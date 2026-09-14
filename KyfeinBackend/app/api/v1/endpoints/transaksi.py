@@ -9,7 +9,7 @@ from sqlalchemy import select, func, and_
 
 from app.core.deps import get_db, get_current_user
 from app.models.transaksi import Transaksi, TransaksiDetail
-from app.models.menu import Menu
+from app.models.master_data import Menu
 from app.models.jadwal import JadwalShift
 from app.models.stok import StokOpname
 from app.models.karyawan import Karyawan

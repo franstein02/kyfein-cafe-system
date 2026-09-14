@@ -12,7 +12,7 @@ from app.models.stok import (
     StokOpname, StokOpnameDetail, MutasiStok
 )
 from app.models.jadwal import JadwalShift
-from app.models.bahan import Bahan
+from app.models.master_data import Bahan
 from app.models.karyawan import Karyawan
 from app.schemas.stok import (
     StokOpnameCreate, StokOpnameOut,

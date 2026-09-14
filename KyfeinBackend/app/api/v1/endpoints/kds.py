@@ -5,8 +5,7 @@ from sqlalchemy import select, and_
 
 from app.core.deps import get_db, get_current_user
 from app.models.transaksi import Transaksi, TransaksiDetail
-from app.models.menu import Menu
-from app.models.master_data import KategoriMenu
+from app.models.master_data import Menu, KategoriMenu
 from app.schemas.transaksi import TransaksiDetailOut
 
 router = APIRouter()
