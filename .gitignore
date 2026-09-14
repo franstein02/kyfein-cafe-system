@@ -1,0 +1,84 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+.venv/
+ENV/
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Environment variables & Sensitive Configs
+.env
+.env.*
+!.env.example
+*.env
+
+# Keys & Certificates
+*.pem
+*.key
+*.crt
+*.pfx
+*.p12
+
+# Database
+*.sqlite3
+*.db
+*.sqlite
+*.db-journal
+
+# Nginx & Logs
+logs/
+*.log
+
+# IDE & Editors
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+Desktop.ini
+ehthumbs.db
+
+# Test & Coverage Caches
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Temporary / Uploaded media files
+uploads/
+static/uploads/
+temp/
+tmp/
+
+# Flutter & Dart
+.dart_tool/
+.packages
+.pub-cache/
+.pub/
+flutter_*.png
+KyfeinFrontend/build/
+KyfeinFrontend/.dart_tool/
+KyfeinFrontend/.flutter-plugins
+KyfeinFrontend/.flutter-plugins-dependencies
+KyfeinFrontend/.pub-cache/
+KyfeinFrontend/.pub/
+
+# Node / Web artifacts (if any)
+node_modules/

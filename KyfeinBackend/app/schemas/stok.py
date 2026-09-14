@@ -1,0 +1,86 @@
+from datetime import datetime
+from typing import Optional, List, Literal
+from decimal import Decimal
+from pydantic import BaseModel
+
+class OpnameItemInput(BaseModel):
+    bahan_id: str
+    jumlah: Decimal # Hasil hitung fisik raw
+
+class StokOpnameCreate(BaseModel):
+    jadwal_shift_id: str
+    titik: Literal['bar', 'kitchen']
+    tipe: Literal['awal_shift', 'akhir_shift']
+    metode: Literal['hitung_manual', 'carry_forward']
+    catatan: Optional[str] = None
+    items: List[OpnameItemInput] = []
+
+class StokOpnameDetailOut(BaseModel):
+    id: str
+    bahan_id: str
+    jumlah: Decimal
+
+    class Config:
+        from_attributes = True
+
+class StokOpnameOut(BaseModel):
+    id: str
+    jadwal_shift_id: str
+    titik: Literal['bar', 'kitchen']
+    tipe: Literal['awal_shift', 'akhir_shift']
+    metode: Literal['hitung_manual', 'carry_forward']
+    karyawan_id: str
+    waktu_opname: datetime
+    catatan: Optional[str] = None
+    details: List[StokOpnameDetailOut] = []
+
+    class Config:
+        from_attributes = True
+
+class BarangKeluarItemInput(BaseModel):
+    bahan_id: str
+    jumlah: Decimal
+
+class BarangKeluarCreate(BaseModel):
+    titik_tujuan: Literal['bar', 'kitchen']
+    items: List[BarangKeluarItemInput]
+
+class BarangKeluarOut(BaseModel):
+    id: str
+    titik_tujuan: Literal['bar', 'kitchen']
+    karyawan_id: str
+    waktu: datetime
+
+    class Config:
+        from_attributes = True
+
+# Barang Masuk
+class BarangMasukItemInput(BaseModel):
+    bahan_id: str
+    jumlah_kemasan_besar: int = 0
+    jumlah_satuan_kecil: Decimal = Decimal('0')
+    harga_total: Decimal = Decimal('0')
+
+class BarangMasukCreate(BaseModel):
+    catatan: Optional[str] = None
+    items: List[BarangMasukItemInput]
+
+class BarangMasukDetailOut(BaseModel):
+    id: str
+    bahan_id: str
+    jumlah_kemasan_besar: int
+    jumlah_satuan_kecil: Decimal
+    harga_total: Decimal
+
+    class Config:
+        from_attributes = True
+
+class BarangMasukOut(BaseModel):
+    id: str
+    karyawan_id: str
+    waktu: datetime
+    catatan: Optional[str] = None
+    details: List[BarangMasukDetailOut] = []
+
+    class Config:
+        from_attributes = True
