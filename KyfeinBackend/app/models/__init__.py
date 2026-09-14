@@ -1,6 +1,6 @@
 from app.models.base import Base
 from app.models.karyawan import Karyawan
-from app.models.master_data import KonfigurasiLokasi, KategoriMenu, Menu, Bahan, MenuResep, KategoriPengeluaran
+from app.models.master_data import KonfigurasiLokasi, KategoriMenu, Menu, Bahan, MenuResep, KategoriPengeluaran, AuditLogKonfigurasi
 from app.models.jadwal import ShiftTemplate, JadwalShift, TukarShift, RequestOff
 from app.models.absensi import IzinTelat, IzinTidakMasuk, Absensi
 from app.models.stok import StokGudang, StokTitik, BarangKeluar, BarangKeluarDetail, StokOpname, StokOpnameDetail, MutasiStok
@@ -16,6 +16,7 @@ __all__ = [
     "Bahan",
     "MenuResep",
     "KategoriPengeluaran",
+    "AuditLogKonfigurasi",
     "ShiftTemplate",
     "JadwalShift",
     "TukarShift",

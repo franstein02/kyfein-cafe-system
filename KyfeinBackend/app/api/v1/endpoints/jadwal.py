@@ -33,6 +33,9 @@ async def create_jadwal(
     db: AsyncSession = Depends(get_db),
     current_user: Karyawan = Depends(require_roles(["admin", "owner"]))
 ):
+    """
+    Buat jadwal shift baru dengan penugasan area_kerja ('kasir', 'bar', 'kitchen')
+    """
     # Cek constraint 1 karyawan tidak boleh 2 shift di tanggal sama
     existing = await db.execute(
         select(JadwalShift).where(

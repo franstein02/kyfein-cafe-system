@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, date
 from typing import List
 from decimal import Decimal
 
@@ -29,6 +29,7 @@ async def submit_stok_opname(
 ):
     """
     STOK OPNAME TWIN CHECKPOINT:
+    - Validasi area_kerja: titik opname WAJIB sama dengan area_kerja shift aktif (FIX-2)
     - awal_shift & akhir_shift (keduanya blocking)
     - metode: carry_forward (same-day, 1 tap konfirmasi) vs hitung_manual (cross-day, hitung fisik)
     - overwrite stok_titik.jumlah untuk kombinasi (bahan_id, titik)
@@ -36,6 +37,13 @@ async def submit_stok_opname(
     shift = await db.get(JadwalShift, data.jadwal_shift_id)
     if not shift:
         raise HTTPException(status_code=404, detail="Jadwal shift tidak ditemukan")
+
+    # [FIX-2 App Layer Validation] titik opname harus sama dengan area_kerja shift aktif
+    if shift.area_kerja != data.titik:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Titik opname ('{data.titik}') tidak sesuai dengan area_kerja shift aktif karyawan ('{shift.area_kerja}')."
+        )
 
     # Cek apakah opname ini sudah pernah disubmit
     existing_opname = await db.execute(
@@ -63,12 +71,11 @@ async def submit_stok_opname(
         catatan=data.catatan
     )
     db.add(new_opname)
-    await db.flush() # Ambil ID opname
+    await db.flush()
 
     # 2. Process Items
     details_to_add = []
     for item in data.items:
-        # Save raw physical count detail
         detail = StokOpnameDetail(
             stok_opname_id=new_opname.id,
             bahan_id=item.bahan_id,
@@ -110,9 +117,27 @@ async def record_barang_keluar(
 ):
     """
     TRANSFER GUDANG -> TITIK (BAR/KITCHEN):
-    Mengurangi stok_gudang. Tidak menambah stok_titik secara langsung
-    (karena stok_titik hanya diperbarui lewat stok_opname fisik).
+    - Validasi area_kerja: titik_tujuan harus sesuai dengan area_kerja shift aktif karyawan saat itu (FIX-2)
+    - Mengurangi stok_gudang. Tidak menambah stok_titik secara langsung.
     """
+    today = date.today()
+    shift_res = await db.execute(
+        select(JadwalShift).where(
+            and_(
+                JadwalShift.karyawan_id == current_user.id,
+                JadwalShift.tanggal == today
+            )
+        )
+    )
+    active_shift = shift_res.scalars().first()
+
+    # Validasi area_kerja di app layer if shift exists
+    if active_shift and active_shift.area_kerja != data.titik_tujuan:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Titik tujuan barang keluar ('{data.titik_tujuan}') harus sesuai dengan area_kerja shift aktif Anda ('{active_shift.area_kerja}')."
+        )
+
     new_bk = BarangKeluar(
         titik_tujuan=data.titik_tujuan,
         karyawan_id=current_user.id

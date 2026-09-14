@@ -6,6 +6,7 @@ class JadwalShiftCreate(BaseModel):
     karyawan_id: str
     tanggal: date
     shift: Literal['shift_1', 'shift_2']
+    area_kerja: Literal['kasir', 'bar', 'kitchen'] # [FIX-2]
     jam_mulai: time
     jam_selesai: time
 
@@ -14,6 +15,7 @@ class JadwalShiftOut(BaseModel):
     karyawan_id: str
     tanggal: date
     shift: Literal['shift_1', 'shift_2']
+    area_kerja: Literal['kasir', 'bar', 'kitchen'] # [FIX-2]
     jam_mulai: time
     jam_selesai: time
     created_at: datetime

@@ -25,11 +25,18 @@ async def create_transaksi(
 ):
     """
     Input transaksi POS baru oleh kasir
+    Validasi area_kerja: kasir_id / shift WAJIB memilik area_kerja='kasir' (FIX-2)
     """
-    # 1. Cek jadwal shift aktif
+    # 1. Cek jadwal shift aktif & validasi area_kerja
     shift = await db.get(JadwalShift, data.jadwal_shift_id)
     if not shift:
         raise HTTPException(status_code=404, detail="Jadwal shift tidak ditemukan")
+
+    if shift.area_kerja != "kasir":
+        raise HTTPException(
+            status_code=400,
+            detail=f"Transaksi POS hanya dapat diinput pada shift dengan area_kerja 'kasir' (area_kerja shift saat ini: '{shift.area_kerja}')."
+        )
 
     # 2. Cek apakah shift ini sudah ditutup dengan stok opname akhir_shift
     opname_end = await db.execute(

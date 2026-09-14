@@ -197,7 +197,8 @@ Saat opname disubmit → sistem hitung total per bahan, lalu **overwrite** `stok
 
 ### 3.3 Absensi (Poin 3)
 * Absen **di lokasi cafe** (1 titik GPS saja, karena cafe tidak berpindah) — **radius GPS blocking**, bukan sekadar warning: di luar radius, sistem menolak absen dan menampilkan notifikasi "di luar radius"
-* Titik koordinat & radius cafe **editable oleh admin**, bukan hardcode
+* Titik koordinat & radius cafe **editable oleh admin**, bukan hardcode — disimpan di tabel `konfigurasi_lokasi` (didesain singleton, 1 row mewakili lokasi cafe; enforce "selalu UPDATE, bukan INSERT baru" di level API)
+* Perubahan `konfigurasi_lokasi` dicatat ke `audit_log_konfigurasi` (tabel generik: tabel, row_id, data_lama, data_baru, diubah_oleh) — supaya ada jejak kalau titik/radius absen pernah diubah
 * Wajib **match `jadwal_shift`** — karyawan hanya bisa absen kalau ada jadwal di tanggal itu. Jam absen bebas (boleh datang lebih awal dari jam mulai shift)
 * Foto wajib saat absen masuk
 * **Absen pulang juga ada** — admin bisa evaluasi karyawan yang sering pulang telat/lupa absen pulang, jadi bahan evaluasi kedisiplinan
@@ -260,6 +261,19 @@ Saat opname disubmit → sistem hitung total per bahan, lalu **overwrite** `stok
 * Karyawan langsung di-assign ke **Shift 1** atau **Shift 2** — tanpa konsep cabang/rombong (karena cafe cuma 1 lokasi)
 * Admin/owner assign manual per karyawan per tanggal
 * Validasi bentrok: 1 karyawan tidak boleh 2 shift di tanggal sama
+* **Setiap shift wajib punya `area_kerja`: `kasir` / `bar` / `kitchen`** — 1 shift = 1 area kerja spesifik untuk karyawan itu. Konsekuensi lintas fitur:
+  * Kasir POS (3.1): `transaksi.kasir_id` harus karyawan dengan `area_kerja = kasir` pada shift aktifnya
+  * Stok Opname (3.2): `stok_opname.titik` untuk shift itu harus sama dengan `area_kerja` (`bar`→titik `bar`, `kitchen`→titik `kitchen`)
+  * Barang Keluar (3.2): `barang_keluar.titik_tujuan` idealnya sama dengan `area_kerja` karyawan yang mengambil
+  * Validasi konsistensi ini dilakukan di **level API** (bukan constraint database, karena butuh cek lintas tabel)
+
+**`shift_template`** — preset jam per shift, dipakai sebagai default saat assign (opsional, bisa override manual)
+
+| Kolom | Tipe | Keterangan |
+|---|---|---|
+| id | UUID | PK |
+| shift | ENUM | `shift_1` / `shift_2`, UNIQUE |
+| jam_mulai, jam_selesai | TIME | |
 
 **`jadwal_shift`**
 
@@ -269,18 +283,41 @@ Saat opname disubmit → sistem hitung total per bahan, lalu **overwrite** `stok
 | karyawan_id | UUID | FK |
 | tanggal | DATE | |
 | shift | ENUM | `shift_1` / `shift_2` |
-| jam_mulai, jam_selesai | TIME | bisa dari Shift Template atau manual |
+| area_kerja | ENUM | `kasir` / `bar` / `kitchen` |
+| shift_template_id | UUID nullable | FK ke `shift_template`, jejak referensi saja |
+| jam_mulai, jam_selesai | TIME | snapshot dari Shift Template atau manual |
 | dibuat_oleh | UUID | FK admin |
 
 Constraint: `UNIQUE(karyawan_id, tanggal)`.
 
 **Swap Shift**
 * Karyawan bisa mengajukan tukar shift dengan karyawan lain, **hanya untuk tanggal yang sama** — kalau target beda tanggal, request ditolak sistem langsung saat submit
-* Admin approve/tolak. Begitu disetujui, `karyawan_id` di kedua row `jadwal_shift` ditukar posisinya — jam otomatis ikut tertukar
+* Admin approve/tolak. Begitu disetujui, `karyawan_id` di kedua row `jadwal_shift` ditukar posisinya — jam & `area_kerja` otomatis ikut tertukar (karena tetap menempel ke row `jadwal_shift`, bukan ke karyawan)
+
+**`tukar_shift`**
+
+| Kolom | Tipe | Keterangan |
+|---|---|---|
+| id | UUID | PK |
+| shift_a_id, shift_b_id | UUID | FK ke `jadwal_shift`, wajib beda row |
+| karyawan_pengaju_id, karyawan_target_id | UUID | FK |
+| status | ENUM | `pending` / `disetujui` / `ditolak` |
+| alasan | TEXT nullable | |
+| diajukan_at, diproses_oleh, diproses_at | | |
 
 **Request Off**
 * Sifatnya **cuma pengajuan**, tanpa approval workflow — admin melihat lalu membuat jadwal libur sendiri (dengan tidak membuatkan row `jadwal_shift` di tanggal tsb)
 * **Semua karyawan bisa lihat semua pengajuan** (termasuk yang belum diproses admin) — supaya karyawan lain bisa menghindari mengajukan libur di tanggal yang sudah banyak yang request, biar tidak bentrok kekurangan orang
+
+**`request_off`**
+
+| Kolom | Tipe | Keterangan |
+|---|---|---|
+| id | UUID | PK |
+| karyawan_id | UUID | FK |
+| tanggal | DATE | |
+| alasan | TEXT nullable | |
+| diajukan_at | TIMESTAMP | |
 
 ### 3.5 Layar Pesanan / KDS (Poin 5)
 * Begitu `transaksi` disimpan → sistem cek tiap `transaksi_detail`, kelompokkan berdasarkan `kategori_menu.area_produksi`
@@ -375,7 +412,34 @@ Laporan lain yang tersedia: breakdown pengeluaran per kategori (`pengeluaran` gr
 * **Asumsi implementasi — akun Owner:** kemungkinan besar hanya **1 akun Owner** untuk sistem ini. Akun Owner **di-seed manual langsung di database** (bukan dibuat lewat UI/endpoint aplikasi) — tidak perlu ada endpoint "create owner" di sistem sama sekali, menghindari celah role-elevation yang tidak sengaja terbuka
 
 ## 5. Skema Database — Optimasi
-*Belum dibahas — indexing, constraint, backup, dll menyusul di sesi terpisah.*
+
+### 5.1 Karakter Set & Collation
+* `utf8mb4` di semua tabel (sudah benar, support emoji/karakter penuh di catatan pesanan, dll)
+* **Collation eksplisit `utf8mb4_unicode_ci`** — di-set di level **database**, bukan diulang per tabel: `ALTER DATABASE db_kyfein CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;` dijalankan sekali sebelum migration. Alasan: default collation beda antara MySQL 8 (`utf8mb4_0900_ai_ci`) dan MariaDB (`utf8mb4_general_ci`) — kalau tidak dikunci eksplisit, behavior sorting/pencarian nama (`karyawan.nama`, `menu.nama`, dll) bisa beda tergantung versi server yang dipasang di Laragon
+
+### 5.2 Indexing — 2 lapis
+* **Lapis 1 (otomatis):** semua kolom FK sudah eksplisit (lihat Log Keputusan) → InnoDB otomatis bikin index untuk tiap kolom FK, tidak perlu index manual terpisah untuk itu
+* **Lapis 2 (manual, composite index untuk query yang sering dipakai):**
+  * `transaksi(status, waktu_transaksi)` — dipakai tiap kali hitung profit harian/reporting (3.6): filter `status='selesai'` + range tanggal dalam 1 query
+  * `stok_opname(titik, tipe)` — dipakai app layer buat cari opname terakhir per titik sebelum shift baru mulai (3.2)
+  * `absensi(karyawan_id, jam_masuk)` — riwayat absensi per karyawan, dipakai laporan evaluasi kedisiplinan (3.3)
+  * `pengeluaran(kategori_id, tipe)` — breakdown pengeluaran per kategori (3.6)
+  * Index single-column yang sudah ada (status, tanggal, area_kerja, dst di Part 5 skema) tetap dipertahankan untuk query yang tidak butuh kombinasi kolom
+
+### 5.3 Constraint (CHECK) — ringkasan yang sudah aktif
+Semua nilai numerik yang secara bisnis tidak boleh negatif sudah dikunci `CHECK (... >= 0)` atau `> 0` sesuai konteks: `menu.harga`, `stok_gudang.jumlah_kemasan_besar/jumlah_satuan_kecil`, `stok_titik.jumlah`, `menu_resep.jumlah_terpakai`, `barang_keluar_detail.jumlah`, `transaksi.total_harga`, `transaksi_detail.qty`, `pengeluaran.nominal`. Plus 2 CHECK kondisional: `transaksi.chk_bukti_bayar` (bukti wajib sesuai metode bayar) dan `pengeluaran.chk_pengeluaran_periode` (kolom wajib sesuai tipe bulanan/mendadak).
+
+### 5.4 Strategi Backup (level database)
+* **Metode:** `mysqldump` terjadwal — cocok untuk skala 1 cafe/1 database, tidak perlu replication/cluster
+* **Jadwal:** dump harian di luar jam sibuk (mis. jam 03:00, setelah shift 2 tutup), pakai **Windows Task Scheduler** (karena server di Laragon/Windows) menjalankan `.bat` yang memanggil `mysqldump`
+* **Retensi:** simpan 30 hari terakhir (dump harian), plus 1 dump mingguan disimpan 3 bulan — dump lama di luar retensi dihapus otomatis oleh script yang sama
+* **Lokasi simpan:** dump **tidak boleh cuma di PC yang sama** dengan server (kalau PC rusak, backup ikut hilang) — minimal disalin ke folder yang di-sync ke cloud (Google Drive Desktop/OneDrive) atau eksternal drive terpisah
+* **Verifikasi:** restore-test dump ke database sementara dilakukan berkala (mis. 1x/bulan) untuk memastikan file dump valid, bukan cuma "ada file tapi corrupt/kosong"
+* Ini melengkapi item **[PENDING]** "Backup database & strategi kalau PC server mati/rusak" di bagian 2 — level databasenya sudah fix di sini, detail infra (redundansi PC, remote access) tetap pending menyusul sesi terpisah
+
+### 5.5 Yang sengaja TIDAK dipakai (skala tidak butuh)
+* **Partitioning** — jumlah baris untuk 1 cafe (skala transaksi harian kecil-menengah) belum butuh; revisit kalau data tahunan sudah jutaan baris
+* **Read replica / clustering** — server on-premise 1 PC, di luar scope infrastruktur yang direncanakan (bagian 1.1)
 
 ---
 
@@ -394,7 +458,12 @@ Laporan lain yang tersedia: breakdown pengeluaran per kategori (`pengeluaran` gr
 - [FIX] Formula Reporting: Profit Harian = Penjualan − HPP harian − Pengeluaran bulanan (dipecah harian) − pengeluaran mendadak
 - [FIX] Input Pengeluaran: kategori fleksibel (`kategori_pengeluaran`, admin bisa tambah sendiri, bukan ENUM fixed) + 2 tipe pengeluaran (`bulanan` dipecah harian, `mendadak` one-time di tanggal kejadian)
 - [FIX] Role & Hak Akses: 3 role (Karyawan/Admin/Owner). Karyawan akses operasional harian (POS shift aktif, stok opname, absensi, swap shift/request off dengan exception visibility) + Laporan Shift Aktif read-only. Admin akses penuh 6 fitur + approval swap shift/izin + kelola akun Karyawan, tapi diblok dari kelola akun Admin lain. Owner superuser, satu-satunya yang bisa buat/promote akun Admin, akun di-seed manual di database
+- [FIX] Cancel/Void transaksi: kasir cancel transaksi sendiri tanpa alasan wajib, dibatasi hanya sebelum stok_opname akhir_shift shift terkait disubmit, status jadi `dibatalkan` (bukan hard delete), divalidasi di level API
+- [FIX] **Implementasi Database — hasil review `schema_kyfein_mysql.sql`:**
+  - Semua Foreign Key ditulis eksplisit `FOREIGN KEY (col) REFERENCES tbl(id)` dengan `ON DELETE` jelas (`RESTRICT` untuk data operasional, `SET NULL` untuk kolom opsional/jejak seperti `diproses_oleh`/`dibuat_oleh`, `CASCADE` khusus header→detail dalam 1 entitas). Versi awal pakai inline column-level `REFERENCES` yang **diabaikan MySQL/MariaDB** — integritas referensial sebelumnya tidak aktif untuk mayoritas relasi
+  - `jadwal_shift` ditambah kolom **`area_kerja`** (`kasir`/`bar`/`kitchen`) — 1 shift = 1 area kerja spesifik. Stok opname & barang keluar untuk karyawan itu harus konsisten dengan `area_kerja` shift aktifnya (divalidasi di level API)
+  - Tabel yang sebelumnya cuma detail implementasi (`shift_template`, `tukar_shift`, `request_off`, `konfigurasi_lokasi`, `audit_log_konfigurasi`) sekarang resmi didokumentasikan di sini juga
+- [FIX] **Skema Database — Optimasi (bagian 5):** collation `utf8mb4_unicode_ci` dikunci di level database, composite index untuk query reporting/opname/absensi/pengeluaran, ringkasan CHECK constraint aktif, strategi backup `mysqldump` harian terjadwal (retensi 30 hari + mingguan 3 bulan, disalin ke lokasi terpisah dari PC server, verifikasi restore berkala). Partitioning & read replica sengaja tidak dipakai (skala 1 cafe belum butuh)
 - [PENDING] Potongan telat/SP — menunggu hasil wawancara
 - [PENDING] Layar/app antrian minuman di Bar — menunggu observasi
-- [PENDING] Detail remote access (Cloudflare Tunnel/Tailscale), domain, backup server
-- [FIX] Cancel/Void transaksi: kasir cancel transaksi sendiri tanpa alasan wajib, dibatasi hanya sebelum stok_opname akhir_shift shift terkait disubmit, status jadi `dibatalkan` (bukan hard delete), divalidasi di level API
+- [PENDING] Detail remote access (Cloudflare Tunnel/Tailscale), domain, redundansi PC server (di luar level database, sudah dibahas terpisah di 5.4)

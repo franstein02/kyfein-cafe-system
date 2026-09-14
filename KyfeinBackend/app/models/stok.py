@@ -7,7 +7,7 @@ class StokGudang(Base):
     __tablename__ = "stok_gudang"
 
     id = Column(String(36), primary_key=True, default=generate_uuid)
-    bahan_id = Column(String(36), ForeignKey("bahan.id"), nullable=False, unique=True)
+    bahan_id = Column(String(36), ForeignKey("bahan.id", ondelete="RESTRICT"), nullable=False, unique=True)
     jumlah_kemasan_besar = Column(Integer, nullable=False, default=0)
     jumlah_satuan_kecil = Column(Numeric(10, 3), nullable=False, default=0)
     updated_at = Column(DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
@@ -18,7 +18,7 @@ class StokTitik(Base):
     __tablename__ = "stok_titik"
 
     id = Column(String(36), primary_key=True, default=generate_uuid)
-    bahan_id = Column(String(36), ForeignKey("bahan.id"), nullable=False)
+    bahan_id = Column(String(36), ForeignKey("bahan.id", ondelete="RESTRICT"), nullable=False)
     titik = Column(SQLEnum('bar', 'kitchen', name='enum_titik_opname'), nullable=False)
     jumlah = Column(Numeric(10, 3), nullable=False, default=0)
     updated_at = Column(DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
@@ -30,7 +30,7 @@ class BarangKeluar(Base):
 
     id = Column(String(36), primary_key=True, default=generate_uuid)
     titik_tujuan = Column(SQLEnum('bar', 'kitchen', name='enum_titik_opname'), nullable=False)
-    karyawan_id = Column(String(36), ForeignKey("karyawan.id"), nullable=False)
+    karyawan_id = Column(String(36), ForeignKey("karyawan.id", ondelete="RESTRICT"), nullable=False)
     waktu = Column(DateTime, nullable=False, default=datetime.utcnow)
     created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
 
@@ -42,7 +42,7 @@ class BarangKeluarDetail(Base):
 
     id = Column(String(36), primary_key=True, default=generate_uuid)
     barang_keluar_id = Column(String(36), ForeignKey("barang_keluar.id", ondelete="CASCADE"), nullable=False)
-    bahan_id = Column(String(36), ForeignKey("bahan.id"), nullable=False)
+    bahan_id = Column(String(36), ForeignKey("bahan.id", ondelete="RESTRICT"), nullable=False)
     jumlah = Column(Numeric(10, 3), nullable=False)
 
     barang_keluar = relationship("BarangKeluar", back_populates="details")
@@ -52,11 +52,11 @@ class StokOpname(Base):
     __tablename__ = "stok_opname"
 
     id = Column(String(36), primary_key=True, default=generate_uuid)
-    jadwal_shift_id = Column(String(36), ForeignKey("jadwal_shift.id"), nullable=False)
+    jadwal_shift_id = Column(String(36), ForeignKey("jadwal_shift.id", ondelete="RESTRICT"), nullable=False)
     titik = Column(SQLEnum('bar', 'kitchen', name='enum_titik_opname'), nullable=False)
     tipe = Column(SQLEnum('awal_shift', 'akhir_shift', name='enum_tipe_opname'), nullable=False)
     metode = Column(SQLEnum('hitung_manual', 'carry_forward', name='enum_metode_opname'), nullable=False)
-    karyawan_id = Column(String(36), ForeignKey("karyawan.id"), nullable=False)
+    karyawan_id = Column(String(36), ForeignKey("karyawan.id", ondelete="RESTRICT"), nullable=False)
     waktu_opname = Column(DateTime, nullable=False, default=datetime.utcnow)
     catatan = Column(Text, nullable=True)
     created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
@@ -70,7 +70,7 @@ class StokOpnameDetail(Base):
 
     id = Column(String(36), primary_key=True, default=generate_uuid)
     stok_opname_id = Column(String(36), ForeignKey("stok_opname.id", ondelete="CASCADE"), nullable=False)
-    bahan_id = Column(String(36), ForeignKey("bahan.id"), nullable=False)
+    bahan_id = Column(String(36), ForeignKey("bahan.id", ondelete="RESTRICT"), nullable=False)
     jumlah = Column(Numeric(10, 3), nullable=False, default=0)
 
     stok_opname = relationship("StokOpname", back_populates="details")
@@ -80,12 +80,13 @@ class MutasiStok(Base):
     __tablename__ = "mutasi_stok"
 
     id = Column(String(36), primary_key=True, default=generate_uuid)
-    bahan_id = Column(String(36), ForeignKey("bahan.id"), nullable=False)
+    bahan_id = Column(String(36), ForeignKey("bahan.id", ondelete="RESTRICT"), nullable=False)
     titik = Column(SQLEnum('bar', 'kitchen', name='enum_titik_opname'), nullable=True)
-    jadwal_shift_id = Column(String(36), ForeignKey("jadwal_shift.id"), nullable=True)
+    jadwal_shift_id = Column(String(36), ForeignKey("jadwal_shift.id", ondelete="SET NULL"), nullable=True)
     tipe = Column(String(50), nullable=False, default='selisih_handover')
     jumlah_selisih = Column(Numeric(10, 3), nullable=False)
     keterangan = Column(Text, nullable=True)
     created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
 
     bahan = relationship("Bahan")
+    jadwal_shift = relationship("JadwalShift")

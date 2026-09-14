@@ -7,8 +7,8 @@ class Transaksi(Base):
     __tablename__ = "transaksi"
 
     id = Column(String(36), primary_key=True, default=generate_uuid)
-    jadwal_shift_id = Column(String(36), ForeignKey("jadwal_shift.id"), nullable=False)
-    kasir_id = Column(String(36), ForeignKey("karyawan.id"), nullable=False)
+    jadwal_shift_id = Column(String(36), ForeignKey("jadwal_shift.id", ondelete="RESTRICT"), nullable=False)
+    kasir_id = Column(String(36), ForeignKey("karyawan.id", ondelete="RESTRICT"), nullable=False)
     nomor_transaksi = Column(String(30), nullable=False, unique=True)
     metode_bayar = Column(SQLEnum('cash', 'qris', name='enum_metode_bayar'), nullable=False)
     total_harga = Column(Numeric(14, 2), nullable=False, default=0)
@@ -28,7 +28,7 @@ class TransaksiDetail(Base):
 
     id = Column(String(36), primary_key=True, default=generate_uuid)
     transaksi_id = Column(String(36), ForeignKey("transaksi.id", ondelete="CASCADE"), nullable=False)
-    menu_id = Column(String(36), ForeignKey("menu.id"), nullable=False)
+    menu_id = Column(String(36), ForeignKey("menu.id", ondelete="RESTRICT"), nullable=False)
     qty = Column(Integer, nullable=False, default=1)
     harga_satuan = Column(Numeric(14, 2), nullable=False)
     catatan = Column(Text, nullable=True)
