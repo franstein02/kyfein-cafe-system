@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, date
 from typing import List
 from decimal import Decimal
 import uuid
@@ -9,11 +9,12 @@ from sqlalchemy import select, func, and_
 
 from app.core.deps import get_db, get_current_user
 from app.models.transaksi import Transaksi, TransaksiDetail
-from app.models.master_data import Menu
+from app.models.master_data import Menu, KategoriMenu
 from app.models.jadwal import JadwalShift
 from app.models.stok import StokOpname
 from app.models.karyawan import Karyawan
 from app.schemas.transaksi import TransaksiCreate, TransaksiOut, ActiveShiftSummaryOut
+from app.api.v1.endpoints.kds import kds_manager
 
 router = APIRouter()
 
@@ -24,13 +25,21 @@ async def create_transaksi(
     current_user: Karyawan = Depends(get_current_user)
 ):
     """
-    Input transaksi POS baru oleh kasir
-    Validasi area_kerja: kasir_id / shift WAJIB memilik area_kerja='kasir' (FIX-2)
+    Input transaksi POS baru oleh kasir:
+    - Validasi shift.karyawan_id == current_user.id
+    - Validasi area_kerja: shift WAJIB memiliki area_kerja='kasir'
+    - Broadcast order realtime ke KDS (Kitchen/Bar WebSocket)
     """
-    # 1. Cek jadwal shift aktif & validasi area_kerja
+    # 1. Cek jadwal shift aktif, ownership, & validasi area_kerja
     shift = await db.get(JadwalShift, data.jadwal_shift_id)
     if not shift:
         raise HTTPException(status_code=404, detail="Jadwal shift tidak ditemukan")
+
+    if shift.karyawan_id != current_user.id and current_user.role not in ["admin", "owner"]:
+        raise HTTPException(
+            status_code=403,
+            detail="Tidak dapat menginput transaksi untuk shift milik karyawan lain."
+        )
 
     if shift.area_kerja != "kasir":
         raise HTTPException(
@@ -53,7 +62,7 @@ async def create_transaksi(
             detail="Shift ini sudah ditutup (opname akhir shift telah disubmit). Tidak dapat membuat transaksi baru."
         )
 
-    # 3. Generate nomor transaksi unik (misal: TRX-YYYYMMDD-XXXX)
+    # 3. Generate nomor transaksi unik (TRX-YYYYMMDD-XXXX)
     date_str = datetime.utcnow().strftime("%Y%m%d")
     random_code = str(uuid.uuid4().hex[:6]).upper()
     nomor_trx = f"TRX-{date_str}-{random_code}"
@@ -61,6 +70,7 @@ async def create_transaksi(
     # 4. Hitung detail & total
     total_harga = Decimal("0")
     details_to_add = []
+    kds_items = []
 
     for item in data.details:
         menu_item = await db.get(Menu, item.menu_id)
@@ -79,6 +89,17 @@ async def create_transaksi(
             status_item="menunggu"
         )
         details_to_add.append(trx_detail)
+
+        kat = await db.get(KategoriMenu, menu_item.kategori_id) if menu_item.kategori_id else None
+        if kat and kat.area_produksi in ["kitchen", "bar"]:
+            kds_items.append({
+                "detail_id": trx_detail.id,
+                "menu_id": menu_item.id,
+                "nama_menu": menu_item.nama,
+                "qty": item.qty,
+                "catatan": item.catatan,
+                "area_produksi": kat.area_produksi
+            })
 
     # Validasi pembayaran cash vs qris
     kembalian = None
@@ -106,6 +127,22 @@ async def create_transaksi(
     db.add(new_trx)
     await db.commit()
     await db.refresh(new_trx)
+
+    # Broadcast KDS Realtime Event
+    for kds in kds_items:
+        message = {
+            "transaksi_id": new_trx.id,
+            "nomor_transaksi": new_trx.nomor_transaksi,
+            "detail_id": kds["detail_id"],
+            "menu_id": kds["menu_id"],
+            "nama_menu": kds["nama_menu"],
+            "qty": kds["qty"],
+            "catatan": kds["catatan"],
+            "status_item": "menunggu",
+            "waktu": new_trx.created_at.isoformat()
+        }
+        await kds_manager.broadcast_order(kds["area_produksi"], message)
+
     return new_trx
 
 @router.post("/{transaksi_id}/void", response_model=TransaksiOut)
@@ -165,6 +202,18 @@ async def get_active_shift_report(
     shift = await db.get(JadwalShift, jadwal_shift_id)
     if not shift:
         raise HTTPException(status_code=404, detail="Jadwal shift tidak ditemukan")
+
+    if shift.tanggal != date.today():
+        raise HTTPException(
+            status_code=400,
+            detail="Laporan shift aktif hanya untuk shift yang sedang berjalan hari ini"
+        )
+
+    if shift.karyawan_id != current_user.id and current_user.role == "karyawan":
+        raise HTTPException(
+            status_code=403,
+            detail="Tidak dapat melihat laporan shift milik karyawan lain."
+        )
 
     # Ambil transaksi berstatus selesai pada shift ini
     result = await db.execute(

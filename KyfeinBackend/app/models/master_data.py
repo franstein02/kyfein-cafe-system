@@ -50,6 +50,7 @@ class Bahan(Base):
     nama = Column(String(100), nullable=False)
     satuan = Column(String(20), nullable=False)
     isi_per_kemasan = Column(Numeric(10, 3), nullable=True)
+    harga_rata_rata = Column(Numeric(14, 2), nullable=False, default=0)
     stok_minimum = Column(Numeric(10, 3), nullable=False, default=0)
     created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
     updated_at = Column(DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)

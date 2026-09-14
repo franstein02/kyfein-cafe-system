@@ -3,10 +3,12 @@
 -- Scope: 6 fitur utama (POS+Takaran, Stok Gudang & Titik, Absensi,
 --        Jadwal Shift, Layar Pesanan/KDS, Reporting & Pengeluaran)
 --        + Master Data + Role & Hak Akses
--- Tanpa: QR ordering pelanggan, payroll/gaji, kas bon, supplier,
---        multi-cabang/rombong (di luar scope rencana pengembangan)
+-- Tanpa: QR ordering pelanggan, payroll/gaji, kas bon, manajemen supplier/PO,
+--        multi-cabang/rombong (di luar scope rencana pengembangan). Catatan:
+--        barang_masuk (v4) SENGAJA cuma catat harga+jumlah restock, BUKAN
+--        modul supplier/purchase-order penuh — masih di luar scope.
 --
--- REVISI v3 dari schema_kyfein_mysql.sql — 4 fix hasil review:
+-- REVISI v4 dari schema_kyfein_mysql.sql — 5 fix hasil review:
 --   [FIX-1] Semua FK ditulis eksplisit "FOREIGN KEY (col) REFERENCES tbl(id)"
 --           dengan ON DELETE yang jelas. Versi sebelumnya pakai inline
 --           column-level "REFERENCES" yang DIABAIKAN oleh MySQL/MariaDB
@@ -35,6 +37,13 @@
 --           absensi/pengeluaran yang sering dipakai. Strategi backup
 --           (mysqldump terjadwal) didokumentasikan di markdown, di luar
 --           file SQL ini karena bukan bagian dari skema.
+--   [FIX-5] Tabel baru barang_masuk/barang_masuk_detail (pencatatan barang
+--           masuk ke gudang: jumlah + harga) + kolom bahan.harga_rata_rata
+--           (moving weighted average, di-update tiap barang_masuk disubmit).
+--           Ini sumber harga bahan yang sebelumnya HILANG dari skema —
+--           dipakai reporting.py buat hitung HPP aktual (3.6), gantikan
+--           angka hardcode/asumsi yang sempat dipakai coding agent karena
+--           skema lama tidak punya sumber harga bahan sama sekali.
 --
 -- Catatan UUID: PK pakai CHAR(36) + DEFAULT (UUID()).
 --   - MySQL 8.0.13+ dan MariaDB 10.7+ mendukung DEFAULT (UUID()) langsung.
@@ -133,9 +142,20 @@ CREATE TABLE bahan (
     satuan          VARCHAR(20) NOT NULL, -- ml/gram/pcs, dll
     isi_per_kemasan DECIMAL(10,3), -- konversi kemasan besar -> satuan kecil, khusus internal gudang (3.2)
     stok_minimum    DECIMAL(10,3) NOT NULL DEFAULT 0, -- reminder stok menipis di Reporting (3.6)
+    harga_rata_rata DECIMAL(14,2) NOT NULL DEFAULT 0 CHECK (harga_rata_rata >= 0), -- moving weighted-average cost per satuan kecil, di-update tiap barang_masuk (3.2 & 3.6)
     created_at      DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at      DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- Catatan (harga_rata_rata): HPP di Reporting (3.6) pakai kolom ini, BUKAN
+-- harga dari transaksi pembelian mentah. Dihitung app layer pakai moving
+-- weighted average setiap kali barang_masuk disubmit:
+--   total_satuan_kecil_lama = stok_gudang.jumlah_kemasan_besar * bahan.isi_per_kemasan
+--                              + stok_gudang.jumlah_satuan_kecil  (SEBELUM ditambah barang masuk baru)
+--   harga_rata_rata_baru = (total_satuan_kecil_lama * harga_rata_rata_lama
+--                            + jumlah_satuan_kecil_masuk * harga_satuan_masuk)
+--                           / (total_satuan_kecil_lama + jumlah_satuan_kecil_masuk)
+-- Kalau bahan belum pernah ada stok (baris pertama), harga_rata_rata_baru = harga_satuan_masuk.
 
 CREATE TABLE menu_resep (
     id              CHAR(36) NOT NULL DEFAULT (UUID()) PRIMARY KEY,
@@ -297,6 +317,36 @@ CREATE TABLE stok_titik (
     CONSTRAINT uq_stok_titik UNIQUE (bahan_id, titik),
     CONSTRAINT fk_stok_titik_bahan FOREIGN KEY (bahan_id) REFERENCES bahan(id) ON DELETE RESTRICT
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE barang_masuk (
+    id              CHAR(36) NOT NULL DEFAULT (UUID()) PRIMARY KEY,
+    karyawan_id     CHAR(36) NOT NULL, -- wajib, siapa yang input/terima barang
+    keterangan      TEXT, -- catatan bebas (nama toko/supplier, no. nota, dll) — BUKAN relasi ke tabel supplier (di luar scope)
+    waktu           DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    created_at      DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT fk_barang_masuk_karyawan FOREIGN KEY (karyawan_id) REFERENCES karyawan(id) ON DELETE RESTRICT
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE barang_masuk_detail (
+    id                      CHAR(36) NOT NULL DEFAULT (UUID()) PRIMARY KEY,
+    barang_masuk_id         CHAR(36) NOT NULL,
+    bahan_id                CHAR(36) NOT NULL,
+    jumlah_kemasan_besar    INT NOT NULL DEFAULT 0 CHECK (jumlah_kemasan_besar >= 0), -- dus/box yang masuk
+    jumlah_satuan_kecil     DECIMAL(10,3) NOT NULL DEFAULT 0 CHECK (jumlah_satuan_kecil >= 0), -- satuan eceran tambahan di luar kemasan besar
+    harga_total             DECIMAL(14,2) NOT NULL CHECK (harga_total > 0), -- total dibayar utk baris ini (kemasan + eceran digabung)
+    CONSTRAINT chk_bmd_jumlah_masuk CHECK (jumlah_kemasan_besar > 0 OR jumlah_satuan_kecil > 0),
+    CONSTRAINT fk_bmd_barang_masuk FOREIGN KEY (barang_masuk_id) REFERENCES barang_masuk(id) ON DELETE CASCADE,
+    CONSTRAINT fk_bmd_bahan FOREIGN KEY (bahan_id) REFERENCES bahan(id) ON DELETE RESTRICT
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- Catatan (barang_masuk): submit barang_masuk_detail melakukan 2 hal di app layer:
+--   1. Menambah stok_gudang.jumlah_kemasan_besar & jumlah_satuan_kecil (INCREASE,
+--      kebalikan dari barang_keluar yang selalu DECREASE stok_gudang)
+--   2. Update bahan.harga_rata_rata pakai moving weighted average (lihat catatan
+--      di definisi tabel bahan) — harga_satuan_masuk = harga_total / total
+--      satuan kecil masuk (jumlah_kemasan_besar * bahan.isi_per_kemasan + jumlah_satuan_kecil)
+-- Bukan fitur supplier/purchasing penuh — cuma pencatatan restock + harga
+-- untuk kebutuhan HPP (3.6). Tanpa relasi supplier/PO, sesuai scope awal.
 
 CREATE TABLE barang_keluar (
     id              CHAR(36) NOT NULL DEFAULT (UUID()) PRIMARY KEY,
@@ -463,6 +513,7 @@ CREATE INDEX idx_jadwal_shift_tanggal ON jadwal_shift(tanggal);
 CREATE INDEX idx_absensi_jam_masuk ON absensi(jam_masuk);
 CREATE INDEX idx_pengeluaran_bulan ON pengeluaran(bulan);
 CREATE INDEX idx_pengeluaran_tanggal ON pengeluaran(tanggal);
+CREATE INDEX idx_barang_masuk_waktu ON barang_masuk(waktu);
 
 -- Index status & area_kerja (kolom yang sering difilter bareng)
 CREATE INDEX idx_transaksi_status ON transaksi(status);

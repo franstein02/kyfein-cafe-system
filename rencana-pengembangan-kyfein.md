@@ -65,6 +65,7 @@
 | satuan | VARCHAR | ml/gram/pcs, dll |
 | isi_per_kemasan | INT | konversi kemasan besar → satuan kecil, khusus internal gudang |
 | stok_minimum | DECIMAL | untuk reminder stok menipis di Reporting |
+| harga_rata_rata | DECIMAL | moving weighted-average harga beli per satuan kecil — sumber HPP di Reporting (3.6), di-update tiap `barang_masuk` disubmit (3.2) |
 
 **`menu_resep`** — BOM/takaran per menu (dasar Poin 1: POS + selisih stok)
 
@@ -152,6 +153,40 @@
 | jumlah | DECIMAL | saldo hasil opname terakhir, satuan campur sesuai kondisi fisik |
 
 `UNIQUE(bahan_id, titik)`. **Hanya pernah di-update lewat `stok_opname`** (awal_shift maupun akhir_shift) — tidak pernah lewat `barang_keluar` langsung.
+
+**Barang Masuk (restock gudang) & Harga Bahan**
+* `barang_masuk` **menambah** `stok_gudang` (kebalikan `barang_keluar` yang selalu mengurangi) — dicatat tiap kali ada restock/belanja bahan baku
+* Setiap baris `barang_masuk_detail` wajib isi `harga_total` (total dibayar untuk baris itu) + jumlah masuk (kemasan besar dan/atau satuan kecil)
+* **Harga bahan pakai moving weighted average** (bukan harga beli terakhir) — `bahan.harga_rata_rata` dihitung ulang tiap `barang_masuk` disubmit:
+  ```
+  total_satuan_kecil_lama = stok_gudang.jumlah_kemasan_besar × bahan.isi_per_kemasan + stok_gudang.jumlah_satuan_kecil  (SEBELUM ditambah barang masuk baru)
+  harga_satuan_masuk      = barang_masuk_detail.harga_total ÷ (jumlah_kemasan_besar × bahan.isi_per_kemasan + jumlah_satuan_kecil)
+  harga_rata_rata_baru    = (total_satuan_kecil_lama × harga_rata_rata_lama + jumlah_satuan_kecil_masuk × harga_satuan_masuk)
+                             ÷ (total_satuan_kecil_lama + jumlah_satuan_kecil_masuk)
+  ```
+  Kalau bahan belum pernah ada stok (baris pertama), `harga_rata_rata_baru = harga_satuan_masuk`
+* **Bukan modul supplier/purchase-order** — cuma pencatatan restock + harga, tanpa relasi ke data supplier (tetap di luar scope)
+* Ini juga jadi **sumber HPP aktual** di Reporting (3.6): `Σ(menu_resep.jumlah_terpakai × bahan.harga_rata_rata)`, menggantikan asumsi/estimasi
+
+**`barang_masuk`** — restock gudang, header
+
+| Kolom | Tipe | Keterangan |
+|---|---|---|
+| id | UUID | PK |
+| karyawan_id | UUID | FK — wajib, siapa yang input/terima barang |
+| keterangan | TEXT nullable | catatan bebas (nama toko, no. nota, dll) — bukan relasi supplier |
+| waktu | TIMESTAMP | |
+
+**`barang_masuk_detail`**
+
+| Kolom | Tipe | Keterangan |
+|---|---|---|
+| id | UUID | PK |
+| barang_masuk_id | UUID | FK |
+| bahan_id | UUID | FK |
+| jumlah_kemasan_besar | INT | dus/box yang masuk |
+| jumlah_satuan_kecil | DECIMAL | satuan eceran tambahan di luar kemasan besar |
+| harga_total | DECIMAL | total dibayar untuk baris ini (kemasan + eceran digabung) |
 
 **`barang_keluar`** — transfer gudang → titik
 
@@ -335,7 +370,7 @@ Profit Harian = Penjualan Hari Itu
                 − Σ(pengeluaran tipe `mendadak` yang tanggalnya = hari itu)
 ```
 
-**Prinsip kunci (supaya tidak double-count):** pembelian bahan baku ke gudang **tidak** dihitung sebagai pengeluaran terpisah di laporan profit — cukup dicatat sebagai histori di Stok Gudang (3.2). HPP yang dipakai di laporan profit murni teoritis dari resep × penjualan, bukan dari transaksi pembelian aktual.
+**Prinsip kunci (supaya tidak double-count):** pembelian bahan baku ke gudang (`barang_masuk`, 3.2) **tidak** dihitung sebagai pengeluaran terpisah di laporan profit — cukup dicatat sebagai histori di Stok Gudang. HPP yang dipakai di laporan profit dihitung on-demand dari `Σ(menu_resep.jumlah_terpakai × bahan.harga_rata_rata)` untuk semua item terjual hari itu — **`harga_rata_rata` bersumber dari histori `barang_masuk` (moving weighted average, 3.2), bukan angka asumsi/hardcode.**
 
 **Input Pengeluaran — kategori fleksibel, 2 tipe:**
 * Kategori pengeluaran **bukan ENUM fixed** — admin bisa tambah kategori sendiri ke depan (listrik, air, parfum ruangan, sewa, gaji, dll — apapun yang relevan buat cafe ini), tersimpan di tabel `kategori_pengeluaran`
@@ -363,7 +398,7 @@ Profit Harian = Penjualan Hari Itu
 | dicatat_oleh | UUID | FK admin/owner |
 | created_at | TIMESTAMP | |
 
-HPP dihitung **on-demand** (bukan snapshot): `Σ(menu_resep.jumlah_terpakai × harga_per_unit_bahan)` untuk semua `transaksi_detail` yang terjual (status transaksi `selesai`) di tanggal terkait.
+HPP dihitung **on-demand** (bukan snapshot): `Σ(menu_resep.jumlah_terpakai × bahan.harga_rata_rata)` untuk semua `transaksi_detail` yang terjual (status transaksi `selesai`) di tanggal terkait.
 
 Laporan lain yang tersedia: breakdown pengeluaran per kategori (`pengeluaran` group by `kategori_id`), filter Harian / Range Tanggal / Bulanan / Tahunan.
 
@@ -464,6 +499,8 @@ Semua nilai numerik yang secara bisnis tidak boleh negatif sudah dikunci `CHECK 
   - `jadwal_shift` ditambah kolom **`area_kerja`** (`kasir`/`bar`/`kitchen`) — 1 shift = 1 area kerja spesifik. Stok opname & barang keluar untuk karyawan itu harus konsisten dengan `area_kerja` shift aktifnya (divalidasi di level API)
   - Tabel yang sebelumnya cuma detail implementasi (`shift_template`, `tukar_shift`, `request_off`, `konfigurasi_lokasi`, `audit_log_konfigurasi`) sekarang resmi didokumentasikan di sini juga
 - [FIX] **Skema Database — Optimasi (bagian 5):** collation `utf8mb4_unicode_ci` dikunci di level database, composite index untuk query reporting/opname/absensi/pengeluaran, ringkasan CHECK constraint aktif, strategi backup `mysqldump` harian terjadwal (retensi 30 hari + mingguan 3 bulan, disalin ke lokasi terpisah dari PC server, verifikasi restore berkala). Partitioning & read replica sengaja tidak dipakai (skala 1 cafe belum butuh)
+- [FIX] **Harga Bahan & HPP — tabel baru `barang_masuk`/`barang_masuk_detail`:** gap ditemukan saat audit endpoint — skema lama tidak punya sumber harga bahan sama sekali, HPP di reporting sempat pakai angka hardcode. Sekarang `barang_masuk` menambah `stok_gudang` (kebalikan `barang_keluar`) + tiap baris wajib isi `harga_total`, dipakai app layer buat hitung `bahan.harga_rata_rata` pakai **moving weighted average** (bukan harga beli terakhir). HPP di Reporting (3.6) pakai `bahan.harga_rata_rata` ini. Tetap bukan modul supplier/PO — cuma pencatatan restock+harga
+- [FIX] **Audit endpoint (hasil review kode backend v3):** ditemukan beberapa bug — endpoint transaksi/stok_opname tidak validasi kepemilikan shift (`shift.karyawan_id == current_user`), `status_pulang` di absen_pulang hardcode alih-alih dihitung, push realtime KDS belum tersambung dari `create_transaksi`, endpoint create_karyawan masih bisa dipakai Owner untuk bikin akun `role=owner` baru (seharusnya tidak ada endpoint create-owner sama sekali), Admin belum diblokir dari edit/nonaktifkan Admin lain, logic `selisih_handover` & pembedaan `carry_forward` vs `hitung_manual` di stok opname belum diimplementasikan — semua masuk 1 batch fix, lihat issue terkait
 - [PENDING] Potongan telat/SP — menunggu hasil wawancara
 - [PENDING] Layar/app antrian minuman di Bar — menunggu observasi
 - [PENDING] Detail remote access (Cloudflare Tunnel/Tailscale), domain, redundansi PC server (di luar level database, sudah dibahas terpisah di 5.4)

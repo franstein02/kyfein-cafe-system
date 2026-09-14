@@ -24,11 +24,17 @@ async def create_karyawan(
     db: AsyncSession = Depends(get_db),
     current_user: Karyawan = Depends(require_roles(["admin", "owner"]))
 ):
-    # Batasan role elevation (4.2 & 4.3)
-    if karyawan_in.role in ["admin", "owner"] and current_user.role != "owner":
+    # Enforce role creation rules
+    if karyawan_in.role == "owner":
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Hanya Owner yang berhak membuat akun role Admin atau Owner"
+            detail="Akun dengan role Owner tidak dapat dibuat melalui API."
+        )
+
+    if karyawan_in.role == "admin" and current_user.role != "owner":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Hanya Owner yang berhak membuat akun dengan role Admin."
         )
 
     existing = await db.execute(select(Karyawan).where(Karyawan.email == karyawan_in.email))
@@ -65,6 +71,13 @@ async def update_karyawan(
     if not target:
         raise HTTPException(status_code=404, detail="Karyawan tidak ditemukan")
 
+    # Admin tidak boleh mengedit/menonaktifkan Admin lain atau Owner
+    if current_user.role == "admin" and target.role in ["admin", "owner"] and target.id != current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Admin tidak dapat mengubah atau menonaktifkan akun Admin lain atau Owner."
+        )
+
     if karyawan_in.nama is not None:
         target.nama = karyawan_in.nama
     if karyawan_in.nomor_hp is not None:
@@ -76,6 +89,33 @@ async def update_karyawan(
     if karyawan_in.status_aktif is not None and current_user.role in ["admin", "owner"]:
         target.status_aktif = karyawan_in.status_aktif
 
+    await db.commit()
+    await db.refresh(target)
+    return target
+
+@router.put("/{karyawan_id}/promote", response_model=KaryawanOut)
+async def promote_karyawan(
+    karyawan_id: str,
+    role: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: Karyawan = Depends(require_roles(["owner"]))
+):
+    """
+    PROMOTIONS / ROLE CHANGE (OWNER ONLY):
+    Hanya Owner yang berhak mengubah role karyawan (misal: karyawan -> admin).
+    Role owner tidak dapat diset via API.
+    """
+    if role not in ["admin", "karyawan"]:
+        raise HTTPException(status_code=400, detail="Role tujuan harus 'admin' atau 'karyawan'")
+
+    target = await db.get(Karyawan, karyawan_id)
+    if not target:
+        raise HTTPException(status_code=404, detail="Karyawan tidak ditemukan")
+
+    if target.role == "owner":
+        raise HTTPException(status_code=403, detail="Role Owner tidak dapat diubah")
+
+    target.role = role
     await db.commit()
     await db.refresh(target)
     return target

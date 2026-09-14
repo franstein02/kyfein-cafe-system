@@ -53,3 +53,34 @@ class BarangKeluarOut(BaseModel):
 
     class Config:
         from_attributes = True
+
+# Barang Masuk
+class BarangMasukItemInput(BaseModel):
+    bahan_id: str
+    jumlah_kemasan_besar: int = 0
+    jumlah_satuan_kecil: Decimal = Decimal('0')
+    harga_total: Decimal = Decimal('0')
+
+class BarangMasukCreate(BaseModel):
+    catatan: Optional[str] = None
+    items: List[BarangMasukItemInput]
+
+class BarangMasukDetailOut(BaseModel):
+    id: str
+    bahan_id: str
+    jumlah_kemasan_besar: int
+    jumlah_satuan_kecil: Decimal
+    harga_total: Decimal
+
+    class Config:
+        from_attributes = True
+
+class BarangMasukOut(BaseModel):
+    id: str
+    karyawan_id: str
+    waktu: datetime
+    catatan: Optional[str] = None
+    details: List[BarangMasukDetailOut] = []
+
+    class Config:
+        from_attributes = True

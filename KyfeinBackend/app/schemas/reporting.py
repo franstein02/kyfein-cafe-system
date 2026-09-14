@@ -1,5 +1,5 @@
 from datetime import datetime, date
-from typing import Optional, Literal
+from typing import Optional, Literal, List
 from decimal import Decimal
 from pydantic import BaseModel
 
@@ -31,3 +31,4 @@ class DailyProfitReportOut(BaseModel):
     pengeluaran_bulanan_pro_rata: Decimal
     pengeluaran_mendadak: Decimal
     net_profit_harian: Decimal
+    menu_tanpa_resep: List[str] = []

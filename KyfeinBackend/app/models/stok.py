@@ -25,6 +25,31 @@ class StokTitik(Base):
 
     bahan = relationship("Bahan")
 
+class BarangMasuk(Base):
+    __tablename__ = "barang_masuk"
+
+    id = Column(String(36), primary_key=True, default=generate_uuid)
+    karyawan_id = Column(String(36), ForeignKey("karyawan.id", ondelete="RESTRICT"), nullable=False)
+    catatan = Column("keterangan", Text, nullable=True)
+    waktu = Column(DateTime, nullable=False, default=datetime.utcnow)
+    created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
+
+    karyawan = relationship("Karyawan")
+    details = relationship("BarangMasukDetail", back_populates="barang_masuk", cascade="all, delete-orphan")
+
+class BarangMasukDetail(Base):
+    __tablename__ = "barang_masuk_detail"
+
+    id = Column(String(36), primary_key=True, default=generate_uuid)
+    barang_masuk_id = Column(String(36), ForeignKey("barang_masuk.id", ondelete="CASCADE"), nullable=False)
+    bahan_id = Column(String(36), ForeignKey("bahan.id", ondelete="RESTRICT"), nullable=False)
+    jumlah_kemasan_besar = Column(Integer, nullable=False, default=0)
+    jumlah_satuan_kecil = Column(Numeric(10, 3), nullable=False, default=0)
+    harga_total = Column(Numeric(14, 2), nullable=False, default=0)
+
+    barang_masuk = relationship("BarangMasuk", back_populates="details")
+    bahan = relationship("Bahan")
+
 class BarangKeluar(Base):
     __tablename__ = "barang_keluar"
 

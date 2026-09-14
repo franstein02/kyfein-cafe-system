@@ -45,6 +45,7 @@ class BahanBase(BaseModel):
     nama: str
     satuan: str
     isi_per_kemasan: Optional[Decimal] = None
+    harga_rata_rata: Decimal = Decimal('0')
     stok_minimum: Decimal = Decimal('0')
 
 class BahanCreate(BahanBase):

@@ -14,8 +14,6 @@ dist/
 downloads/
 eggs/
 .eggs/
-lib/
-lib64/
 parts/
 sdist/
 var/
@@ -24,14 +22,24 @@ wheels/
 .installed.cfg
 *.egg
 
-# Environment variables
+# Environment variables & Sensitive Configs
 .env
-.env.local
-.env.*.local
+.env.*
+!.env.example
+*.env
+
+# Keys & Certificates
+*.pem
+*.key
+*.crt
+*.pfx
+*.p12
 
 # Database
 *.sqlite3
 *.db
+*.sqlite
+*.db-journal
 
 # Nginx & Logs
 logs/
@@ -45,6 +53,19 @@ logs/
 *~
 .DS_Store
 Thumbs.db
+Desktop.ini
+ehthumbs.db
+
+# Test & Coverage Caches
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Temporary / Uploaded media files
+uploads/
+static/uploads/
+temp/
+tmp/
 
 # Flutter & Dart
 .dart_tool/

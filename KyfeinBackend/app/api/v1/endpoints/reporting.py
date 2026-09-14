@@ -9,7 +9,7 @@ from sqlalchemy import select, func, extract, and_
 
 from app.core.deps import get_db, require_roles
 from app.models.transaksi import Transaksi, TransaksiDetail
-from app.models.master_data import Menu, MenuResep, KategoriPengeluaran
+from app.models.master_data import Menu, MenuResep, Bahan, KategoriPengeluaran
 from app.models.pengeluaran import Pengeluaran
 from app.models.karyawan import Karyawan
 from app.schemas.reporting import PengeluaranCreate, PengeluaranOut, DailyProfitReportOut
@@ -23,9 +23,9 @@ async def get_daily_profit_report(
     current_user: Karyawan = Depends(require_roles(["admin", "owner"]))
 ):
     """
-    FORMULA PROFIT HARIAN (Rencana 3.6):
+    FORMULA PROFIT HARIAN:
     Profit = Penjualan Hari Itu
-           - HPP (on-demand resep x qty terjual)
+           - HPP (on-demand sum(menu_resep.jumlah_terpakai * bahan.harga_rata_rata) * qty terjual)
            - Sum(Pengeluaran Bulanan / jumlah_hari_di_bulan_itu)
            - Sum(Pengeluaran Mendadak pada tanggal_itu)
     """
@@ -44,9 +44,7 @@ async def get_daily_profit_report(
     )
     total_penjualan = trx_res.scalar() or Decimal("0")
 
-    # 2. HPP Teoritis On-Demand: sum(menu_resep.jumlah_terpakai * harga_bahan) for items sold on that day
-    # Untuk kesederhanaan baseline, jika harga bahan tidak disimpan di tabel bahan, HPP dihitung dari resep x snapshot/rasio
-    # Query transaksi_detail pada hari ini
+    # 2. HPP Aktual On-Demand: sum(menu_resep.jumlah_terpakai * bahan.harga_rata_rata) for items sold on that day
     details_res = await db.execute(
         select(TransaksiDetail, Menu)
         .join(Transaksi, TransaksiDetail.transaksi_id == Transaksi.id)
@@ -62,23 +60,25 @@ async def get_daily_profit_report(
     sold_items = details_res.all()
 
     total_hpp = Decimal("0")
+    menu_tanpa_resep: List[str] = []
     for detail, menu_item in sold_items:
-        # Fetch resep
         resep_res = await db.execute(
-            select(MenuResep).where(MenuResep.menu_id == menu_item.id)
+            select(MenuResep, Bahan)
+            .join(Bahan, MenuResep.bahan_id == Bahan.id)
+            .where(MenuResep.menu_id == menu_item.id)
         )
-        reseps = resep_res.scalars().all()
-        # Jika resep terdaftar, hitung estimasi HPP (default 40% dari harga menu jika harga bahan belum diset)
+        reseps = resep_res.all()
         menu_hpp = Decimal("0")
-        for r in reseps:
-            # Asumsi takaran resep x 1000 per unit (dihitung on-demand)
-            menu_hpp += Decimal("1000.00") * r.jumlah_terpakai
+        for r, b in reseps:
+            harga_bahan = Decimal(str(b.harga_rata_rata or 0))
+            menu_hpp += harga_bahan * Decimal(str(r.jumlah_terpakai))
         if not reseps:
-            menu_hpp = menu_item.harga * Decimal("0.35") # Fallback HPP teoritis
+            menu_hpp = Decimal("0")
+            if menu_item.nama not in menu_tanpa_resep:
+                menu_tanpa_resep.append(menu_item.nama)
         total_hpp += menu_hpp * detail.qty
 
     # 3. Pengeluaran Bulanan (Pro-Rata per hari)
-    # Filter pengeluaran tipe='bulanan' untuk bulan & tahun tanggal terkait
     year = tanggal.year
     month = tanggal.month
     days_in_month = calendar.monthrange(year, month)[1]
@@ -115,7 +115,8 @@ async def get_daily_profit_report(
         total_hpp_teoritis=total_hpp,
         pengeluaran_bulanan_pro_rata=pengeluaran_bulanan_harian,
         pengeluaran_mendadak=pengeluaran_mendadak,
-        net_profit_harian=net_profit
+        net_profit_harian=net_profit,
+        menu_tanpa_resep=menu_tanpa_resep
     )
 
 @router.get("/pengeluaran", response_model=List[PengeluaranOut])

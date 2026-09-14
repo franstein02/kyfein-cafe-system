@@ -1,5 +1,5 @@
 import math
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import List
 from decimal import Decimal
 
@@ -53,20 +53,24 @@ async def absen_masuk(
     # 3. Validasi GPS Radius Server-side
     lokasi_res = await db.execute(select(KonfigurasiLokasi).limit(1))
     lokasi = lokasi_res.scalars().first()
-    if lokasi:
-        dist = haversine_distance(
-            float(data.lat_masuk), float(data.lng_masuk),
-            float(lokasi.latitude), float(lokasi.longitude)
+    if not lokasi:
+        raise HTTPException(
+            status_code=400,
+            detail="Konfigurasi lokasi cafe belum diatur oleh admin."
         )
-        if dist > float(lokasi.radius_meter):
-            raise HTTPException(
-                status_code=400,
-                detail=f"Posisi Anda di luar radius lokasi cafe ({dist:.1f}m > {lokasi.radius_meter}m). Absen ditolak."
-            )
 
-    # 4. Hitung keterlambatan (menit)
-    now = datetime.utcnow()
-    # Format jam_mulai shift ke datetime hari ini untuk perbandingan
+    dist = haversine_distance(
+        float(data.lat_masuk), float(data.lng_masuk),
+        float(lokasi.latitude), float(lokasi.longitude)
+    )
+    if dist > float(lokasi.radius_meter):
+        raise HTTPException(
+            status_code=400,
+            detail=f"Posisi Anda di luar radius lokasi cafe ({dist:.1f}m > {lokasi.radius_meter}m). Absen ditolak."
+        )
+
+    # 4. Hitung keterlambatan (menit) menggunakan local time
+    now = datetime.now()
     shift_start_dt = datetime.combine(shift.tanggal, shift.jam_mulai)
     menit_telat = 0
     if now > shift_start_dt:
@@ -112,11 +116,27 @@ async def absen_pulang(
     if absensi.jam_pulang:
         raise HTTPException(status_code=400, detail="Anda sudah melakukan absen pulang")
 
-    absensi.jam_pulang = datetime.utcnow()
+    now = datetime.now()
+    absensi.jam_pulang = now
     absensi.lat_pulang = data.lat_pulang
     absensi.lng_pulang = data.lng_pulang
     absensi.foto_pulang = data.foto_pulang
-    absensi.status_pulang = "tepat_waktu"
+
+    TOLERANSI_PULANG_MENIT = 15
+    # Calculate status_pulang vs shift jam_selesai + toleransi
+    shift = await db.get(JadwalShift, absensi.jadwal_shift_id)
+    if shift:
+        shift_end_dt = datetime.combine(shift.tanggal, shift.jam_selesai)
+        max_end_dt = shift_end_dt + timedelta(minutes=TOLERANSI_PULANG_MENIT)
+        if now > max_end_dt:
+            absensi.status_pulang = "telat"  # Telat / lupa tap out hingga melewati batas toleransi
+        else:
+            # TODO: Pulang lebih awal (now < shift_end_dt) saat ini disimplifikasi sebagai "tepat_waktu"
+            # karena ENUM status_pulang saat ini hanya memiliki ['tepat_waktu', 'telat', 'lupa_absen'].
+            # Di versi mendatang, jika ditambahkan enum 'pulang_cepat', cabang ini perlu diperbarui.
+            absensi.status_pulang = "tepat_waktu"
+    else:
+        absensi.status_pulang = "tepat_waktu"
 
     await db.commit()
     await db.refresh(absensi)
