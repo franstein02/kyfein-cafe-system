@@ -34,6 +34,9 @@ class Settings(BaseSettings):
     # CORS
     BACKEND_CORS_ORIGINS: List[str] = ["*"]
 
+    # Upload Directory
+    UPLOAD_DIR: str = os.getenv("UPLOAD_DIR", "uploads")
+
     class Config:
         case_sensitive = True
         env_file = ".env"

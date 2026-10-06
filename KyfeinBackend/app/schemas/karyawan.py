@@ -7,7 +7,7 @@ class KaryawanBase(BaseModel):
     email: EmailStr
     nomor_hp: str
     role: Literal['karyawan', 'admin', 'owner']
-    foto_profile: Optional[str] = None
+    foto_profile_id: Optional[str] = None
     status_aktif: bool = True
 
 class KaryawanCreate(KaryawanBase):
@@ -17,7 +17,7 @@ class KaryawanUpdate(BaseModel):
     nama: Optional[str] = None
     nomor_hp: Optional[str] = None
     password: Optional[str] = None
-    foto_profile: Optional[str] = None
+    foto_profile_id: Optional[str] = None
     status_aktif: Optional[bool] = None
 
 class KaryawanOut(KaryawanBase):

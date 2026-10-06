@@ -1,11 +1,11 @@
 from datetime import datetime
 from typing import Optional, List, Literal
 from decimal import Decimal
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 class TransaksiDetailCreate(BaseModel):
-    menu_id: str
-    qty: int
+    menu_id: str = Field(min_length=1)
+    qty: int = Field(gt=0)
     catatan: Optional[str] = None
 
 class TransaksiDetailOut(BaseModel):
@@ -13,6 +13,7 @@ class TransaksiDetailOut(BaseModel):
     menu_id: str
     qty: int
     harga_satuan: Decimal
+    hpp_satuan: Decimal = Decimal("0")
     catatan: Optional[str] = None
     subtotal: Decimal
     status_item: Literal['menunggu', 'diproses', 'selesai']
@@ -21,10 +22,10 @@ class TransaksiDetailOut(BaseModel):
         from_attributes = True
 
 class TransaksiCreate(BaseModel):
-    jadwal_shift_id: str
+    jadwal_shift_id: str = Field(min_length=1)
     metode_bayar: Literal['cash', 'qris']
     uang_diterima: Optional[Decimal] = None
-    foto_bukti_qris: Optional[str] = None
+    foto_bukti_qris_id: Optional[str] = None
     details: List[TransaksiDetailCreate]
 
 class TransaksiOut(BaseModel):
@@ -36,7 +37,7 @@ class TransaksiOut(BaseModel):
     total_harga: Decimal
     uang_diterima: Optional[Decimal] = None
     kembalian: Optional[Decimal] = None
-    foto_bukti_qris: Optional[str] = None
+    foto_bukti_qris_id: Optional[str] = None
     status: Literal['selesai', 'dibatalkan']
     waktu_transaksi: datetime
     details: List[TransaksiDetailOut] = []

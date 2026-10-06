@@ -6,12 +6,17 @@ import uuid
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, and_
+from sqlalchemy.orm import selectinload
 
 from app.core.deps import get_db, get_current_user
+from app.core.utils import now_local
+from app.core.foto_helper import validate_and_claim_foto
+from app.core.transaksi_helper import is_transaksi_locked, hitung_hpp_satuan
 from app.models.transaksi import Transaksi, TransaksiDetail
 from app.models.master_data import Menu, KategoriMenu
 from app.models.jadwal import JadwalShift
 from app.models.stok import StokOpname
+from app.models.absensi import Absensi
 from app.models.karyawan import Karyawan
 from app.schemas.transaksi import TransaksiCreate, TransaksiOut, ActiveShiftSummaryOut
 from app.api.v1.endpoints.kds import kds_manager
@@ -26,48 +31,50 @@ async def create_transaksi(
 ):
     """
     Input transaksi POS baru oleh kasir:
-    - Validasi shift.karyawan_id == current_user.id
-    - Validasi area_kerja: shift WAJIB memiliki area_kerja='kasir'
-    - Broadcast order realtime ke KDS (Kitchen/Bar WebSocket)
+    - User wajib karyawan dengan area_kerja = kasir pada jadwal_shift yang dipakai
+    - Jadwal shift harus hari ini
+    - Wajib sudah ada row absensi (absen masuk) untuk shift itu
+    - Opname akhir_shift bar/kitchen belum mengunci shift
     """
-    # 1. Cek jadwal shift aktif, ownership, & validasi area_kerja
+    # 1. Cek jadwal shift aktif & ownership
     shift = await db.get(JadwalShift, data.jadwal_shift_id)
     if not shift:
         raise HTTPException(status_code=404, detail="Jadwal shift tidak ditemukan")
 
-    if shift.karyawan_id != current_user.id and current_user.role not in ["admin", "owner"]:
+    if shift.karyawan_id != current_user.id or shift.area_kerja != "kasir":
+        raise HTTPException(
+            status_code=400,
+            detail="User bukan karyawan dengan area_kerja kasir pada jadwal_shift yang dipakai."
+        )
+
+    # 2. Cek tanggal shift = hari ini
+    if shift.tanggal != now_local().date():
+        raise HTTPException(
+            status_code=400,
+            detail="Jadwal shift bukan untuk hari ini."
+        )
+
+    # 3. Cek row absensi untuk shift itu (kasir sudah absen masuk)
+    absensi_res = await db.execute(select(Absensi).where(Absensi.jadwal_shift_id == data.jadwal_shift_id))
+    if not absensi_res.scalars().first():
+        raise HTTPException(
+            status_code=400,
+            detail="Kasir belum melakukan absen masuk untuk shift ini."
+        )
+
+    # 4. Cek apakah transaksi terkunci
+    if await is_transaksi_locked(db, data.jadwal_shift_id):
         raise HTTPException(
             status_code=403,
-            detail="Tidak dapat menginput transaksi untuk shift milik karyawan lain."
+            detail="Transaksi terkunci untuk shift ini (opname akhir_shift selesai / shift selesai)."
         )
 
-    if shift.area_kerja != "kasir":
-        raise HTTPException(
-            status_code=400,
-            detail=f"Transaksi POS hanya dapat diinput pada shift dengan area_kerja 'kasir' (area_kerja shift saat ini: '{shift.area_kerja}')."
-        )
-
-    # 2. Cek apakah shift ini sudah ditutup dengan stok opname akhir_shift
-    opname_end = await db.execute(
-        select(StokOpname).where(
-            and_(
-                StokOpname.jadwal_shift_id == data.jadwal_shift_id,
-                StokOpname.tipe == "akhir_shift"
-            )
-        )
-    )
-    if opname_end.scalars().first():
-        raise HTTPException(
-            status_code=400,
-            detail="Shift ini sudah ditutup (opname akhir shift telah disubmit). Tidak dapat membuat transaksi baru."
-        )
-
-    # 3. Generate nomor transaksi unik (TRX-YYYYMMDD-XXXX)
-    date_str = datetime.utcnow().strftime("%Y%m%d")
+    # 5. Generate nomor transaksi unik (TRX-YYYYMMDD-XXXX)
+    date_str = now_local().strftime("%Y%m%d")
     random_code = str(uuid.uuid4().hex[:6]).upper()
     nomor_trx = f"TRX-{date_str}-{random_code}"
 
-    # 4. Hitung detail & total
+    # 6. Hitung detail & total
     total_harga = Decimal("0")
     details_to_add = []
     kds_items = []
@@ -80,10 +87,13 @@ async def create_transaksi(
         subtotal = menu_item.harga * item.qty
         total_harga += subtotal
 
+        hpp_satuan = await hitung_hpp_satuan(db, item.menu_id)
+
         trx_detail = TransaksiDetail(
             menu_id=item.menu_id,
             qty=item.qty,
             harga_satuan=menu_item.harga,
+            hpp_satuan=hpp_satuan,
             catatan=item.catatan,
             subtotal=subtotal,
             status_item="menunggu"
@@ -108,8 +118,7 @@ async def create_transaksi(
             raise HTTPException(status_code=400, detail="Uang diterima kurang dari total harga")
         kembalian = data.uang_diterima - total_harga
     elif data.metode_bayar == "qris":
-        if not data.foto_bukti_qris:
-            raise HTTPException(status_code=400, detail="Foto bukti pembayaran QRIS wajib diunggah")
+        await validate_and_claim_foto(db, data.foto_bukti_qris_id, current_user.id, "qris", required=True)
 
     new_trx = Transaksi(
         jadwal_shift_id=data.jadwal_shift_id,
@@ -119,7 +128,7 @@ async def create_transaksi(
         total_harga=total_harga,
         uang_diterima=data.uang_diterima,
         kembalian=kembalian,
-        foto_bukti_qris=data.foto_bukti_qris,
+        foto_bukti_qris_id=data.foto_bukti_qris_id,
         status="selesai",
         details=details_to_add
     )
@@ -143,50 +152,57 @@ async def create_transaksi(
         }
         await kds_manager.broadcast_order(kds["area_produksi"], message)
 
-    return new_trx
+    res = await db.execute(
+        select(Transaksi).options(selectinload(Transaksi.details)).where(Transaksi.id == new_trx.id)
+    )
+    return res.scalar_one()
 
+@router.put("/{transaksi_id}/cancel", response_model=TransaksiOut)
 @router.post("/{transaksi_id}/void", response_model=TransaksiOut)
-async def void_transaksi(
+async def cancel_transaksi(
     transaksi_id: str,
     db: AsyncSession = Depends(get_db),
     current_user: Karyawan = Depends(get_current_user)
 ):
     """
-    ENFORCEMENT VOID TRANSAKSI:
-    Kasir hanya boleh membatalkan transaksi pada shift aktif miliknya SEBELUM
-    stok_opname akhir_shift untuk shift terkait disubmit.
-    Validasi ini di-enforce secara ketat di level API.
+    CANCEL TRANSAKSI:
+    - Kasir hanya boleh cancel transaksi buatan sendiri pada shift aktif miliknya SEBELUM terkunci.
+    - Admin/Owner juga ditolak dengan status 403 setelah transaksi terkunci.
+    - Menolak cancel transaksi kasir lain dengan status 403.
     """
     trx = await db.get(Transaksi, transaksi_id)
     if not trx:
         raise HTTPException(status_code=404, detail="Transaksi tidak ditemukan")
 
+    shift = await db.get(JadwalShift, trx.jadwal_shift_id)
+    if not shift:
+        raise HTTPException(status_code=404, detail="Jadwal shift transaksi tidak ditemukan")
+
+    # 1. Lock Check (Terkunci -> 403 untuk SEMUA role, termasuk admin/owner)
+    if await is_transaksi_locked(db, trx.jadwal_shift_id):
+        raise HTTPException(
+            status_code=403,
+            detail="Transaksi tidak dapat dibatalkan karena shift sudah terkunci (opname akhir_shift selesai / shift selesai)."
+        )
+
+    # 2. Authorization Check (Kasir hanya boleh cancel transaksi buatan sendiri di shift miliknya)
+    if current_user.role == "karyawan":
+        if trx.kasir_id != current_user.id or shift.karyawan_id != current_user.id:
+            raise HTTPException(
+                status_code=403,
+                detail="Anda hanya dapat membatalkan transaksi buatan sendiri pada shift aktif milik Anda."
+            )
+
     if trx.status == "dibatalkan":
         raise HTTPException(status_code=400, detail="Transaksi ini sudah dibatalkan sebelumnya")
 
-    # Syarat 1: Hanya kasir pembuat transaksi atau Admin/Owner yang boleh cancel
-    if current_user.role == "karyawan" and trx.kasir_id != current_user.id:
-        raise HTTPException(status_code=403, detail="Anda hanya dapat membatalkan transaksi buatan sendiri")
-
-    # Syarat 2: VALIDASI BLOCKING API - Cek Stok Opname akhir_shift
-    opname_end = await db.execute(
-        select(StokOpname).where(
-            and_(
-                StokOpname.jadwal_shift_id == trx.jadwal_shift_id,
-                StokOpname.tipe == "akhir_shift"
-            )
-        )
-    )
-    if opname_end.scalars().first():
-        raise HTTPException(
-            status_code=400,
-            detail="Transaksi tidak dapat dibatalkan karena stok opname akhir shift terkait telah disubmit (shift telah terkunci)."
-        )
-
     trx.status = "dibatalkan"
     await db.commit()
-    await db.refresh(trx)
-    return trx
+
+    res = await db.execute(
+        select(Transaksi).options(selectinload(Transaksi.details)).where(Transaksi.id == trx.id)
+    )
+    return res.scalar_one()
 
 @router.get("/shift-aktif/laporan", response_model=ActiveShiftSummaryOut)
 async def get_active_shift_report(
@@ -203,7 +219,7 @@ async def get_active_shift_report(
     if not shift:
         raise HTTPException(status_code=404, detail="Jadwal shift tidak ditemukan")
 
-    if shift.tanggal != date.today():
+    if shift.tanggal != now_local().date():
         raise HTTPException(
             status_code=400,
             detail="Laporan shift aktif hanya untuk shift yang sedang berjalan hari ini"
@@ -238,16 +254,7 @@ async def get_active_shift_report(
         elif t.metode_bayar == "qris":
             total_qris += t.total_harga
 
-    # Cek apakah shift sudah terkunci opname akhir
-    opname_end = await db.execute(
-        select(StokOpname).where(
-            and_(
-                StokOpname.jadwal_shift_id == jadwal_shift_id,
-                StokOpname.tipe == "akhir_shift"
-            )
-        )
-    )
-    is_locked = bool(opname_end.scalars().first())
+    is_locked = await is_transaksi_locked(db, jadwal_shift_id)
 
     return ActiveShiftSummaryOut(
         jadwal_shift_id=shift.id,

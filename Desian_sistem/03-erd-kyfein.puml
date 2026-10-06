@@ -1,0 +1,358 @@
+@startuml erd-kyfein
+title ERD — Sistem Kyfein (Cafe POS)
+
+hide circle
+skinparam linetype ortho
+skinparam roundcorner 5
+skinparam class {
+  BackgroundColor White
+  BorderColor Black
+  ArrowColor Black
+}
+
+' NB: entitas "karyawan" tidak didetailkan sebagai tabel tersendiri di
+' dokumen sumber (hanya muncul sbg karyawan_id di banyak tabel).
+' Kolom di bawah diasumsikan minimal berdasarkan konteks role &
+' "Profil: foto profil, nomor HP" di bagian 4.1.
+entity "karyawan" as karyawan {
+  * id : UUID <<PK>>
+  --
+  nama : VARCHAR
+  no_hp : VARCHAR
+  foto_profil : TEXT
+  role : ENUM('karyawan','admin','owner')
+  status_aktif : BOOL
+}
+
+entity "kategori_menu" as kategori_menu {
+  * id : UUID <<PK>>
+  --
+  nama : VARCHAR
+  area_produksi : ENUM('bar','kitchen')
+  status_aktif : BOOL
+}
+
+entity "menu" as menu {
+  * id : UUID <<PK>>
+  --
+  nama : VARCHAR
+  kode_menu : VARCHAR
+  harga : DECIMAL
+  # kategori_id : UUID <<FK>>
+  foto : TEXT
+  status_aktif : BOOL
+}
+
+entity "bahan" as bahan {
+  * id : UUID <<PK>>
+  --
+  nama : VARCHAR
+  satuan : VARCHAR
+  isi_per_kemasan : INT
+  stok_minimum : DECIMAL
+  harga_rata_rata : DECIMAL
+}
+
+entity "menu_resep" as menu_resep {
+  * id : UUID <<PK>>
+  --
+  # menu_id : UUID <<FK>>
+  # bahan_id : UUID <<FK>>
+  jumlah_terpakai : DECIMAL
+}
+
+entity "shift_template" as shift_template {
+  * id : UUID <<PK>>
+  --
+  shift : ENUM('shift_1','shift_2') <<UNIQUE>>
+  jam_mulai : TIME
+  jam_selesai : TIME
+}
+
+entity "jadwal_shift" as jadwal_shift {
+  * id : UUID <<PK>>
+  --
+  # karyawan_id : UUID <<FK>>
+  tanggal : DATE
+  shift : ENUM('shift_1','shift_2')
+  area_kerja : ENUM('kasir','bar','kitchen')
+  # shift_template_id : UUID <<FK, nullable>>
+  jam_mulai : TIME
+  jam_selesai : TIME
+  # dibuat_oleh : UUID <<FK -> karyawan>>
+  ..
+  UNIQUE(karyawan_id, tanggal)
+}
+
+entity "tukar_shift" as tukar_shift {
+  * id : UUID <<PK>>
+  --
+  # shift_a_id : UUID <<FK -> jadwal_shift>>
+  # shift_b_id : UUID <<FK -> jadwal_shift>>
+  # karyawan_pengaju_id : UUID <<FK -> karyawan>>
+  # karyawan_target_id : UUID <<FK -> karyawan>>
+  status : ENUM('pending','disetujui','ditolak')
+  alasan : TEXT
+  diajukan_at : TIMESTAMP
+  # diproses_oleh : UUID <<FK -> karyawan>>
+  diproses_at : TIMESTAMP
+}
+
+entity "request_off" as request_off {
+  * id : UUID <<PK>>
+  --
+  # karyawan_id : UUID <<FK>>
+  tanggal : DATE
+  alasan : TEXT
+  diajukan_at : TIMESTAMP
+}
+
+entity "absensi" as absensi {
+  * id : UUID <<PK>>
+  --
+  # karyawan_id : UUID <<FK>>
+  # jadwal_shift_id : UUID <<FK>>
+  jam_masuk : TIMESTAMP
+  jam_pulang : TIMESTAMP
+  lat_masuk, lng_masuk : DECIMAL
+  lat_pulang, lng_pulang : DECIMAL
+  foto_masuk : TEXT
+  foto_pulang : TEXT
+  menit_telat : INT
+  # izin_telat_id : UUID <<FK, nullable>>
+  status_pulang : ENUM('tepat_waktu','telat','lupa_absen')
+}
+
+entity "izin_telat" as izin_telat {
+  * id : UUID <<PK>>
+  --
+  # karyawan_id : UUID <<FK>>
+  # jadwal_shift_id : UUID <<FK>>
+  alasan : TEXT
+  foto : TEXT
+  status : ENUM('pending','disetujui','ditolak')
+  diajukan_at : TIMESTAMP
+  # diproses_oleh : UUID <<FK -> karyawan>>
+  diproses_at : TIMESTAMP
+}
+
+entity "izin_tidak_masuk" as izin_tidak_masuk {
+  * id : UUID <<PK>>
+  --
+  # karyawan_id : UUID <<FK>>
+  # jadwal_shift_id : UUID <<FK>>
+  alasan : TEXT
+  foto : TEXT
+  status : ENUM('pending','disetujui','ditolak')
+  diajukan_at : TIMESTAMP
+  # diproses_oleh : UUID <<FK -> karyawan>>
+  diproses_at : TIMESTAMP
+}
+
+entity "konfigurasi_lokasi" as konfigurasi_lokasi {
+  * id : UUID <<PK>> (singleton)
+  --
+  latitude : DECIMAL
+  longitude : DECIMAL
+  radius_meter : INT
+}
+
+entity "audit_log_konfigurasi" as audit_log_konfigurasi {
+  * id : UUID <<PK>>
+  --
+  tabel : VARCHAR
+  row_id : UUID
+  data_lama : TEXT
+  data_baru : TEXT
+  # diubah_oleh : UUID <<FK -> karyawan>>
+  waktu : TIMESTAMP
+}
+
+entity "transaksi" as transaksi {
+  * id : UUID <<PK>>
+  --
+  nomor_transaksi : VARCHAR
+  # jadwal_shift_id : UUID <<FK>>
+  # kasir_id : UUID <<FK -> karyawan>>
+  metode_bayar : ENUM('cash','qris')
+  total_harga : DECIMAL
+  uang_diterima : DECIMAL
+  kembalian : DECIMAL
+  foto_bukti_qris : TEXT
+  status : ENUM('selesai','dibatalkan')
+  waktu_transaksi : TIMESTAMP
+}
+
+entity "transaksi_detail" as transaksi_detail {
+  * id : UUID <<PK>>
+  --
+  # transaksi_id : UUID <<FK>>
+  # menu_id : UUID <<FK>>
+  qty : INT
+  harga_satuan : DECIMAL
+  catatan : TEXT
+  subtotal : DECIMAL
+  status_item : ENUM('menunggu','diproses','selesai')
+}
+
+entity "stok_gudang" as stok_gudang {
+  * id : UUID <<PK>>
+  --
+  # bahan_id : UUID <<FK, UNIQUE>>
+  jumlah_kemasan_besar : INT
+  jumlah_satuan_kecil : DECIMAL
+}
+
+entity "stok_titik" as stok_titik {
+  * id : UUID <<PK>>
+  --
+  # bahan_id : UUID <<FK>>
+  titik : ENUM('bar','kitchen')
+  jumlah : DECIMAL
+  ..
+  UNIQUE(bahan_id, titik)
+}
+
+entity "barang_masuk" as barang_masuk {
+  * id : UUID <<PK>>
+  --
+  # karyawan_id : UUID <<FK>>
+  keterangan : TEXT
+  waktu : TIMESTAMP
+}
+
+entity "barang_masuk_detail" as barang_masuk_detail {
+  * id : UUID <<PK>>
+  --
+  # barang_masuk_id : UUID <<FK>>
+  # bahan_id : UUID <<FK>>
+  jumlah_kemasan_besar : INT
+  jumlah_satuan_kecil : DECIMAL
+  harga_total : DECIMAL
+}
+
+entity "barang_keluar" as barang_keluar {
+  * id : UUID <<PK>>
+  --
+  titik_tujuan : ENUM('bar','kitchen')
+  # karyawan_id : UUID <<FK>>
+  waktu : TIMESTAMP
+}
+
+entity "barang_keluar_detail" as barang_keluar_detail {
+  * id : UUID <<PK>>
+  --
+  # barang_keluar_id : UUID <<FK>>
+  # bahan_id : UUID <<FK>>
+  jumlah : DECIMAL
+}
+
+entity "stok_opname" as stok_opname {
+  * id : UUID <<PK>>
+  --
+  # jadwal_shift_id : UUID <<FK>>
+  titik : ENUM('bar','kitchen')
+  tipe : ENUM('awal_shift','akhir_shift')
+  metode : ENUM('hitung_manual','carry_forward')
+  # karyawan_id : UUID <<FK>>
+  waktu_opname : TIMESTAMP
+  catatan : TEXT
+}
+
+entity "stok_opname_detail" as stok_opname_detail {
+  * id : UUID <<PK>>
+  --
+  # stok_opname_id : UUID <<FK>>
+  # bahan_id : UUID <<FK>>
+  jumlah : DECIMAL
+}
+
+' NB: "mutasi_stok" disebut di teks (hasil otomatis selisih_handover)
+' tapi skema kolomnya tidak dirinci di dokumen sumber — struktur di
+' bawah adalah asumsi minimal yang konsisten dengan deskripsinya.
+entity "mutasi_stok" as mutasi_stok {
+  * id : UUID <<PK>>
+  --
+  # bahan_id : UUID <<FK>>
+  titik : ENUM('bar','kitchen')
+  tipe : ENUM('selisih_handover')
+  jumlah_selisih : DECIMAL
+  # stok_opname_id : UUID <<FK>>
+  keterangan : TEXT
+  waktu : TIMESTAMP
+}
+
+entity "kategori_pengeluaran" as kategori_pengeluaran {
+  * id : UUID <<PK>>
+  --
+  nama : VARCHAR
+  status_aktif : BOOL
+}
+
+entity "pengeluaran" as pengeluaran {
+  * id : UUID <<PK>>
+  --
+  # kategori_id : UUID <<FK>>
+  tipe : ENUM('bulanan','mendadak')
+  nominal : DECIMAL
+  bulan : DATE
+  tanggal : DATE
+  keterangan : TEXT
+  # dicatat_oleh : UUID <<FK -> karyawan>>
+  created_at : TIMESTAMP
+}
+
+' ===================== Relasi =====================
+
+kategori_menu   ||--o{ menu                 : kategori_id
+menu            ||--o{ menu_resep           : menu_id
+bahan           ||--o{ menu_resep           : bahan_id
+
+karyawan        ||--o{ jadwal_shift         : karyawan_id
+karyawan        ||--o{ jadwal_shift         : dibuat_oleh
+shift_template  ||--o{ jadwal_shift         : shift_template_id
+jadwal_shift    ||--o{ tukar_shift          : shift_a_id
+jadwal_shift    ||--o{ tukar_shift          : shift_b_id
+karyawan        ||--o{ tukar_shift          : karyawan_pengaju_id
+karyawan        ||--o{ tukar_shift          : karyawan_target_id
+karyawan        ||--o{ tukar_shift          : diproses_oleh
+karyawan        ||--o{ request_off          : karyawan_id
+
+karyawan        ||--o{ absensi              : karyawan_id
+jadwal_shift    ||--o| absensi              : jadwal_shift_id
+izin_telat      ||--o| absensi              : izin_telat_id
+karyawan        ||--o{ izin_telat           : karyawan_id
+jadwal_shift    ||--o{ izin_telat           : jadwal_shift_id
+karyawan        ||--o{ izin_telat           : diproses_oleh
+karyawan        ||--o{ izin_tidak_masuk     : karyawan_id
+jadwal_shift    ||--o{ izin_tidak_masuk     : jadwal_shift_id
+karyawan        ||--o{ izin_tidak_masuk     : diproses_oleh
+karyawan        ||--o{ audit_log_konfigurasi : diubah_oleh
+
+jadwal_shift    ||--o{ transaksi            : jadwal_shift_id
+karyawan        ||--o{ transaksi            : kasir_id
+transaksi       ||--o{ transaksi_detail     : transaksi_id
+menu            ||--o{ transaksi_detail     : menu_id
+
+bahan           ||--o| stok_gudang          : bahan_id
+bahan           ||--o{ stok_titik           : bahan_id
+
+karyawan        ||--o{ barang_masuk         : karyawan_id
+barang_masuk    ||--o{ barang_masuk_detail  : barang_masuk_id
+bahan           ||--o{ barang_masuk_detail  : bahan_id
+
+karyawan        ||--o{ barang_keluar        : karyawan_id
+barang_keluar   ||--o{ barang_keluar_detail : barang_keluar_id
+bahan           ||--o{ barang_keluar_detail : bahan_id
+
+jadwal_shift    ||--o{ stok_opname          : jadwal_shift_id
+karyawan        ||--o{ stok_opname          : karyawan_id
+stok_opname     ||--o{ stok_opname_detail   : stok_opname_id
+bahan           ||--o{ stok_opname_detail   : bahan_id
+stok_opname     ||--o{ mutasi_stok          : stok_opname_id
+bahan           ||--o{ mutasi_stok          : bahan_id
+
+kategori_pengeluaran ||--o{ pengeluaran     : kategori_id
+karyawan        ||--o{ pengeluaran          : dicatat_oleh
+
+@enduml

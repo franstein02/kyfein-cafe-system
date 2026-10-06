@@ -2,6 +2,7 @@ from datetime import datetime
 from sqlalchemy import Column, String, Integer, DateTime, Numeric, Enum as SQLEnum, ForeignKey, Text
 from sqlalchemy.orm import relationship
 from app.models.base import Base, generate_uuid
+from app.core.utils import now_local
 
 class StokGudang(Base):
     __tablename__ = "stok_gudang"
@@ -10,7 +11,7 @@ class StokGudang(Base):
     bahan_id = Column(String(36), ForeignKey("bahan.id", ondelete="RESTRICT"), nullable=False, unique=True)
     jumlah_kemasan_besar = Column(Integer, nullable=False, default=0)
     jumlah_satuan_kecil = Column(Numeric(10, 3), nullable=False, default=0)
-    updated_at = Column(DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
+    updated_at = Column(DateTime, nullable=False, default=now_local, onupdate=now_local)
 
     bahan = relationship("Bahan")
 
@@ -21,7 +22,7 @@ class StokTitik(Base):
     bahan_id = Column(String(36), ForeignKey("bahan.id", ondelete="RESTRICT"), nullable=False)
     titik = Column(SQLEnum('bar', 'kitchen', name='enum_titik_opname'), nullable=False)
     jumlah = Column(Numeric(10, 3), nullable=False, default=0)
-    updated_at = Column(DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
+    updated_at = Column(DateTime, nullable=False, default=now_local, onupdate=now_local)
 
     bahan = relationship("Bahan")
 
@@ -31,8 +32,8 @@ class BarangMasuk(Base):
     id = Column(String(36), primary_key=True, default=generate_uuid)
     karyawan_id = Column(String(36), ForeignKey("karyawan.id", ondelete="RESTRICT"), nullable=False)
     catatan = Column("keterangan", Text, nullable=True)
-    waktu = Column(DateTime, nullable=False, default=datetime.utcnow)
-    created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
+    waktu = Column(DateTime, nullable=False, default=now_local)
+    created_at = Column(DateTime, nullable=False, default=now_local)
 
     karyawan = relationship("Karyawan")
     details = relationship("BarangMasukDetail", back_populates="barang_masuk", cascade="all, delete-orphan")
@@ -56,8 +57,8 @@ class BarangKeluar(Base):
     id = Column(String(36), primary_key=True, default=generate_uuid)
     titik_tujuan = Column(SQLEnum('bar', 'kitchen', name='enum_titik_opname'), nullable=False)
     karyawan_id = Column(String(36), ForeignKey("karyawan.id", ondelete="RESTRICT"), nullable=False)
-    waktu = Column(DateTime, nullable=False, default=datetime.utcnow)
-    created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
+    waktu = Column(DateTime, nullable=False, default=now_local)
+    created_at = Column(DateTime, nullable=False, default=now_local)
 
     karyawan = relationship("Karyawan")
     details = relationship("BarangKeluarDetail", back_populates="barang_keluar", cascade="all, delete-orphan")
@@ -82,9 +83,9 @@ class StokOpname(Base):
     tipe = Column(SQLEnum('awal_shift', 'akhir_shift', name='enum_tipe_opname'), nullable=False)
     metode = Column(SQLEnum('hitung_manual', 'carry_forward', name='enum_metode_opname'), nullable=False)
     karyawan_id = Column(String(36), ForeignKey("karyawan.id", ondelete="RESTRICT"), nullable=False)
-    waktu_opname = Column(DateTime, nullable=False, default=datetime.utcnow)
+    waktu_opname = Column(DateTime, nullable=False, default=now_local)
     catatan = Column(Text, nullable=True)
-    created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
+    created_at = Column(DateTime, nullable=False, default=now_local)
 
     jadwal_shift = relationship("JadwalShift")
     karyawan = relationship("Karyawan")
@@ -111,7 +112,7 @@ class MutasiStok(Base):
     tipe = Column(String(50), nullable=False, default='selisih_handover')
     jumlah_selisih = Column(Numeric(10, 3), nullable=False)
     keterangan = Column(Text, nullable=True)
-    created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
+    created_at = Column(DateTime, nullable=False, default=now_local)
 
     bahan = relationship("Bahan")
     jadwal_shift = relationship("JadwalShift")

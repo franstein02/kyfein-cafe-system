@@ -1,5 +1,5 @@
 from datetime import datetime, date
-from typing import List
+from typing import List, Optional, Literal
 from decimal import Decimal
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -7,7 +7,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, and_
 from sqlalchemy.orm import selectinload
 
-from app.core.deps import get_db, get_current_user
+from app.core.deps import get_db, get_current_user, require_roles
+from app.core.utils import now_local
 from app.models.stok import (
     StokGudang, StokTitik, BarangKeluar, BarangKeluarDetail,
     BarangMasuk, BarangMasukDetail, StokOpname, StokOpnameDetail, MutasiStok
@@ -18,10 +19,12 @@ from app.models.karyawan import Karyawan
 from app.schemas.stok import (
     StokOpnameCreate, StokOpnameOut,
     BarangKeluarCreate, BarangKeluarOut,
-    BarangMasukCreate, BarangMasukOut
+    BarangMasukCreate, BarangMasukOut,
+    StokGudangOut, StokTitikOut, MutasiStokOut
 )
 
 router = APIRouter()
+
 
 @router.post("/barang-masuk", response_model=BarangMasukOut)
 async def record_barang_masuk(
@@ -109,16 +112,32 @@ async def submit_stok_opname(
     current_user: Karyawan = Depends(get_current_user)
 ):
     """
-    STOK OPNAME TWIN CHECKPOINT:
-    - Validasi kepemilikan shift (shift.karyawan_id == current_user.id)
-    - Validasi area_kerja (titik opname == shift.area_kerja)
-    - awal_shift: carry_forward (same-day only) vs hitung_manual
-    - Perhitungan & pencatatan selisih_handover jika baseline ada
-    - Overwrite stok_titik balance
+    A6 (opname):
+    - jumlahkan items yang bahan_id-nya sama sebelum menyimpan dan membandingkan
+    - metode ditentukan server (akhir_shift selalu hitung_manual, awal_shift otomatis carry_forward jika shift sebelumnya di titik sama dan tanggal sama, selain itu hitung_manual), dan field metode dari client diabaikan
+    - awal_shift harus ada sebelum akhir_shift di shift yang sama
+    - jadwal_shift.tanggal harus hari ini
+    - karyawan_id opname selalu karyawan yang di-assign di shift, bukan admin yang submit
+    - shift yang area_kerja-nya kasir ditolak
     """
     shift = await db.get(JadwalShift, data.jadwal_shift_id)
     if not shift:
         raise HTTPException(status_code=404, detail="Jadwal shift tidak ditemukan")
+
+    # Validasi: jadwal_shift.tanggal harus hari ini
+    today = now_local().date()
+    if shift.tanggal != today:
+        raise HTTPException(
+            status_code=400,
+            detail="Stok opname hanya dapat dilakukan untuk shift hari ini"
+        )
+
+    # Validasi: shift area_kerja kasir ditolak
+    if shift.area_kerja == 'kasir':
+        raise HTTPException(
+            status_code=400,
+            detail="Shift dengan area kerja kasir tidak memerlukan stok opname"
+        )
 
     # Ownership check
     if shift.karyawan_id != current_user.id and current_user.role not in ["admin", "owner"]:
@@ -134,7 +153,7 @@ async def submit_stok_opname(
             detail=f"Titik opname ('{data.titik}') tidak sesuai dengan area_kerja shift aktif karyawan ('{shift.area_kerja}')."
         )
 
-    # Cek apakah opname ini sudah pernah disubmit
+    # Cek apakah opname tipe ini untuk titik pada shift ini sudah pernah disubmit
     existing_opname = await db.execute(
         select(StokOpname).where(
             and_(
@@ -150,43 +169,97 @@ async def submit_stok_opname(
             detail=f"Stok opname {data.tipe} untuk titik {data.titik} pada shift ini sudah pernah disubmit."
         )
 
-    opname_items = []
-    if data.tipe == 'awal_shift':
-        # Query last opname akhir_shift at the same titik
-        last_opname_query = await db.execute(
-            select(StokOpname)
-            .where(
+    # Menentukan metode server-side (field data.metode dari client diabaikan)
+    # 1. akhir_shift selalu hitung_manual
+    # 2. awal_shift: cek opname akhir_shift terakhir di titik yang sama
+    last_opname_query = await db.execute(
+        select(StokOpname)
+        .where(
+            and_(
+                StokOpname.titik == data.titik,
+                StokOpname.tipe == 'akhir_shift'
+            )
+        )
+        .order_by(StokOpname.waktu_opname.desc())
+    )
+    last_opname = last_opname_query.scalars().first()
+
+    if data.tipe == 'akhir_shift':
+        # Validasi: awal_shift harus ada sebelum akhir_shift di shift yang sama
+        awal_opname = await db.execute(
+            select(StokOpname).where(
                 and_(
+                    StokOpname.jadwal_shift_id == data.jadwal_shift_id,
                     StokOpname.titik == data.titik,
-                    StokOpname.tipe == 'akhir_shift'
+                    StokOpname.tipe == 'awal_shift'
                 )
             )
-            .order_by(StokOpname.waktu_opname.desc())
         )
-        last_opname = last_opname_query.scalars().first()
-
-        if data.metode == 'carry_forward':
-            if not last_opname:
-                raise HTTPException(
-                    status_code=400,
-                    detail="Belum ada data opname sebelumnya, gunakan hitung_manual"
-                )
-
+        if not awal_opname.scalars().first():
+            raise HTTPException(
+                status_code=400,
+                detail="Opname awal_shift harus ada sebelum opname akhir_shift pada shift yang sama"
+            )
+        metode = 'hitung_manual'
+    else: # awal_shift
+        if last_opname:
             last_shift = await db.get(JadwalShift, last_opname.jadwal_shift_id)
-            if not last_shift or last_shift.tanggal != shift.tanggal:
-                raise HTTPException(
-                    status_code=400,
-                    detail="Handover melewati hari berbeda, wajib hitung manual"
-                )
+            if last_shift and last_shift.tanggal == shift.tanggal:
+                metode = 'carry_forward'
+            else:
+                metode = 'hitung_manual'
+        else:
+            metode = 'hitung_manual'
 
-            # Map previous details
+    # Aggregasi/Jumlahkan items dengan bahan_id yang sama dari payload client
+    aggregated_client_items = {}
+    if data.items:
+        for it in data.items:
+            aggregated_client_items[it.bahan_id] = aggregated_client_items.get(it.bahan_id, Decimal('0')) + Decimal(str(it.jumlah))
+
+    opname_items = []
+    if metode == 'carry_forward':
+        # Map previous details from last_opname
+        prev_details_query = await db.execute(
+            select(StokOpnameDetail).where(StokOpnameDetail.stok_opname_id == last_opname.id)
+        )
+        prev_details = prev_details_query.scalars().all()
+        stok_map = {d.bahan_id: Decimal(str(d.jumlah)) for d in prev_details}
+
+        # Add barang_keluar since last opname
+        bk_query = await db.execute(
+            select(BarangKeluarDetail.bahan_id, BarangKeluarDetail.jumlah)
+            .join(BarangKeluar, BarangKeluarDetail.barang_keluar_id == BarangKeluar.id)
+            .where(
+                and_(
+                    BarangKeluar.titik_tujuan == data.titik,
+                    BarangKeluar.waktu >= last_opname.waktu_opname
+                )
+            )
+        )
+        for b_id, b_jml in bk_query.all():
+            stok_map[b_id] = stok_map.get(b_id, Decimal('0')) + Decimal(str(b_jml))
+
+        for b_id, b_jml in stok_map.items():
+            opname_items.append({"bahan_id": b_id, "jumlah": b_jml})
+
+    else: # hitung_manual
+        if not aggregated_client_items:
+            raise HTTPException(
+                status_code=400,
+                detail="Items opname fisik wajib diisi untuk hitung_manual."
+            )
+        for b_id, b_jml in aggregated_client_items.items():
+            opname_items.append({"bahan_id": b_id, "jumlah": b_jml})
+
+        # Check selisih_handover jika baseline ada (untuk awal_shift hitung_manual)
+        if data.tipe == 'awal_shift' and last_opname:
             prev_details_query = await db.execute(
                 select(StokOpnameDetail).where(StokOpnameDetail.stok_opname_id == last_opname.id)
             )
             prev_details = prev_details_query.scalars().all()
-            stok_map = {d.bahan_id: Decimal(str(d.jumlah)) for d in prev_details}
+            exp_map = {d.bahan_id: Decimal(str(d.jumlah)) for d in prev_details}
 
-            # Add barang_keluar since last opname
             bk_query = await db.execute(
                 select(BarangKeluarDetail.bahan_id, BarangKeluarDetail.jumlah)
                 .join(BarangKeluar, BarangKeluarDetail.barang_keluar_id == BarangKeluar.id)
@@ -198,78 +271,35 @@ async def submit_stok_opname(
                 )
             )
             for b_id, b_jml in bk_query.all():
-                stok_map[b_id] = stok_map.get(b_id, Decimal('0')) + Decimal(str(b_jml))
+                exp_map[b_id] = exp_map.get(b_id, Decimal('0')) + Decimal(str(b_jml))
 
-            for b_id, b_jml in stok_map.items():
-                opname_items.append({"bahan_id": b_id, "jumlah": b_jml})
-
-        else: # hitung_manual for awal_shift
-            if not data.items:
-                raise HTTPException(
-                    status_code=400,
-                    detail="Items opname fisik wajib diisi untuk hitung_manual."
-                )
-            for item in data.items:
-                opname_items.append({"bahan_id": item.bahan_id, "jumlah": item.jumlah})
-
-            # Check selisih_handover if baseline exists
-            if last_opname:
-                prev_details_query = await db.execute(
-                    select(StokOpnameDetail).where(StokOpnameDetail.stok_opname_id == last_opname.id)
-                )
-                prev_details = prev_details_query.scalars().all()
-                exp_map = {d.bahan_id: Decimal(str(d.jumlah)) for d in prev_details}
-
-                bk_query = await db.execute(
-                    select(BarangKeluarDetail.bahan_id, BarangKeluarDetail.jumlah)
-                    .join(BarangKeluar, BarangKeluarDetail.barang_keluar_id == BarangKeluar.id)
-                    .where(
-                        and_(
-                            BarangKeluar.titik_tujuan == data.titik,
-                            BarangKeluar.waktu >= last_opname.waktu_opname
-                        )
+            for b_id, phys_val in aggregated_client_items.items():
+                exp_val = exp_map.get(b_id, Decimal('0'))
+                if phys_val != exp_val:
+                    mutasi = MutasiStok(
+                        bahan_id=b_id,
+                        titik=data.titik,
+                        jadwal_shift_id=data.jadwal_shift_id,
+                        tipe='selisih_handover',
+                        jumlah_selisih=phys_val - exp_val,
+                        keterangan=f"Selisih handover awal shift {data.titik} (fisik={phys_val}, ekspektasi={exp_val})"
                     )
-                )
-                for b_id, b_jml in bk_query.all():
-                    exp_map[b_id] = exp_map.get(b_id, Decimal('0')) + Decimal(str(b_jml))
+                    db.add(mutasi)
 
-                for item in data.items:
-                    exp_val = exp_map.get(item.bahan_id, Decimal('0'))
-                    phys_val = Decimal(str(item.jumlah))
-                    if phys_val != exp_val:
-                        mutasi = MutasiStok(
-                            bahan_id=item.bahan_id,
-                            titik=data.titik,
-                            jadwal_shift_id=data.jadwal_shift_id,
-                            tipe='selisih_handover',
-                            jumlah_selisih=phys_val - exp_val,
-                            keterangan=f"Selisih handover awal shift {data.titik} (fisik={phys_val}, ekspektasi={exp_val})"
-                        )
-                        db.add(mutasi)
-
-    else: # akhir_shift
-        if not data.items:
-            raise HTTPException(
-                status_code=400,
-                detail="Items opname fisik wajib diisi untuk akhir_shift."
-            )
-        for item in data.items:
-            opname_items.append({"bahan_id": item.bahan_id, "jumlah": item.jumlah})
-
-    # Header
+    # Header: karyawan_id opname selalu karyawan yang di-assign di shift (shift.karyawan_id)
     new_opname = StokOpname(
         jadwal_shift_id=data.jadwal_shift_id,
         titik=data.titik,
         tipe=data.tipe,
-        metode=data.metode,
-        karyawan_id=current_user.id,
-        catatan=data.catatan
+        metode=metode,
+        karyawan_id=shift.karyawan_id,
+        catatan=data.catatan,
+        waktu_opname=now_local()
     )
     db.add(new_opname)
     await db.flush()
 
     # Save Details & Overwrite stok_titik
-    details_to_add = []
     for item in opname_items:
         detail = StokOpnameDetail(
             stok_opname_id=new_opname.id,
@@ -317,7 +347,7 @@ async def record_barang_keluar(
     - Validasi area_kerja: titik_tujuan harus sesuai dengan area_kerja shift aktif karyawan saat itu
     - Mengurangi stok_gudang. Tidak menambah stok_titik secara langsung.
     """
-    today = date.today()
+    today = now_local().date()
     shift_res = await db.execute(
         select(JadwalShift).where(
             and_(
@@ -336,7 +366,8 @@ async def record_barang_keluar(
 
     new_bk = BarangKeluar(
         titik_tujuan=data.titik_tujuan,
-        karyawan_id=current_user.id
+        karyawan_id=current_user.id,
+        waktu=now_local()
     )
     db.add(new_bk)
     await db.flush()
@@ -366,3 +397,61 @@ async def record_barang_keluar(
         .where(BarangKeluar.id == new_bk.id)
     )
     return bk_res.scalars().first()
+
+# --- VIEW ENDPOINTS ---
+@router.get("/stok-gudang", response_model=List[StokGudangOut])
+async def list_stok_gudang(
+    db: AsyncSession = Depends(get_db),
+    current_user: Karyawan = Depends(get_current_user)
+):
+    result = await db.execute(
+        select(StokGudang)
+        .options(selectinload(StokGudang.bahan))
+        .order_by(StokGudang.updated_at.desc())
+    )
+    items = result.scalars().all()
+    for item in items:
+        if item.bahan:
+            setattr(item, 'nama_bahan', item.bahan.nama)
+    return items
+
+@router.get("/stok-titik", response_model=List[StokTitikOut])
+async def list_stok_titik(
+    titik: Optional[Literal['bar', 'kitchen']] = None,
+    db: AsyncSession = Depends(get_db),
+    current_user: Karyawan = Depends(get_current_user)
+):
+    query = select(StokTitik).options(selectinload(StokTitik.bahan))
+    if titik:
+        query = query.where(StokTitik.titik == titik)
+    result = await db.execute(query.order_by(StokTitik.updated_at.desc()))
+    items = result.scalars().all()
+    for item in items:
+        if item.bahan:
+            setattr(item, 'nama_bahan', item.bahan.nama)
+    return items
+
+@router.get("/mutasi-stok", response_model=List[MutasiStokOut])
+async def list_mutasi_stok(
+    titik: Optional[Literal['bar', 'kitchen']] = None,
+    tanggal_mulai: Optional[date] = None,
+    tanggal_selesai: Optional[date] = None,
+    db: AsyncSession = Depends(get_db),
+    current_user: Karyawan = Depends(require_roles(["admin", "owner"]))
+):
+    query = select(MutasiStok).options(selectinload(MutasiStok.bahan))
+    if titik:
+        query = query.where(MutasiStok.titik == titik)
+    if tanggal_mulai:
+        start_dt = datetime.combine(tanggal_mulai, datetime.min.time())
+        query = query.where(MutasiStok.created_at >= start_dt)
+    if tanggal_selesai:
+        end_dt = datetime.combine(tanggal_selesai, datetime.max.time())
+        query = query.where(MutasiStok.created_at <= end_dt)
+
+    result = await db.execute(query.order_by(MutasiStok.created_at.desc()))
+    items = result.scalars().all()
+    for item in items:
+        if item.bahan:
+            setattr(item, 'nama_bahan', item.bahan.nama)
+    return items

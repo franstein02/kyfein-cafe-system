@@ -1,4 +1,5 @@
 from app.models.base import Base
+from app.models.foto import Foto
 from app.models.karyawan import Karyawan
 from app.models.master_data import KonfigurasiLokasi, KategoriMenu, Menu, Bahan, MenuResep, KategoriPengeluaran, AuditLogKonfigurasi
 from app.models.jadwal import ShiftTemplate, JadwalShift, TukarShift, RequestOff
@@ -9,6 +10,7 @@ from app.models.pengeluaran import Pengeluaran
 
 __all__ = [
     "Base",
+    "Foto",
     "Karyawan",
     "KonfigurasiLokasi",
     "KategoriMenu",

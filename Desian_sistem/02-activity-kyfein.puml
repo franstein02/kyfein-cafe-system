@@ -1,0 +1,163 @@
+' ======================================================================
+' ACTIVITY DIAGRAM 1 — POS & Transaksi (3.1) + push realtime ke KDS
+' ======================================================================
+@startuml activity-pos-transaksi
+title Activity Diagram — POS & Transaksi (Poin 1)
+
+|Kasir|
+start
+:Login & mulai shift\n(area_kerja = kasir);
+repeat
+  :Klik menu\n(qty 1, klik lagi = qty +1);
+repeat while (tambah item lagi?) is (ya)
+->tidak;
+:Pilih metode bayar;
+
+if (Metode bayar?) then (Cash)
+  :Input nominal diterima;
+  |Sistem|
+  :Hitung kembalian otomatis;
+else (QRIS statis)
+  |Kasir|
+  :Cek mutasi QRIS manual;
+  :Tandai lunas + upload foto bukti (opsional);
+endif
+
+|Kasir|
+:Simpan transaksi;
+
+|Sistem (API/Backend)|
+:Set status = "selesai"\n(lunas otomatis saat simpan);
+:Simpan transaksi_detail\n(snapshot harga_satuan, subtotal);
+:Kelompokkan item per\nkategori_menu.area_produksi;
+:Push realtime via WebSocket\nke Layar Pesanan/KDS;
+
+|KDS (Bar/Kitchen)|
+:Tampilkan kode_menu + qty + catatan;
+:status_item = "menunggu";
+
+|Kasir|
+if (Kasir perlu cancel transaksi?) then (ya)
+  :Ajukan cancel/void\n(tanpa alasan wajib);
+  |Sistem (API/Backend)|
+  if (stok_opname akhir_shift\nshift ini sudah disubmit?) then (ya - terkunci)
+    :Tolak cancel;
+    stop
+  else (belum - masih boleh)
+    :Set status = "dibatalkan"\n(soft, bukan hard delete);
+    stop
+  endif
+else (tidak)
+  stop
+endif
+
+@enduml
+
+' ======================================================================
+' ACTIVITY DIAGRAM 2 — Stok Opname Twin Checkpoint (3.2)
+' ======================================================================
+@startuml activity-stok-opname
+title Activity Diagram — Stok Opname Twin Checkpoint (Poin 2)
+
+|Karyawan|
+start
+:Mulai/akhiri shift di titik\n(Bar/Kitchen);
+
+|Sistem (API/Backend)|
+:Cari opname terakhir\ndi titik yang sama (checkpoint pembanding);
+
+if (Ada shift sebelumnya\ndi titik ini?) then (tidak - shift pertama)
+  :Set sebagai baseline pertama\n(tanpa pembanding);
+else (ya)
+  if (Shift sebelumnya & shift ini\ndi tanggal kalender sama?) then (ya - same day)
+    :metode = carry_forward;
+  else (tidak - cross-day/overnight)
+    :metode = hitung_manual;
+  endif
+endif
+
+|Karyawan|
+if (metode?) then (carry_forward)
+  :Tap "Konfirmasi Terima"\n(1 tap, tanpa hitung fisik);
+  |Sistem (API/Backend)|
+  :Stok awal = akhir_shift sebelumnya\n+ transfer masuk (barang_keluar);
+else (hitung_manual)
+  :Hitung fisik penuh per bahan\n(ml/gram/pcs campur sesuai kondisi nyata);
+  :Input stok_opname_detail per bahan;
+endif
+
+|Karyawan|
+:Submit stok_opname\n(tipe = awal_shift / akhir_shift);
+
+|Sistem (API/Backend)|
+:Hitung total per bahan\ndari stok_opname_detail;
+:Overwrite stok_titik.jumlah\n(bahan_id + titik);
+
+if (Selisih vs ekspektasi\n(akhir_shift sblm + transfer masuk)?) then (ada selisih)
+  :Catat mutasi_stok\ntipe = selisih_handover\n(untuk review Admin, non-blocking);
+else (tidak ada selisih)
+endif
+
+if (tipe opname?) then (awal_shift)
+  :Karyawan boleh mulai\ntransaksi POS;
+  stop
+else (akhir_shift)
+  :Shift ini dianggap selesai/ditutup;
+  :Kunci transaksi shift ini\n(tidak bisa dicancel lagi);
+  stop
+endif
+
+@enduml
+
+' ======================================================================
+' ACTIVITY DIAGRAM 3 — Absensi + Izin Telat (3.3)
+' ======================================================================
+@startuml activity-absensi
+title Activity Diagram — Absensi (Poin 3)
+
+|Karyawan|
+start
+:Buka menu Absen Masuk;
+
+|Sistem (API/Backend)|
+if (Ada jadwal_shift\ndi tanggal ini?) then (tidak)
+  :Tolak - tidak ada jadwal;
+  stop
+else (ya)
+endif
+
+|Karyawan|
+:Ambil lokasi GPS perangkat;
+
+|Sistem (Client)|
+:Hitung jarak ke\nkonfigurasi_lokasi cafe;
+if (Di luar radius?) then (ya)
+  :Tampilkan notifikasi\n"di luar radius" - blocking;
+  stop
+else (tidak)
+endif
+
+|Karyawan|
+:Ambil foto (wajib);
+:Submit absen masuk;
+
+|Sistem (API/Backend)|
+:Validasi ulang radius GPS\n(server-side, tidak percaya client);
+if (Di luar radius (server)?) then (ya)
+  :Tolak absen;
+  stop
+else (tidak)
+endif
+
+:Hitung menit_telat =\njam_masuk - jadwal_shift.jam_mulai;
+
+if (Ada izin_telat berstatus\n"disetujui" utk shift ini?) then (ya)
+  :Abaikan keterlambatan\n(tidak dihitung telat);
+else (tidak)
+  :Simpan menit_telat apa adanya;
+endif
+
+:Simpan record absensi\n(jam_masuk, lat/lng, foto_masuk);
+stop
+
+@enduml

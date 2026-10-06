@@ -1,0 +1,147 @@
+' ======================================================================
+' WIREFRAME 1 — Login
+' ======================================================================
+@startsalt wireframe-login
+{
+  {Center
+    <b>KYFEIN — LOGIN
+    ..
+    Username | "____________"
+    Password | "____________"
+    ..
+    [ Masuk ]
+  }
+}
+@endsalt
+
+' ======================================================================
+' WIREFRAME 2 — Kasir / POS (3.1)
+' ======================================================================
+@startsalt wireframe-kasir-pos
+{+
+  { Kyfein - Kasir | Shift 1 - Area: Kasir | [ Laporan Shift ] [ Logout ] }
+  ==
+  {
+    { #
+      . | Kategori: [Semua|Makanan|Minuman]
+      { #
+        [Nasi Goreng\nRp 20.000] | [Es Teh\nRp 5.000]  | [Ayam Bakar\nRp 25.000]
+        [Mie Goreng\nRp 18.000] | [Kopi Susu\nRp 12.000] | [Kentang\nRp 15.000]
+      }
+    } |
+    {
+      <b>Keranjang
+      ..
+      { # ; Menu | Qty | Subtotal
+        Nasi Goreng | 2 | Rp 40.000
+        Es Teh | 1 | Rp 5.000
+      }
+      ..
+      Total | <b>Rp 45.000
+      ==
+      Metode Bayar ()Cash  ()QRIS
+      Nominal Diterima | "________"
+      Kembalian | Rp 0
+      ..
+      [ Simpan Transaksi ]
+      [ Cancel Transaksi ]
+    }
+  }
+}
+@endsalt
+
+' ======================================================================
+' WIREFRAME 3 — Layar Pesanan / KDS Kitchen (3.5)
+' ======================================================================
+@startsalt wireframe-kds-kitchen
+{+
+  { Kyfein - KDS Kitchen | Realtime }
+  ==
+  {
+    { <b>#101 (menunggu)
+      . NGR x2 - less pedas
+      . AYB x1
+      [ Mulai Proses ]
+    } |
+    { <b>#102 (diproses)
+      . MGR x1
+      [ Tandai Selesai ]
+    } |
+    { <b>#103 (selesai)
+      . NGR x1
+      <i>selesai 10:42
+    }
+  }
+}
+@endsalt
+
+' ======================================================================
+' WIREFRAME 4 — Stok Opname (3.2)
+' ======================================================================
+@startsalt wireframe-stok-opname
+{+
+  { Kyfein - Stok Opname | Titik: Kitchen | Tipe: Awal Shift }
+  ==
+  Metode: <b>Carry Forward (same-day handover)
+  ..
+  {
+    "Stok akhir shift sebelumnya + transfer masuk sudah dihitung otomatis."
+    [ Konfirmasi Terima ]
+  }
+  ==
+  <i>--- Jika metode Hitung Manual (cross-day) ---
+  { # ; Bahan | Satuan | Jumlah Fisik
+    Kopi Bubuk | gram | "______"
+    Susu UHT | ml | "______"
+    Gula | gram | "______"
+  }
+  [ Submit Opname ]
+}
+@endsalt
+
+' ======================================================================
+' WIREFRAME 5 — Absensi (3.3)
+' ======================================================================
+@startsalt wireframe-absensi
+{
+  {Center
+    <b>ABSENSI
+    ..
+    Status Lokasi: <color:green>Dalam radius (12m)
+    ..
+    [ Ambil Foto ]
+    "[ preview foto ]"
+    ..
+    [ Absen Masuk ]
+    ..
+    ---
+    Ajukan Izin
+    [ Izin Telat ] [ Izin Tidak Masuk ]
+  }
+}
+@endsalt
+
+' ======================================================================
+' WIREFRAME 6 — Dashboard Reporting (Admin/Owner) (3.6)
+' ======================================================================
+@startsalt wireframe-dashboard-reporting
+{+
+  { Kyfein - Reporting | Filter: ()Harian ()Range ()Bulanan ()Tahunan }
+  ==
+  {
+    Profit Hari Ini | <b>Rp 1.250.000
+    Penjualan | Rp 2.100.000
+    HPP | Rp 550.000
+    Pengeluaran (bulanan+mendadak) | Rp 300.000
+  }
+  ==
+  {
+    <b>Breakdown Pengeluaran per Kategori
+    { # ; Kategori | Tipe | Nominal
+      Listrik | bulanan | Rp 150.000
+      Es Batu | mendadak | Rp 50.000
+    }
+    [ + Input Pengeluaran ]
+  }
+}
+@endsalt

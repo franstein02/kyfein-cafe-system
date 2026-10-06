@@ -1,0 +1,135 @@
+@startuml usecase-kyfein
+left to right direction
+skinparam packageStyle rectangle
+skinparam actorStyle awesome
+
+actor Karyawan
+actor Admin
+actor Owner
+
+' Hierarki hak akses: Admin mewarisi semua use case Karyawan,
+' Owner mewarisi semua use case Admin (superuser)
+Admin --|> Karyawan
+Owner --|> Admin
+
+rectangle "Sistem Kyfein (Cafe POS)" {
+
+  package "Autentikasi & Profil" {
+    usecase "Login" as UC_Login
+    usecase "Edit Profil Sendiri" as UC_EditProfil
+  }
+
+  package "POS & Transaksi (Kasir)" {
+    usecase "Buat Transaksi\n(Input Pesanan)" as UC_BuatTransaksi
+    usecase "Pilih Menu\n(qty +1 tiap klik)" as UC_PilihMenu
+    usecase "Pilih Metode Bayar\n(Cash / QRIS)" as UC_MetodeBayar
+    usecase "Cancel/Void Transaksi\n(shift aktif, sblm opname akhir)" as UC_CancelTransaksi
+    usecase "Lihat Laporan Shift Aktif" as UC_LaporanShiftAktif
+  }
+
+  package "Stok Gudang & Titik (Bar/Kitchen)" {
+    usecase "Input Barang Masuk\n(restock gudang + harga)" as UC_BarangMasuk
+    usecase "Ambil Barang\n(Barang Keluar gudang->titik)" as UC_BarangKeluar
+    usecase "Stok Opname Awal Shift" as UC_OpnameAwal
+    usecase "Stok Opname Akhir Shift" as UC_OpnameAkhir
+    usecase "Review Selisih Stok\n(mutasi_stok selisih_handover)" as UC_ReviewSelisih
+  }
+
+  package "Absensi" {
+    usecase "Absen Masuk\n(radius GPS blocking + foto)" as UC_AbsenMasuk
+    usecase "Absen Pulang" as UC_AbsenPulang
+    usecase "Ajukan Izin Telat" as UC_IzinTelat
+    usecase "Ajukan Izin Tidak Masuk" as UC_IzinAlpa
+    usecase "Approve/Tolak Izin" as UC_ApproveIzin
+    usecase "Atur Lokasi & Radius Absen" as UC_KonfigLokasi
+  }
+
+  package "Jadwal Shift" {
+    usecase "Lihat Jadwal Shift" as UC_LihatJadwal
+    usecase "Ajukan Swap Shift" as UC_AjukanSwap
+    usecase "Approve/Tolak Swap Shift" as UC_ApproveSwap
+    usecase "Ajukan Request Off" as UC_RequestOff
+    usecase "Lihat Semua Pengajuan\nRequest Off" as UC_LihatRequestOff
+    usecase "Kelola/Assign Jadwal Shift" as UC_KelolaJadwal
+  }
+
+  package "Layar Pesanan / KDS" {
+    usecase "Lihat Layar Pesanan Realtime" as UC_LihatKDS
+    usecase "Update Status Item Pesanan\n(menunggu->diproses->selesai)" as UC_UpdateStatusItem
+  }
+
+  package "Reporting & Pengeluaran" {
+    usecase "Lihat Laporan Profit\n(Harian/Range/Bulanan/Tahunan)" as UC_LaporanProfit
+    usecase "Input Pengeluaran\n(bulanan/mendadak)" as UC_InputPengeluaran
+    usecase "Kelola Kategori Pengeluaran" as UC_KelolaKategoriPengeluaran
+    usecase "Lihat Breakdown Pengeluaran" as UC_BreakdownPengeluaran
+  }
+
+  package "Master Data & Manajemen Akun" {
+    usecase "CRUD Master Data\n(menu, kategori_menu, bahan, menu_resep)" as UC_CRUDMaster
+    usecase "Kelola Akun Karyawan\n(create/soft-disable)" as UC_KelolaAkunKaryawan
+    usecase "Kelola Akun Admin\n(create/promote/disable)" as UC_KelolaAkunAdmin
+  }
+}
+
+' ===== Karyawan =====
+Karyawan --> UC_Login
+Karyawan --> UC_EditProfil
+Karyawan --> UC_BuatTransaksi
+Karyawan --> UC_CancelTransaksi
+Karyawan --> UC_LaporanShiftAktif
+Karyawan --> UC_BarangKeluar
+Karyawan --> UC_BarangMasuk
+Karyawan --> UC_OpnameAwal
+Karyawan --> UC_OpnameAkhir
+Karyawan --> UC_AbsenMasuk
+Karyawan --> UC_AbsenPulang
+Karyawan --> UC_IzinTelat
+Karyawan --> UC_IzinAlpa
+Karyawan --> UC_LihatJadwal
+Karyawan --> UC_AjukanSwap
+Karyawan --> UC_RequestOff
+Karyawan --> UC_LihatRequestOff
+Karyawan --> UC_LihatKDS
+Karyawan --> UC_UpdateStatusItem
+
+UC_BuatTransaksi .> UC_PilihMenu : <<include>>
+UC_BuatTransaksi .> UC_MetodeBayar : <<include>>
+UC_BuatTransaksi .> UC_UpdateStatusItem : <<extend>>\n(trigger push KDS)
+
+' ===== Admin (otomatis mewarisi semua use case Karyawan) =====
+Admin --> UC_ApproveIzin
+Admin --> UC_KonfigLokasi
+Admin --> UC_ApproveSwap
+Admin --> UC_KelolaJadwal
+Admin --> UC_ReviewSelisih
+Admin --> UC_LaporanProfit
+Admin --> UC_InputPengeluaran
+Admin --> UC_KelolaKategoriPengeluaran
+Admin --> UC_BreakdownPengeluaran
+Admin --> UC_CRUDMaster
+Admin --> UC_KelolaAkunKaryawan
+
+' ===== Owner (otomatis mewarisi semua use case Admin) =====
+Owner --> UC_KelolaAkunAdmin
+
+note right of UC_KelolaAkunAdmin
+  Hak eksklusif Owner.
+  Admin diblok API dari membuat/mengubah
+  akun ber-role admin lain (termasuk dirinya sendiri).
+end note
+
+note right of UC_BarangMasuk
+  Asumsi: bisa diinput Karyawan yang
+  menerima barang (kolom karyawan_id
+  bersifat generik, bukan Admin-only
+  secara eksplisit di dokumen).
+end note
+
+note bottom of UC_CancelTransaksi
+  Dibatasi API: hanya sebelum
+  stok_opname akhir_shift shift
+  terkait disubmit.
+end note
+
+@enduml

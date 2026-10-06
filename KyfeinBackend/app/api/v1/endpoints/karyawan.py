@@ -5,6 +5,7 @@ from sqlalchemy import select
 
 from app.core.deps import get_db, require_roles, get_current_user
 from app.core.security import get_password_hash
+from app.core.foto_helper import validate_and_claim_foto, remove_old_foto_if_replaced
 from app.models.karyawan import Karyawan
 from app.schemas.karyawan import KaryawanCreate, KaryawanUpdate, KaryawanOut
 
@@ -41,13 +42,16 @@ async def create_karyawan(
     if existing.scalars().first():
         raise HTTPException(status_code=400, detail="Email sudah terdaftar")
 
+    if karyawan_in.foto_profile_id:
+        await validate_and_claim_foto(db, karyawan_in.foto_profile_id, current_user.id, "profil", required=False)
+
     new_karyawan = Karyawan(
         nama=karyawan_in.nama,
         email=karyawan_in.email,
         nomor_hp=karyawan_in.nomor_hp,
         role=karyawan_in.role,
         password=get_password_hash(karyawan_in.password),
-        foto_profile=karyawan_in.foto_profile,
+        foto_profile_id=karyawan_in.foto_profile_id,
         status_aktif=karyawan_in.status_aktif
     )
     db.add(new_karyawan)
@@ -78,12 +82,15 @@ async def update_karyawan(
             detail="Admin tidak dapat mengubah atau menonaktifkan akun Admin lain atau Owner."
         )
 
+    if karyawan_in.foto_profile_id is not None and karyawan_in.foto_profile_id != target.foto_profile_id:
+        await validate_and_claim_foto(db, karyawan_in.foto_profile_id, current_user.id, "profil", required=False)
+        await remove_old_foto_if_replaced(db, target.foto_profile_id, karyawan_in.foto_profile_id)
+        target.foto_profile_id = karyawan_in.foto_profile_id
+
     if karyawan_in.nama is not None:
         target.nama = karyawan_in.nama
     if karyawan_in.nomor_hp is not None:
         target.nomor_hp = karyawan_in.nomor_hp
-    if karyawan_in.foto_profile is not None:
-        target.foto_profile = karyawan_in.foto_profile
     if karyawan_in.password:
         target.password = get_password_hash(karyawan_in.password)
     if karyawan_in.status_aktif is not None and current_user.role in ["admin", "owner"]:

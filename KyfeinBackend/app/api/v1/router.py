@@ -2,7 +2,7 @@ from fastapi import APIRouter
 
 from app.api.v1.endpoints import (
     auth, karyawan, master_data, transaksi,
-    stok, absensi, jadwal, kds, reporting
+    stok, absensi, jadwal, kds, reporting, foto
 )
 
 api_router = APIRouter()
@@ -16,3 +16,4 @@ api_router.include_router(absensi.router, prefix="/absensi", tags=["Absensi & Iz
 api_router.include_router(jadwal.router, prefix="/jadwal", tags=["Jadwal Shift"])
 api_router.include_router(kds.router, prefix="/kds", tags=["Layar KDS"])
 api_router.include_router(reporting.router, prefix="/reporting", tags=["Reporting & Profit"])
+api_router.include_router(foto.router, prefix="/foto", tags=["Foto"])

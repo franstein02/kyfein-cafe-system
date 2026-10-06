@@ -1,7 +1,7 @@
 class ApiEndpoints {
-  // Base API URL (defaults to localhost:8000 for dev, Nginx proxy /api in prod)
-  static const String baseUrl = 'http://localhost:8000/api/v1';
-  static const String wsUrl = 'ws://localhost:8000/ws';
+  // Base API URL & WebSocket URL (Supports environment overrides via --dart-define)
+  static const String baseUrl = String.fromEnvironment('API_BASE_URL', defaultValue: 'https://kasir.cafe-kyfein.com/api/v1');
+  static const String wsUrl = String.fromEnvironment('WS_BASE_URL', defaultValue: 'wss://kasir.cafe-kyfein.com/api/v1/kds/ws');
 
   // Auth
   static const String login = '$baseUrl/auth/login';

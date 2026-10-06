@@ -2,6 +2,7 @@ from datetime import datetime
 from sqlalchemy import Column, String, Date, DateTime, Numeric, Enum as SQLEnum, ForeignKey, Text
 from sqlalchemy.orm import relationship
 from app.models.base import Base, generate_uuid
+from app.core.utils import now_local
 
 class Pengeluaran(Base):
     __tablename__ = "pengeluaran"
@@ -14,7 +15,7 @@ class Pengeluaran(Base):
     tanggal = Column(Date, nullable=True) # Wajib kalau tipe='mendadak'
     keterangan = Column(Text, nullable=True)
     dicatat_oleh = Column(String(36), ForeignKey("karyawan.id", ondelete="SET NULL"), nullable=True)
-    created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
+    created_at = Column(DateTime, nullable=False, default=now_local)
 
     kategori = relationship("KategoriPengeluaran")
     pencatat = relationship("Karyawan")
