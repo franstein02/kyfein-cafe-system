@@ -1,82 +1,89 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
-import '../../../core/network/api_client.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:http/http.dart' as http;
 import '../../../core/constants/api_endpoints.dart';
-import '../../../core/services/storage_service.dart';
 
 class AuthProvider with ChangeNotifier {
-  final ApiClient _api = ApiClient();
-  final StorageService _storage = StorageService();
+  final _storage = const FlutterSecureStorage();
 
-  bool _isLoading = false;
-  String? _errorMessage;
-  String? _userName;
-  String? _userRole;
-  bool _isAuthenticated = false;
+  String? _token;
+  String? _role;
+  String? _nama;
+  String? _karyawanId;
+  String? _fotoProfile;
+  bool _isLoading = true; // Start true so splash shows while checking storage
 
+  String? get token => _token;
+  String? get role => _role;
+  String? get nama => _nama;
+  String? get karyawanId => _karyawanId;
+  String? get fotoProfile => _fotoProfile;
   bool get isLoading => _isLoading;
-  String? get errorMessage => _errorMessage;
-  String? get userName => _userName;
-  String? get userRole => _userRole;
-  bool get isAuthenticated => _isAuthenticated;
+  bool get isAuthenticated => _token != null;
+
+  Map<String, String> get authHeaders => {
+        'Content-Type': 'application/json',
+        if (_token != null) 'Authorization': 'Bearer $_token',
+      };
 
   Future<void> checkAuthStatus() async {
-    final token = await _storage.getToken();
-    if (token != null) {
-      _isAuthenticated = true;
-      _userName = await _storage.getUserName();
-      _userRole = await _storage.getRole();
-    } else {
-      _isAuthenticated = false;
-    }
+    _isLoading = true;
+    notifyListeners();
+    _token = await _storage.read(key: 'jwt_token');
+    _role = await _storage.read(key: 'role');
+    _nama = await _storage.read(key: 'nama');
+    _karyawanId = await _storage.read(key: 'karyawan_id');
+    _fotoProfile = await _storage.read(key: 'foto_profile');
+    _isLoading = false;
     notifyListeners();
   }
 
-  Future<bool> login(String email, String password) async {
-    _isLoading = true;
-    _errorMessage = null;
-    notifyListeners();
-
+  Future<void> login(String email, String password) async {
     try {
-      final response = await _api.post(
-        ApiEndpoints.login,
-        body: {'email': email, 'password': password},
-      );
+      final response = await http
+          .post(
+            Uri.parse(ApiEndpoints.login),
+            headers: {'Content-Type': 'application/json'},
+            body: jsonEncode({'email': email, 'password': password}),
+          )
+          .timeout(const Duration(seconds: 8));
 
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
-        await _storage.saveSession(
-          token: data['access_token'],
-          userId: data['user_id'],
-          name: data['nama'],
-          role: data['role'],
-        );
-        _userName = data['nama'];
-        _userRole = data['role'];
-        _isAuthenticated = true;
-        _isLoading = false;
+        _token = data['access_token'];
+        _role = data['role'];
+        _nama = data['nama'];
+        _karyawanId = data['karyawan_id']?.toString();
+        _fotoProfile = data['foto_profile'];
+
+        await _storage.write(key: 'jwt_token', value: _token);
+        await _storage.write(key: 'role', value: _role);
+        await _storage.write(key: 'nama', value: _nama);
+        await _storage.write(key: 'karyawan_id', value: _karyawanId);
+        if (_fotoProfile != null) {
+          await _storage.write(key: 'foto_profile', value: _fotoProfile);
+        }
+
         notifyListeners();
-        return true;
+      } else if (response.statusCode == 403) {
+        throw Exception('Akun tidak aktif, hubungi admin');
       } else {
-        final errorData = jsonDecode(response.body);
-        _errorMessage = errorData['detail'] ?? 'Login gagal. Periksa kembali email dan password.';
-        _isLoading = false;
-        notifyListeners();
-        return false;
+        throw Exception('Email atau password salah');
       }
     } catch (e) {
-      _errorMessage = 'Gagal terhubung ke server backend: $e';
-      _isLoading = false;
-      notifyListeners();
-      return false;
+      if (e is Exception && e.toString().contains('Exception:')) rethrow;
+      throw Exception('Tidak bisa terhubung ke server, cek koneksi WiFi cafe');
     }
   }
 
   Future<void> logout() async {
-    await _storage.clearSession();
-    _isAuthenticated = false;
-    _userName = null;
-    _userRole = null;
+    _token = null;
+    _role = null;
+    _nama = null;
+    _karyawanId = null;
+    _fotoProfile = null;
+    await _storage.deleteAll();
     notifyListeners();
   }
 }
