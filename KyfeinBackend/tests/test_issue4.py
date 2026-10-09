@@ -8,13 +8,14 @@ from app.models import JadwalShift, Absensi, StokOpname, Transaksi, TransaksiDet
 from app.core.transaksi_helper import is_transaksi_locked
 
 @pytest.mark.asyncio
-async def test_issue4_create_transaksi_prerequisites(client, sample_data, test_db):
+async def test_issue4_create_transaksi_prerequisites(client, sample_data, test_db, mock_time_at):
     """
     POST /transaksi validation:
     - User must have shift with area_kerja = 'kasir'
     - Shift must be today
     - Kasir must have checked in (Absensi row exists)
     """
+    mock_time_at("20:00")
     today = now_local().date()
 
     # 1. Kasir 1 has shift-kasir-k1, but hasn't done absen_masuk yet -> 400
@@ -44,6 +45,7 @@ async def test_issue4_create_transaksi_prerequisites(client, sample_data, test_d
     await test_db.commit()
 
     # 2. Non-kasir shift (shift-bar-k1 with area_kerja 'bar') -> 400
+    mock_time_at("10:00")
     res_bar = await client.post(
         "/api/v1/transaksi/",
         headers={"Authorization": f"Bearer {sample_data['token_k1']}"},
@@ -58,6 +60,7 @@ async def test_issue4_create_transaksi_prerequisites(client, sample_data, test_d
     assert "area_kerja kasir" in res_bar.json()["detail"].lower()
 
     # 3. Valid kasir create transaction -> 200
+    mock_time_at("20:00")
     res_valid = await client.post(
         "/api/v1/transaksi/",
         headers={"Authorization": f"Bearer {sample_data['token_k1']}"},
@@ -72,11 +75,12 @@ async def test_issue4_create_transaksi_prerequisites(client, sample_data, test_d
     assert "id" in res_valid.json()
 
 @pytest.mark.asyncio
-async def test_issue4_lock_1_titik(client, sample_data, test_db):
+async def test_issue4_lock_1_titik(client, sample_data, test_db, mock_time_at):
     """
     1 titik (bar only):
     Terkunci ketika shift bar pada tanggal & shift yang sama mengirim opname akhir_shift
     """
+    mock_time_at("20:00")
     today = sample_data["today"]
 
     # Absen kasir
@@ -123,12 +127,13 @@ async def test_issue4_lock_1_titik(client, sample_data, test_db):
     assert res_trx.status_code == 403
 
 @pytest.mark.asyncio
-async def test_issue4_lock_2_titik_and_separuh(client, sample_data, test_db):
+async def test_issue4_lock_2_titik_and_separuh(client, sample_data, test_db, mock_time_at):
     """
     2 titik (bar & kitchen):
     - Bar submit akhir_shift (opname separuh) -> Belum terkunci!
     - Kitchen submit akhir_shift -> Terkunci!
     """
+    mock_time_at("20:00")
     today = sample_data["today"]
 
     # Add kitchen shift on same day and shift_2
@@ -176,11 +181,12 @@ async def test_issue4_lock_2_titik_and_separuh(client, sample_data, test_db):
     assert await is_transaksi_locked(test_db, "shift-kasir-k1")
 
 @pytest.mark.asyncio
-async def test_issue4_lock_0_titik_fallback(client, sample_data, test_db):
+async def test_issue4_lock_0_titik_fallback(client, sample_data, test_db, mock_time_at):
     """
     0 titik (no bar or kitchen shifts scheduled):
     - Fallback: locked when kasir completes absen_pulang (jam_pulang is filled)
     """
+    mock_time_at("10:00")
     today = sample_data["today"]
 
     # Create kasir-only shift on a different day/shift (e.g. tomorrow shift_1)
@@ -221,13 +227,14 @@ async def test_issue4_lock_0_titik_fallback(client, sample_data, test_db):
     assert await is_transaksi_locked(test_db, "shift-kasir-solo")
 
 @pytest.mark.asyncio
-async def test_issue4_cancel_transaksi_authorization(client, sample_data, test_db):
+async def test_issue4_cancel_transaksi_authorization(client, sample_data, test_db, mock_time_at):
     """
     Cancel transaksi rules:
     - Kasir can cancel own transaction before locked
     - Kasir trying to cancel another kasir's transaction -> 403
     - After locked: Kasir and Admin both get 403 when trying to cancel
     """
+    mock_time_at("20:00")
     # Create Absensi for kasir
     absen = Absensi(
         id="abs-kasir-cancel",
@@ -308,8 +315,9 @@ async def test_issue4_cancel_transaksi_authorization(client, sample_data, test_d
     assert res_admin_after_lock.status_code == 403
 
 @pytest.mark.asyncio
-async def test_issue4_opname_kasir_area_rejected(client, sample_data):
+async def test_issue4_opname_kasir_area_rejected(client, sample_data, mock_time_at):
     """Opname endpoint rejects shifts with area_kerja = 'kasir' with 400"""
+    mock_time_at("20:00")
     res = await client.post(
         "/api/v1/stok/opname",
         headers={"Authorization": f"Bearer {sample_data['token_admin']}"},

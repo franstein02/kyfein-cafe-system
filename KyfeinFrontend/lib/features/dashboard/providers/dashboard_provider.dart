@@ -168,7 +168,7 @@ class DashboardProvider with ChangeNotifier {
       if (role == 'karyawan') {
         await Future.wait([_loadShiftAktif(), _loadLaporanShift()]);
         _startAutoRefresh();
-      } else if (role == 'admin' || role == 'owner') {
+      } else if (role == 'admin') {
         await Future.wait([
           _loadAdminSummary(),
           _loadStokMenipis(),

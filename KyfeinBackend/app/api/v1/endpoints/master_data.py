@@ -27,7 +27,7 @@ async def list_kategori_menu(
     current_user: Karyawan = Depends(get_current_user)
 ):
     stmt = select(KategoriMenu)
-    if not (include_nonaktif and current_user.role in ["admin", "owner"]):
+    if not (include_nonaktif and current_user.role in ["admin"]):
         stmt = stmt.where(KategoriMenu.status_aktif == True)
     result = await db.execute(stmt)
     return result.scalars().all()
@@ -36,7 +36,7 @@ async def list_kategori_menu(
 async def create_kategori_menu(
     data: KategoriMenuCreate,
     db: AsyncSession = Depends(get_db),
-    current_user: Karyawan = Depends(require_roles(["admin", "owner"]))
+    current_user: Karyawan = Depends(require_roles(["admin"]))
 ):
     item = KategoriMenu(**data.dict())
     db.add(item)
@@ -52,7 +52,7 @@ async def list_menu(
     current_user: Karyawan = Depends(get_current_user)
 ):
     stmt = select(Menu).options(selectinload(Menu.kategori))
-    if not (include_nonaktif and current_user.role in ["admin", "owner"]):
+    if not (include_nonaktif and current_user.role in ["admin"]):
         stmt = stmt.where(Menu.status_aktif == True)
     result = await db.execute(stmt)
     return result.scalars().all()
@@ -63,7 +63,7 @@ from app.core.foto_helper import validate_and_claim_foto, remove_old_foto_if_rep
 async def create_menu(
     data: MenuCreate,
     db: AsyncSession = Depends(get_db),
-    current_user: Karyawan = Depends(require_roles(["admin", "owner"]))
+    current_user: Karyawan = Depends(require_roles(["admin"]))
 ):
     if data.foto_id:
         await validate_and_claim_foto(db, data.foto_id, current_user.id, "menu", required=False)
@@ -79,7 +79,7 @@ async def update_menu(
     id: str,
     data: MenuUpdate,
     db: AsyncSession = Depends(get_db),
-    current_user: Karyawan = Depends(require_roles(["admin", "owner"]))
+    current_user: Karyawan = Depends(require_roles(["admin"]))
 ):
     item = await db.get(Menu, id)
     if not item:
@@ -98,11 +98,26 @@ async def update_menu(
     res = await db.execute(select(Menu).options(selectinload(Menu.kategori)).where(Menu.id == item.id))
     return res.scalar_one()
 
+@router.delete("/menu/{id}")
+async def delete_menu(
+    id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: Karyawan = Depends(require_roles(["admin"]))
+):
+    item = await db.get(Menu, id)
+    if not item:
+        raise HTTPException(status_code=404, detail="Menu tidak ditemukan")
+    
+    # We could do hard delete, or just soft delete. Let's do hard delete for now.
+    await db.delete(item)
+    await db.commit()
+    return {"message": "Menu berhasil dihapus"}
+
 # --- BAHAN ---
 @router.get("/bahan/stok-menipis", response_model=List[BahanStokMenipisOut])
 async def get_stok_menipis(
     db: AsyncSession = Depends(get_db),
-    current_user: Karyawan = Depends(require_roles(["admin", "owner"]))
+    current_user: Karyawan = Depends(require_roles(["admin"]))
 ):
     """
     List bahan yang total stoknya (stok_gudang dikonversi ke satuan kecil via isi_per_kemasan,
@@ -142,7 +157,7 @@ async def list_bahan(
 ):
     result = await db.execute(select(Bahan))
     items = result.scalars().all()
-    if current_user.role in ["admin", "owner"]:
+    if current_user.role in ["admin"]:
         return [BahanAdminOut.model_validate(b) for b in items]
     return [BahanOut.model_validate(b) for b in items]
 
@@ -150,7 +165,7 @@ async def list_bahan(
 async def create_bahan(
     data: BahanCreate,
     db: AsyncSession = Depends(get_db),
-    current_user: Karyawan = Depends(require_roles(["admin", "owner"]))
+    current_user: Karyawan = Depends(require_roles(["admin"]))
 ):
     item = Bahan(**data.dict())
     db.add(item)
@@ -164,7 +179,7 @@ async def create_bahan(
 async def create_resep(
     data: MenuResepCreate,
     db: AsyncSession = Depends(get_db),
-    current_user: Karyawan = Depends(require_roles(["admin", "owner"]))
+    current_user: Karyawan = Depends(require_roles(["admin"]))
 ):
     item = MenuResep(**data.dict())
     db.add(item)
@@ -185,7 +200,7 @@ async def list_kategori_pengeluaran(
 async def create_kategori_pengeluaran(
     data: KategoriPengeluaranCreate,
     db: AsyncSession = Depends(get_db),
-    current_user: Karyawan = Depends(require_roles(["admin", "owner"]))
+    current_user: Karyawan = Depends(require_roles(["admin"]))
 ):
     item = KategoriPengeluaran(**data.dict())
     db.add(item)
@@ -212,7 +227,7 @@ async def get_konfigurasi_lokasi(
 async def update_konfigurasi_lokasi(
     data: KonfigurasiLokasiUpdate,
     db: AsyncSession = Depends(get_db),
-    current_user: Karyawan = Depends(require_roles(["admin", "owner"]))
+    current_user: Karyawan = Depends(require_roles(["admin"]))
 ):
     res = await db.execute(select(KonfigurasiLokasi).limit(1))
     item = res.scalars().first()

@@ -113,7 +113,7 @@ class _LoginScreenState extends State<LoginScreen>
                     height: 280,
                     decoration: BoxDecoration(
                       shape: BoxShape.circle,
-                      color: Colors.white.withOpacity(0.04),
+                      color: Colors.white.withValues(alpha: 0.04),
                     ),
                   ),
                 ),
@@ -125,7 +125,7 @@ class _LoginScreenState extends State<LoginScreen>
                     height: 350,
                     decoration: BoxDecoration(
                       shape: BoxShape.circle,
-                      color: Colors.white.withOpacity(0.04),
+                      color: Colors.white.withValues(alpha: 0.04),
                     ),
                   ),
                 ),
@@ -144,7 +144,7 @@ class _LoginScreenState extends State<LoginScreen>
                               width: 88,
                               height: 88,
                               decoration: BoxDecoration(
-                                color: Colors.white.withOpacity(0.15),
+                                color: Colors.white.withValues(alpha: 0.15),
                                 borderRadius: BorderRadius.circular(22),
                               ),
                               child: const Icon(Icons.coffee_rounded,
@@ -164,7 +164,7 @@ class _LoginScreenState extends State<LoginScreen>
                             Text(
                               'Cafe POS & Management System',
                               style: TextStyle(
-                                color: Colors.white.withOpacity(0.7),
+                                color: Colors.white.withValues(alpha: 0.7),
                                 fontSize: 16,
                                 letterSpacing: 0.3,
                               ),
@@ -240,7 +240,7 @@ class _LoginScreenState extends State<LoginScreen>
                 width: 72,
                 height: 72,
                 decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.15),
+                  color: Colors.white.withValues(alpha: 0.15),
                   borderRadius: BorderRadius.circular(18),
                 ),
                 child: const Icon(Icons.coffee_rounded,
@@ -263,7 +263,7 @@ class _LoginScreenState extends State<LoginScreen>
                   borderRadius: BorderRadius.circular(20),
                   boxShadow: [
                     BoxShadow(
-                      color: Colors.black.withOpacity(0.2),
+                      color: Colors.black.withValues(alpha: 0.2),
                       blurRadius: 24,
                       offset: const Offset(0, 8),
                     ),
@@ -424,7 +424,7 @@ class _LoginScreenState extends State<LoginScreen>
                 ScaffoldMessenger.of(context).showSnackBar(
                   const SnackBar(
                     content: Text(
-                        'Hubungi Owner atau Admin untuk mereset password.'),
+                        'Hubungi Admin untuk mereset password.'),
                     behavior: SnackBarBehavior.floating,
                   ),
                 );
@@ -503,7 +503,7 @@ class _FeaturePill extends StatelessWidget {
       padding:
           const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
       decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.1),
+        color: Colors.white.withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(30),
       ),
       child: Row(

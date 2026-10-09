@@ -4,7 +4,7 @@ Applies:
 - Table `barang_masuk` and `barang_masuk_detail`
 - Column `bahan.harga_rata_rata`
 - Index `idx_barang_masuk_waktu`
-- Seeds owner account
+- Seeds admin account
 """
 
 import sys
@@ -103,9 +103,9 @@ def apply_migration():
 
     print("[Migration v4] Migration v4 applied successfully to db_kyfein!")
 
-    # 5. Run owner seed
-    from scripts.seed_owner import seed_owner
-    seed_owner()
+    # 5. Run admin seed
+    from scripts.seed_admin import seed_admin
+    seed_admin()
 
 if __name__ == "__main__":
     apply_migration()

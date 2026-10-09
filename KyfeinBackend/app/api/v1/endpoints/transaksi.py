@@ -20,6 +20,7 @@ from app.models.absensi import Absensi
 from app.models.karyawan import Karyawan
 from app.schemas.transaksi import TransaksiCreate, TransaksiOut, ActiveShiftSummaryOut
 from app.api.v1.endpoints.kds import kds_manager
+from app.services.jadwal_service import get_shift_berjalan
 
 router = APIRouter()
 
@@ -36,23 +37,23 @@ async def create_transaksi(
     - Wajib sudah ada row absensi (absen masuk) untuk shift itu
     - Opname akhir_shift bar/kitchen belum mengunci shift
     """
-    # 1. Cek jadwal shift aktif & ownership
-    shift = await db.get(JadwalShift, data.jadwal_shift_id)
-    if not shift:
-        raise HTTPException(status_code=404, detail="Jadwal shift tidak ditemukan")
-
-    if shift.karyawan_id != current_user.id or shift.area_kerja != "kasir":
+    # 1. Cek jadwal shift aktif
+    now = now_local()
+    active_shift = await get_shift_berjalan(db, current_user.id, now)
+    
+    if not active_shift:
+        raise HTTPException(status_code=400, detail="Tidak ada shift berjalan saat ini")
+        
+    if active_shift.area_kerja != "kasir":
         raise HTTPException(
             status_code=400,
-            detail="User bukan karyawan dengan area_kerja kasir pada jadwal_shift yang dipakai."
+            detail="User bukan karyawan dengan area_kerja kasir pada jadwal_shift yang berjalan."
         )
-
-    # 2. Cek tanggal shift = hari ini
-    if shift.tanggal != now_local().date():
-        raise HTTPException(
-            status_code=400,
-            detail="Jadwal shift bukan untuk hari ini."
-        )
+        
+    if data.jadwal_shift_id != active_shift.id:
+        raise HTTPException(status_code=400, detail="Transaksi hanya dapat dilakukan pada shift yang sedang berjalan")
+        
+    shift = active_shift
 
     # 3. Cek row absensi untuk shift itu (kasir sudah absen masuk)
     absensi_res = await db.execute(select(Absensi).where(Absensi.jadwal_shift_id == data.jadwal_shift_id))
@@ -167,7 +168,7 @@ async def cancel_transaksi(
     """
     CANCEL TRANSAKSI:
     - Kasir hanya boleh cancel transaksi buatan sendiri pada shift aktif miliknya SEBELUM terkunci.
-    - Admin/Owner juga ditolak dengan status 403 setelah transaksi terkunci.
+    - Admin juga ditolak dengan status 403 setelah transaksi terkunci.
     - Menolak cancel transaksi kasir lain dengan status 403.
     """
     trx = await db.get(Transaksi, transaksi_id)
@@ -178,7 +179,7 @@ async def cancel_transaksi(
     if not shift:
         raise HTTPException(status_code=404, detail="Jadwal shift transaksi tidak ditemukan")
 
-    # 1. Lock Check (Terkunci -> 403 untuk SEMUA role, termasuk admin/owner)
+    # 1. Lock Check (Terkunci -> 403 untuk SEMUA role, termasuk admin)
     if await is_transaksi_locked(db, trx.jadwal_shift_id):
         raise HTTPException(
             status_code=403,
@@ -187,7 +188,9 @@ async def cancel_transaksi(
 
     # 2. Authorization Check (Kasir hanya boleh cancel transaksi buatan sendiri di shift miliknya)
     if current_user.role == "karyawan":
-        if trx.kasir_id != current_user.id or shift.karyawan_id != current_user.id:
+        now = now_local()
+        active_shift = await get_shift_berjalan(db, current_user.id, now)
+        if trx.kasir_id != current_user.id or not active_shift or shift.id != active_shift.id:
             raise HTTPException(
                 status_code=403,
                 detail="Anda hanya dapat membatalkan transaksi buatan sendiri pada shift aktif milik Anda."
@@ -219,10 +222,13 @@ async def get_active_shift_report(
     if not shift:
         raise HTTPException(status_code=404, detail="Jadwal shift tidak ditemukan")
 
-    if shift.tanggal != now_local().date():
+    now = now_local()
+    active_shift = await get_shift_berjalan(db, shift.karyawan_id, now)
+    
+    if not active_shift or shift.id != active_shift.id:
         raise HTTPException(
             status_code=400,
-            detail="Laporan shift aktif hanya untuk shift yang sedang berjalan hari ini"
+            detail="Laporan shift aktif hanya untuk shift yang sedang berjalan"
         )
 
     if shift.karyawan_id != current_user.id and current_user.role == "karyawan":

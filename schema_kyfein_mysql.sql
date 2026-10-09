@@ -1,10 +1,10 @@
 -- =====================================================================
--- KYFEIN CAFE SYSTEM — SKEMA MySQL / MariaDB (v6 Synchronized)
+-- KYFEIN CAFE SYSTEM — SKEMA MySQL / MariaDB (v7 Synchronized)
 -- Scope: 6 fitur utama (POS+Takaran, Stok Gudang & Titik, Absensi,
 --        Jadwal Shift, Layar Pesanan/KDS, Reporting & Pengeluaran)
 --        + Master Data + Role & Hak Akses + Tabel Foto & Upload 2 Langkah
 --
--- Versi: v6 Synchronized (2026-10-06)
+-- Versi: v7 Synchronized (2026-10-07)
 -- Migration & Fitur yang Tercakup:
 --   - Issue 1: Tabel foto + FK foto (absensi, izin, qris, menu, karyawan)
 --   - Issue 2: Konfigurasi HTTPS & WebSocket Secure (WSS) Nginx
@@ -14,6 +14,7 @@
 --   - Issue 6: Foto FK & constraint absensi/izin (foto_masuk_id, foto_pulang_id, foto_id)
 --   - Issue 7: UNIQUE(karyawan_id, tanggal) di request_off
 --   - Issue 8: Sinkronisasi skema MySQL komprehensif
+--   - Issue 10: Service shift_berjalan, perbaikan sisa issue 6-9
 --
 -- Catatan UUID: PK memakai CHAR(36) + DEFAULT (UUID()).
 -- Storage engine: InnoDB (wajib untuk mendukung Foreign Keys & Check Constraints).
@@ -38,7 +39,7 @@ CREATE TABLE foto (
 
 CREATE TABLE karyawan (
     id              CHAR(36) NOT NULL DEFAULT (UUID()) PRIMARY KEY,
-    role            ENUM('karyawan', 'admin', 'owner') NOT NULL,
+    role            ENUM('karyawan', 'admin') NOT NULL,
     nama            VARCHAR(150) NOT NULL,
     email           VARCHAR(150) NOT NULL UNIQUE,
     nomor_hp        VARCHAR(20) NOT NULL UNIQUE,
@@ -306,12 +307,15 @@ CREATE TABLE stok_opname (
     tipe            ENUM('awal_shift', 'akhir_shift') NOT NULL,
     metode          ENUM('hitung_manual', 'carry_forward') NOT NULL,
     karyawan_id     CHAR(36) NOT NULL,
+    susulan         BOOLEAN NOT NULL DEFAULT FALSE,
+    diinput_oleh    CHAR(36) NULL,
     waktu_opname    DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     catatan         TEXT,
     created_at      DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     CONSTRAINT uq_stok_opname UNIQUE (jadwal_shift_id, titik, tipe),
     CONSTRAINT fk_stok_opname_jadwal_shift FOREIGN KEY (jadwal_shift_id) REFERENCES jadwal_shift(id) ON DELETE RESTRICT,
-    CONSTRAINT fk_stok_opname_karyawan FOREIGN KEY (karyawan_id) REFERENCES karyawan(id) ON DELETE RESTRICT
+    CONSTRAINT fk_stok_opname_karyawan FOREIGN KEY (karyawan_id) REFERENCES karyawan(id) ON DELETE RESTRICT,
+    CONSTRAINT fk_stok_opname_diinput_oleh FOREIGN KEY (diinput_oleh) REFERENCES karyawan(id) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 CREATE TABLE stok_opname_detail (
@@ -359,7 +363,7 @@ CREATE TABLE transaksi (
     ),
     CONSTRAINT fk_transaksi_jadwal_shift FOREIGN KEY (jadwal_shift_id) REFERENCES jadwal_shift(id) ON DELETE RESTRICT,
     CONSTRAINT fk_transaksi_kasir FOREIGN KEY (kasir_id) REFERENCES karyawan(id) ON DELETE RESTRICT,
-    CONSTRAINT fk_transaksi_foto_qris FOREIGN KEY (foto_bukti_qris_id) REFERENCES foto(id) ON DELETE SET NULL
+    CONSTRAINT fk_transaksi_foto_qris FOREIGN KEY (foto_bukti_qris_id) REFERENCES foto(id) ON DELETE RESTRICT
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 CREATE TABLE transaksi_detail (

@@ -4,7 +4,6 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 import '../../providers/pos_provider.dart';
-import '../../../auth/providers/auth_provider.dart';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 const _brown = Color(0xFF1B4332);
@@ -13,8 +12,8 @@ const _gold = Color(0xFFD4A373);
 const _surface = Colors.white;
 const _textDim = Color(0xFF7A7A7A);
 
-final _idr = NumberFormat.currency(
-    locale: 'id_ID', symbol: 'Rp ', decimalDigits: 0);
+final _idr =
+    NumberFormat.currency(locale: 'id_ID', symbol: 'Rp ', decimalDigits: 0);
 
 // ─── POS Screen ───────────────────────────────────────────────────────────────
 class PosScreen extends StatefulWidget {
@@ -24,23 +23,13 @@ class PosScreen extends StatefulWidget {
   State<PosScreen> createState() => _PosScreenState();
 }
 
-class _PosScreenState extends State<PosScreen>
-    with SingleTickerProviderStateMixin {
-  late TabController _tabController;
-
+class _PosScreenState extends State<PosScreen> {
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 2, vsync: this);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       context.read<PosProvider>().loadAll();
     });
-  }
-
-  @override
-  void dispose() {
-    _tabController.dispose();
-    super.dispose();
   }
 
   @override
@@ -48,9 +37,9 @@ class _PosScreenState extends State<PosScreen>
     return LayoutBuilder(
       builder: (context, constraints) {
         if (constraints.maxWidth > 800) {
-          return _WebPosLayout(tabController: _tabController);
+          return const _WebPosLayout();
         }
-        return _MobilePosLayout(tabController: _tabController);
+        return const _MobilePosLayout();
       },
     );
   }
@@ -58,46 +47,19 @@ class _PosScreenState extends State<PosScreen>
 
 // ─── Web/Tablet POS Layout ────────────────────────────────────────────────────
 class _WebPosLayout extends StatelessWidget {
-  final TabController tabController;
-  const _WebPosLayout({required this.tabController});
+  const _WebPosLayout();
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
+    return const Scaffold(
       backgroundColor: _cream,
-      appBar: AppBar(
-        backgroundColor: _brown,
-        foregroundColor: Colors.white,
-        title: Text('POS — Kyfein',
-            style: GoogleFonts.outfit(fontWeight: FontWeight.w700)),
-        bottom: TabBar(
-          controller: tabController,
-          indicatorColor: _gold,
-          labelColor: Colors.white,
-          unselectedLabelColor: Colors.white60,
-          tabs: const [
-            Tab(icon: Icon(Icons.point_of_sale_rounded), text: 'Kasir'),
-            Tab(icon: Icon(Icons.receipt_long_rounded), text: 'Riwayat Shift'),
-          ],
-        ),
-      ),
-      body: TabBarView(
-        controller: tabController,
+      body: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // ── Tab 1: Kasir ──
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: const [
-              // Left: Menu grid (65%)
-              Expanded(flex: 65, child: _MenuPanel()),
-              // Right: Cart (35%)
-              SizedBox(
-                  width: 360,
-                  child: _CartPanel()),
-            ],
-          ),
-          // ── Tab 2: Riwayat ──
-          const _RiwayatPanel(),
+          // Left: Menu grid (65%)
+          Expanded(flex: 65, child: _MenuPanel()),
+          // Right: Cart (35%)
+          SizedBox(width: 360, child: _CartPanel()),
         ],
       ),
     );
@@ -106,36 +68,13 @@ class _WebPosLayout extends StatelessWidget {
 
 // ─── Mobile POS Layout ────────────────────────────────────────────────────────
 class _MobilePosLayout extends StatelessWidget {
-  final TabController tabController;
-  const _MobilePosLayout({required this.tabController});
+  const _MobilePosLayout();
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
+    return const Scaffold(
       backgroundColor: _cream,
-      appBar: AppBar(
-        backgroundColor: _brown,
-        foregroundColor: Colors.white,
-        title: Text('POS — Kyfein',
-            style: GoogleFonts.outfit(fontWeight: FontWeight.w700)),
-        bottom: TabBar(
-          controller: tabController,
-          indicatorColor: _gold,
-          labelColor: Colors.white,
-          unselectedLabelColor: Colors.white60,
-          tabs: const [
-            Tab(icon: Icon(Icons.point_of_sale_rounded), text: 'Kasir'),
-            Tab(icon: Icon(Icons.receipt_long_rounded), text: 'Riwayat'),
-          ],
-        ),
-      ),
-      body: TabBarView(
-        controller: tabController,
-        children: [
-          const _MobileKasirView(),
-          const _RiwayatPanel(),
-        ],
-      ),
+      body: SafeArea(child: _MobileKasirView()),
     );
   }
 }
@@ -232,9 +171,9 @@ class _MenuPanel extends StatelessWidget {
         // Category chips
         if (pos.kategori.isNotEmpty)
           Container(
+            width: double.infinity,
             color: _surface,
-            padding:
-                const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
             child: SingleChildScrollView(
               scrollDirection: Axis.horizontal,
               child: Row(
@@ -258,37 +197,45 @@ class _MenuPanel extends StatelessWidget {
           child: pos.isLoadingMenu
               ? const Center(
                   child: CircularProgressIndicator(color: _brown))
-              : pos.menu.isEmpty
-                  ? Center(
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Icon(Icons.coffee_rounded,
-                              size: 48, color: Colors.grey.shade300),
-                          const SizedBox(height: 12),
-                          Text('Tidak ada menu tersedia',
-                              style: TextStyle(color: Colors.grey.shade500)),
-                        ],
-                      ),
-                    )
-                  : LayoutBuilder(
-                      builder: (context, constraints) {
-                        final cols = constraints.maxWidth > 600 ? 4 : 2;
-                        return GridView.builder(
-                          padding: const EdgeInsets.all(16),
-                          gridDelegate:
-                              SliverGridDelegateWithFixedCrossAxisCount(
-                            crossAxisCount: cols,
-                            childAspectRatio: 0.85,
-                            crossAxisSpacing: 12,
-                            mainAxisSpacing: 12,
-                          ),
-                          itemCount: pos.menu.length,
-                          itemBuilder: (_, i) =>
-                              _MenuCard(item: pos.menu[i]),
-                        );
-                      },
+              : Column(
+                  children: [
+
+                    Expanded(
+                      child: pos.menu.isEmpty
+                          ? Center(
+                              child: Column(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  Icon(Icons.coffee_rounded,
+                                      size: 48, color: Colors.grey.shade300),
+                                  const SizedBox(height: 12),
+                                  Text('Tidak ada menu tersedia',
+                                      style: TextStyle(color: Colors.grey.shade500)),
+                                ],
+                              ),
+                            )
+                          : LayoutBuilder(
+                              builder: (context, constraints) {
+                                final cols = constraints.maxWidth > 600 ? 4 : 2;
+                                return GridView.builder(
+                                  padding: const EdgeInsets.all(16),
+                                  gridDelegate:
+                                      SliverGridDelegateWithFixedCrossAxisCount(
+                                    crossAxisCount: cols,
+                                    childAspectRatio: 0.85,
+                                    crossAxisSpacing: 12,
+                                    mainAxisSpacing: 12,
+                                  ),
+                                  itemCount: pos.menu.length,
+                                  itemBuilder: (_, i) =>
+                                      _MenuCard(item: pos.menu[i]),
+                                );
+                              },
+                            ),
                     ),
+
+                  ],
+                ),
         ),
       ],
     );
@@ -314,16 +261,14 @@ class _KategoriChip extends StatelessWidget {
         label: Text(label),
         selected: selected,
         onSelected: (_) => onTap(),
-        selectedColor: _brown.withOpacity(0.15),
+        selectedColor: _brown.withValues(alpha: 0.15),
         checkmarkColor: _brown,
         labelStyle: TextStyle(
           color: selected ? _brown : _textDim,
-          fontWeight:
-              selected ? FontWeight.w600 : FontWeight.w400,
+          fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
           fontSize: 13,
         ),
-        side: BorderSide(
-            color: selected ? _brown : Colors.grey.shade300),
+        side: BorderSide(color: selected ? _brown : Colors.grey.shade300),
         backgroundColor: Colors.white,
         showCheckmark: false,
       ),
@@ -353,13 +298,13 @@ class _MenuCard extends StatelessWidget {
                 borderRadius: BorderRadius.circular(14),
                 border: Border.all(
                   color: qty > 0
-                      ? _brown.withOpacity(0.4)
+                      ? _brown.withValues(alpha: 0.4)
                       : Colors.transparent,
                   width: 1.5,
                 ),
                 boxShadow: [
                   BoxShadow(
-                      color: Colors.black.withOpacity(0.05),
+                      color: Colors.black.withValues(alpha: 0.05),
                       blurRadius: 6,
                       offset: const Offset(0, 2))
                 ],
@@ -371,10 +316,10 @@ class _MenuCard extends StatelessWidget {
                   Expanded(
                     child: Container(
                       width: double.infinity,
-                      decoration: BoxDecoration(
+                      decoration: const BoxDecoration(
                         color: _cream,
-                        borderRadius: const BorderRadius.vertical(
-                            top: Radius.circular(14)),
+                        borderRadius:
+                            BorderRadius.vertical(top: Radius.circular(14)),
                       ),
                       child: item.foto != null
                           ? ClipRRect(
@@ -383,10 +328,9 @@ class _MenuCard extends StatelessWidget {
                               child: Image.network(
                                 item.foto!,
                                 fit: BoxFit.cover,
-                                errorBuilder: (_, __, ___) =>
-                                    const Center(
-                                        child: Icon(Icons.coffee_rounded,
-                                            size: 32, color: _gold)),
+                                errorBuilder: (_, __, ___) => const Center(
+                                    child: Icon(Icons.coffee_rounded,
+                                        size: 32, color: _gold)),
                               ),
                             )
                           : const Center(
@@ -431,8 +375,8 @@ class _MenuCard extends StatelessWidget {
             child: Container(
               width: 24,
               height: 24,
-              decoration: const BoxDecoration(
-                  color: _brown, shape: BoxShape.circle),
+              decoration:
+                  const BoxDecoration(color: _brown, shape: BoxShape.circle),
               child: Center(
                 child: Text(
                   '$qty',
@@ -496,8 +440,7 @@ class _CartPanel extends StatelessWidget {
                             size: 48, color: Colors.grey.shade300),
                         const SizedBox(height: 12),
                         Text('Keranjang kosong',
-                            style:
-                                TextStyle(color: Colors.grey.shade400)),
+                            style: TextStyle(color: Colors.grey.shade400)),
                       ],
                     ),
                   )
@@ -506,8 +449,7 @@ class _CartPanel extends StatelessWidget {
                     itemCount: pos.cart.length,
                     separatorBuilder: (_, __) =>
                         const Divider(height: 1, indent: 16),
-                    itemBuilder: (_, i) =>
-                        _CartItemTile(item: pos.cart[i]),
+                    itemBuilder: (_, i) => _CartItemTile(item: pos.cart[i]),
                   ),
           ),
           // Total + Pay button
@@ -521,8 +463,7 @@ class _CartPanel extends StatelessWidget {
                   children: [
                     Text('Total',
                         style: GoogleFonts.outfit(
-                            fontSize: 15,
-                            fontWeight: FontWeight.w600)),
+                            fontSize: 15, fontWeight: FontWeight.w600)),
                     Text(
                       _idr.format(pos.cartTotal),
                       style: GoogleFonts.outfit(
@@ -553,8 +494,7 @@ class _CartPanel extends StatelessWidget {
                             color: Colors.white, strokeWidth: 2)
                         : Text('Bayar',
                             style: GoogleFonts.outfit(
-                                fontSize: 16,
-                                fontWeight: FontWeight.w700)),
+                                fontSize: 16, fontWeight: FontWeight.w700)),
                   ),
                 ),
               ],
@@ -604,35 +544,28 @@ class _CartItemTile extends StatelessWidget {
                 children: [
                   _QtyButton(
                     icon: Icons.remove,
-                    onTap: () =>
-                        pos.decreaseQty(item.menuItem.id),
+                    onTap: () => pos.decreaseQty(item.menuItem.id),
                   ),
                   Padding(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 10),
+                    padding: const EdgeInsets.symmetric(horizontal: 10),
                     child: Text(
                       '${item.qty}',
                       style: GoogleFonts.outfit(
-                          fontSize: 15,
-                          fontWeight: FontWeight.w700),
+                          fontSize: 15, fontWeight: FontWeight.w700),
                     ),
                   ),
                   _QtyButton(
                     icon: Icons.add,
-                    onTap: () =>
-                        pos.addToCart(item.menuItem),
+                    onTap: () => pos.addToCart(item.menuItem),
                   ),
                 ],
               ),
               const SizedBox(width: 8),
               IconButton(
-                icon: const Icon(Icons.close, size: 16,
-                    color: Colors.grey),
-                onPressed: () =>
-                    pos.removeFromCart(item.menuItem.id),
+                icon: const Icon(Icons.close, size: 16, color: Colors.grey),
+                onPressed: () => pos.removeFromCart(item.menuItem.id),
                 padding: EdgeInsets.zero,
-                constraints: const BoxConstraints(
-                    minWidth: 28, minHeight: 28),
+                constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
               ),
             ],
           ),
@@ -640,35 +573,29 @@ class _CartItemTile extends StatelessWidget {
           Text(
             _idr.format(item.subtotal),
             style: const TextStyle(
-                color: _brown,
-                fontSize: 12,
-                fontWeight: FontWeight.w600),
+                color: _brown, fontSize: 12, fontWeight: FontWeight.w600),
           ),
           // Catatan field
           const SizedBox(height: 6),
           TextField(
             decoration: InputDecoration(
               hintText: 'Catatan (less sugar, tanpa es, dll)',
-              hintStyle: const TextStyle(
-                  fontSize: 11, color: Colors.grey),
+              hintStyle: const TextStyle(fontSize: 11, color: Colors.grey),
               contentPadding:
                   const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
               border: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(8),
-                borderSide:
-                    BorderSide(color: Colors.grey.shade200),
+                borderSide: BorderSide(color: Colors.grey.shade200),
               ),
               enabledBorder: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(8),
-                borderSide:
-                    BorderSide(color: Colors.grey.shade200),
+                borderSide: BorderSide(color: Colors.grey.shade200),
               ),
               isDense: true,
             ),
             style: const TextStyle(fontSize: 12),
             controller: TextEditingController(text: item.catatan),
-            onChanged: (v) =>
-                pos.updateCatatan(item.menuItem.id, v),
+            onChanged: (v) => pos.updateCatatan(item.menuItem.id, v),
           ),
         ],
       ),
@@ -757,8 +684,8 @@ class _PaymentDialogState extends State<_PaymentDialog> {
               // Total display
               Container(
                 width: double.infinity,
-                padding: const EdgeInsets.symmetric(
-                    vertical: 16, horizontal: 20),
+                padding:
+                    const EdgeInsets.symmetric(vertical: 16, horizontal: 20),
                 margin: const EdgeInsets.symmetric(vertical: 12),
                 decoration: BoxDecoration(
                   color: _cream,
@@ -767,8 +694,7 @@ class _PaymentDialogState extends State<_PaymentDialog> {
                 child: Column(
                   children: [
                     const Text('Total Bayar',
-                        style:
-                            TextStyle(fontSize: 13, color: _textDim)),
+                        style: TextStyle(fontSize: 13, color: _textDim)),
                     const SizedBox(height: 4),
                     Text(
                       _idr.format(widget.total),
@@ -819,12 +745,11 @@ class _PaymentDialogState extends State<_PaymentDialog> {
                         borderRadius: BorderRadius.circular(10)),
                     focusedBorder: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(10),
-                      borderSide:
-                          const BorderSide(color: _brown, width: 2),
+                      borderSide: const BorderSide(color: _brown, width: 2),
                     ),
                   ),
-                  onChanged: (v) => setState(
-                      () => _uangDiterima = double.tryParse(v) ?? 0),
+                  onChanged: (v) =>
+                      setState(() => _uangDiterima = double.tryParse(v) ?? 0),
                 ),
                 const SizedBox(height: 10),
                 // Preset buttons
@@ -857,15 +782,14 @@ class _PaymentDialogState extends State<_PaymentDialog> {
                     padding: const EdgeInsets.symmetric(
                         horizontal: 16, vertical: 12),
                     decoration: BoxDecoration(
-                      color: const Color(0xFF10B981).withOpacity(0.1),
+                      color: const Color(0xFF10B981).withValues(alpha: 0.1),
                       borderRadius: BorderRadius.circular(10),
                     ),
                     child: Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
                         const Text('Kembalian',
-                            style: TextStyle(
-                                fontWeight: FontWeight.w600)),
+                            style: TextStyle(fontWeight: FontWeight.w600)),
                         Text(
                           _idr.format(_kembalian),
                           style: const TextStyle(
@@ -904,14 +828,12 @@ class _PaymentDialogState extends State<_PaymentDialog> {
                       const SizedBox(height: 12),
                       Text(
                         'Scan & bayar ${_idr.format(widget.total)}',
-                        style: const TextStyle(
-                            fontWeight: FontWeight.w600),
+                        style: const TextStyle(fontWeight: FontWeight.w600),
                       ),
                       const SizedBox(height: 4),
                       const Text(
                         'Cek mutasi rekening, lalu klik Konfirmasi',
-                        style: TextStyle(
-                            fontSize: 12, color: _textDim),
+                        style: TextStyle(fontSize: 12, color: _textDim),
                       ),
                     ],
                   ),
@@ -938,8 +860,7 @@ class _PaymentDialogState extends State<_PaymentDialog> {
                           color: Colors.white, strokeWidth: 2)
                       : Text('Konfirmasi Pembayaran',
                           style: GoogleFonts.outfit(
-                              fontSize: 16,
-                              fontWeight: FontWeight.w700)),
+                              fontSize: 16, fontWeight: FontWeight.w700)),
                 ),
               ),
             ],
@@ -955,7 +876,7 @@ class _PaymentDialogState extends State<_PaymentDialog> {
       uangDiterima: _metode == 'cash' ? _uangDiterima : widget.total,
     );
 
-    if (!mounted) return;
+    if (!context.mounted) return;
 
     if (result != null) {
       Navigator.pop(context); // close payment dialog
@@ -1000,8 +921,8 @@ void _showStrukDialog(BuildContext context, Map<String, dynamic> data) {
             const SizedBox(height: 24),
             if (data['kembalian'] != null && data['kembalian'] > 0)
               Container(
-                padding: const EdgeInsets.symmetric(
-                    horizontal: 20, vertical: 12),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
                 decoration: BoxDecoration(
                   color: _cream,
                   borderRadius: BorderRadius.circular(12),
@@ -1062,19 +983,16 @@ class _MethodButton extends StatelessWidget {
       onTap: onTap,
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 150),
-        padding:
-            const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+        padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
         decoration: BoxDecoration(
           color: selected ? _brown : Colors.transparent,
-          border: Border.all(
-              color: selected ? _brown : Colors.grey.shade300),
+          border: Border.all(color: selected ? _brown : Colors.grey.shade300),
           borderRadius: BorderRadius.circular(10),
         ),
         child: Row(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(icon,
-                color: selected ? Colors.white : _textDim, size: 18),
+            Icon(icon, color: selected ? Colors.white : _textDim, size: 18),
             const SizedBox(width: 8),
             Text(
               label,
@@ -1090,232 +1008,4 @@ class _MethodButton extends StatelessWidget {
   }
 }
 
-// ─── Riwayat Panel ────────────────────────────────────────────────────────────
-class _RiwayatPanel extends StatelessWidget {
-  const _RiwayatPanel();
 
-  @override
-  Widget build(BuildContext context) {
-    final pos = context.watch<PosProvider>();
-
-    return Column(
-      children: [
-        if (pos.shiftDitutup)
-          Container(
-            width: double.infinity,
-            color: Colors.orange.shade50,
-            padding:
-                const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-            child: Row(
-              children: [
-                Icon(Icons.lock_rounded,
-                    color: Colors.orange.shade700, size: 18),
-                const SizedBox(width: 8),
-                Text(
-                  'Shift sudah ditutup — transaksi terkunci',
-                  style: TextStyle(
-                      color: Colors.orange.shade800,
-                      fontSize: 13,
-                      fontWeight: FontWeight.w500),
-                ),
-              ],
-            ),
-          ),
-        Expanded(
-          child: pos.isLoadingRiwayat
-              ? const Center(
-                  child: CircularProgressIndicator(color: _brown))
-              : pos.riwayat.isEmpty
-                  ? Center(
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Icon(Icons.receipt_long_outlined,
-                              size: 48, color: Colors.grey.shade300),
-                          const SizedBox(height: 12),
-                          Text('Belum ada transaksi di shift ini',
-                              style: TextStyle(
-                                  color: Colors.grey.shade500)),
-                        ],
-                      ),
-                    )
-                  : ListView.separated(
-                      padding: const EdgeInsets.all(16),
-                      itemCount: pos.riwayat.length,
-                      separatorBuilder: (_, __) =>
-                          const SizedBox(height: 8),
-                      itemBuilder: (_, i) =>
-                          _TransaksiCard(record: pos.riwayat[i]),
-                    ),
-        ),
-      ],
-    );
-  }
-}
-
-class _TransaksiCard extends StatelessWidget {
-  final TransaksiRecord record;
-  const _TransaksiCard({required this.record});
-
-  @override
-  Widget build(BuildContext context) {
-    final pos = context.read<PosProvider>();
-    final isCancelled = record.status == 'dibatalkan';
-
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: _surface,
-        borderRadius: BorderRadius.circular(12),
-        border: isCancelled
-            ? Border.all(color: Colors.red.shade200)
-            : null,
-        boxShadow: [
-          BoxShadow(
-              color: Colors.black.withOpacity(0.04),
-              blurRadius: 6,
-              offset: const Offset(0, 2))
-        ],
-      ),
-      child: Row(
-        children: [
-          Container(
-            padding: const EdgeInsets.all(10),
-            decoration: BoxDecoration(
-              color: isCancelled
-                  ? Colors.red.shade50
-                  : _cream,
-              borderRadius: BorderRadius.circular(10),
-            ),
-            child: Icon(
-              record.metodeBayar == 'qris'
-                  ? Icons.qr_code_rounded
-                  : Icons.payments_rounded,
-              color: isCancelled ? Colors.red : _brown,
-              size: 20,
-            ),
-          ),
-          const SizedBox(width: 14),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  record.nomorTransaksi,
-                  style: TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w600,
-                    decoration: isCancelled
-                        ? TextDecoration.lineThrough
-                        : null,
-                    color: isCancelled ? Colors.grey : null,
-                  ),
-                ),
-                Text(
-                  record.waktu.isNotEmpty
-                      ? _formatWaktu(record.waktu)
-                      : '',
-                  style: const TextStyle(
-                      fontSize: 12, color: _textDim),
-                ),
-              ],
-            ),
-          ),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: [
-              Text(
-                _idr.format(record.total),
-                style: TextStyle(
-                  fontSize: 15,
-                  fontWeight: FontWeight.w700,
-                  color: isCancelled ? Colors.grey : _brown,
-                  decoration: isCancelled
-                      ? TextDecoration.lineThrough
-                      : null,
-                ),
-              ),
-              const SizedBox(height: 4),
-              Container(
-                padding: const EdgeInsets.symmetric(
-                    horizontal: 8, vertical: 3),
-                decoration: BoxDecoration(
-                  color: isCancelled
-                      ? Colors.red.shade100
-                      : const Color(0xFF10B981).withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(6),
-                ),
-                child: Text(
-                  isCancelled ? 'Dibatalkan' : 'Selesai',
-                  style: TextStyle(
-                    fontSize: 11,
-                    fontWeight: FontWeight.w600,
-                    color: isCancelled
-                        ? Colors.red.shade600
-                        : const Color(0xFF10B981),
-                  ),
-                ),
-              ),
-            ],
-          ),
-          // Cancel button
-          if (!isCancelled && !pos.shiftDitutup) ...[
-            const SizedBox(width: 8),
-            IconButton(
-              icon: const Icon(Icons.cancel_outlined,
-                  color: Colors.red, size: 20),
-              tooltip: 'Batalkan',
-              onPressed: () =>
-                  _confirmCancel(context, pos, record),
-            ),
-          ],
-        ],
-      ),
-    );
-  }
-
-  String _formatWaktu(String raw) {
-    try {
-      final dt = DateTime.parse(raw).toLocal();
-      return DateFormat('HH:mm', 'id_ID').format(dt);
-    } catch (_) {
-      return raw;
-    }
-  }
-
-  void _confirmCancel(
-      BuildContext context, PosProvider pos, TransaksiRecord record) {
-    showDialog(
-      context: context,
-      builder: (_) => AlertDialog(
-        shape:
-            RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: const Text('Batalkan Transaksi?'),
-        content: Text(
-            'Yakin ingin membatalkan transaksi ${record.nomorTransaksi}?'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Tidak'),
-          ),
-          ElevatedButton(
-            onPressed: () async {
-              Navigator.pop(context);
-              final ok = await pos.batalkanTransaksi(record.id);
-              if (!ok && context.mounted) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                      content: Text('Gagal membatalkan transaksi')),
-                );
-              }
-            },
-            style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.red,
-                foregroundColor: Colors.white),
-            child: const Text('Ya, Batalkan'),
-          ),
-        ],
-      ),
-    );
-  }
-}

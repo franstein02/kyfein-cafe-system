@@ -7,13 +7,14 @@ from app.core.utils import now_local
 from app.models import JadwalShift, StokOpname, KonfigurasiLokasi, Karyawan, KategoriPengeluaran, Pengeluaran
 
 @pytest.mark.asyncio
-async def test_issue9_opname_server_determined_method_and_rules(client, sample_data, test_db):
+async def test_issue9_opname_server_determined_method_and_rules(client, sample_data, test_db, mock_time_at):
     """
     Test Opname A6 sisa:
     - akhir_shift rejected if awal_shift missing -> 400
     - metode from client ignored, server sets hitung_manual / carry_forward
     - karyawan_id set to shift assigned employee
     """
+    mock_time_at("10:00")
     today = sample_data["today"]
 
     # 1. akhir_shift submitted without prior awal_shift -> 400
@@ -63,6 +64,7 @@ async def test_issue9_opname_server_determined_method_and_rules(client, sample_d
     assert akhir_data["metode"] == "hitung_manual"
     assert akhir_data["karyawan_id"] == "usr-karyawan1"
 
+    mock_time_at("20:00")
     # 4. Next shift on same day for K2 -> awal_shift automatically gets carry_forward
     res_awal_k2 = await client.post(
         "/api/v1/stok/opname",

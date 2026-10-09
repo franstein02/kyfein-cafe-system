@@ -196,7 +196,7 @@ async def test_a3_approval_already_processed_returns_409(client, sample_data, te
 # ==========================================
 
 @pytest.mark.asyncio
-async def test_a4_absen_masuk_past_shift_rejected(client, sample_data):
+async def test_a4_absen_masuk_past_shift_rejected(client, sample_data, mock_time_10):
     """absen_masuk hanya jika shift.tanggal == hari ini"""
     res = await client.post(
         "/api/v1/absensi/masuk",
@@ -209,12 +209,13 @@ async def test_a4_absen_masuk_past_shift_rejected(client, sample_data):
         }
     )
     assert res.status_code == 400
-    assert "hari ini" in res.json()["detail"].lower()
+    assert "shift yang sedang berjalan" in res.json()["detail"].lower()
 
 
 @pytest.mark.asyncio
-async def test_a4_absen_masuk_rejected_if_izin_tidak_masuk_approved(client, sample_data, test_db):
+async def test_a4_absen_masuk_rejected_if_izin_tidak_masuk_approved(client, sample_data, test_db, mock_time_at):
     """absen masuk ditolak jika ada izin_tidak_masuk disetujui untuk shift itu"""
+    mock_time_at("10:00")
     itm_approved = IzinTidakMasuk(
         id="itm-app",
         karyawan_id="usr-karyawan1",
@@ -274,8 +275,9 @@ async def test_a4_absen_pulang_gps_radius_validation(client, sample_data, test_d
 # ==========================================
 
 @pytest.mark.asyncio
-async def test_a6_opname_duplicate_bahan_aggregated(client, sample_data, test_db):
+async def test_a6_opname_duplicate_bahan_aggregated(client, sample_data, test_db, mock_time_at):
     """jumlahkan items yang bahan_id-nya sama sebelum menyimpan dan membandingkan"""
+    mock_time_at("10:00")
     # 1. Submit awal_shift opname with duplicate items
     res = await client.post(
         "/api/v1/stok/opname",
@@ -301,12 +303,13 @@ async def test_a6_opname_duplicate_bahan_aggregated(client, sample_data, test_db
 
 
 @pytest.mark.asyncio
-async def test_a6_opname_metode_server_determined_and_awal_required(client, sample_data):
+async def test_a6_opname_metode_server_determined_and_awal_required(client, sample_data, mock_time_at):
     """
     metode ditentukan server, field metode dari client diabaikan.
     awal_shift harus ada sebelum akhir_shift di shift yang sama.
     shift area_kerja kasir ditolak.
     """
+    mock_time_at("10:00")
     # 1. akhir_shift without prior awal_shift -> 400
     res_akhir = await client.post(
         "/api/v1/stok/opname",
@@ -322,6 +325,7 @@ async def test_a6_opname_metode_server_determined_and_awal_required(client, samp
     assert res_akhir.status_code == 400
     assert "awal_shift harus ada" in res_akhir.json()["detail"]
 
+    mock_time_at("20:00")
     # 2. Kasir shift opname rejected -> 400
     res_kasir = await client.post(
         "/api/v1/stok/opname",
@@ -337,7 +341,9 @@ async def test_a6_opname_metode_server_determined_and_awal_required(client, samp
     assert res_kasir.status_code == 400
     assert "kasir tidak memerlukan stok opname" in res_kasir.json()["detail"]
 
-    # 3. Past shift opname rejected -> 400
+    mock_time_at("10:00")
+    # 3. Past shift opname rejected -> 403
+    # Sejak Issue 10-11, karyawan biasa pada shift yang jendelanya habis mendapat 403 (hanya admin yang boleh susulan).
     res_past = await client.post(
         "/api/v1/stok/opname",
         headers={"Authorization": f"Bearer {sample_data['token_k1']}"},
@@ -349,13 +355,14 @@ async def test_a6_opname_metode_server_determined_and_awal_required(client, samp
             "items": [{"bahan_id": "b-1", "jumlah": 10}]
         }
     )
-    assert res_past.status_code == 400
-    assert "hari ini" in res_past.json()["detail"]
+    assert res_past.status_code == 403
+    assert "hanya admin yang dapat menyusulkan opname" in res_past.json()["detail"].lower()
 
 
 @pytest.mark.asyncio
-async def test_a6_opname_karyawan_id_is_assigned_worker(client, sample_data, test_db):
+async def test_a6_opname_karyawan_id_is_assigned_worker(client, sample_data, test_db, mock_time_at):
     """karyawan_id opname selalu karyawan yang di-assign di shift, bukan admin yang submit"""
+    mock_time_at("10:00")
     res = await client.post(
         "/api/v1/stok/opname",
         headers={"Authorization": f"Bearer {sample_data['token_admin']}"},

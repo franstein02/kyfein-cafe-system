@@ -24,7 +24,7 @@ router = APIRouter()
 async def get_daily_profit_report(
     tanggal: Optional[date] = Query(None),
     db: AsyncSession = Depends(get_db),
-    current_user: Karyawan = Depends(require_roles(["admin", "owner"]))
+    current_user: Karyawan = Depends(require_roles(["admin"]))
 ):
     if not tanggal:
         tanggal = now_local().date()
@@ -139,7 +139,7 @@ async def get_pengeluaran_breakdown(
     bulan: Optional[int] = Query(None, ge=1, le=12),
     tahun: Optional[int] = Query(None, ge=2000, le=2100),
     db: AsyncSession = Depends(get_db),
-    current_user: Karyawan = Depends(require_roles(["admin", "owner"]))
+    current_user: Karyawan = Depends(require_roles(["admin"]))
 ):
     """
     Breakdown pengeluaran (mendadak + pro-rata bulanan) per kategori untuk periode yang diminta.
@@ -255,7 +255,7 @@ async def get_pengeluaran_breakdown(
 @router.get("/pengeluaran", response_model=List[PengeluaranOut])
 async def list_pengeluaran(
     db: AsyncSession = Depends(get_db),
-    current_user: Karyawan = Depends(require_roles(["admin", "owner"]))
+    current_user: Karyawan = Depends(require_roles(["admin"]))
 ):
     result = await db.execute(select(Pengeluaran).order_by(Pengeluaran.created_at.desc()))
     return result.scalars().all()
@@ -264,7 +264,7 @@ async def list_pengeluaran(
 async def create_pengeluaran(
     data: PengeluaranCreate,
     db: AsyncSession = Depends(get_db),
-    current_user: Karyawan = Depends(require_roles(["admin", "owner"]))
+    current_user: Karyawan = Depends(require_roles(["admin"]))
 ):
     if data.tipe == "bulanan" and not data.bulan:
         raise HTTPException(status_code=400, detail="Pengeluaran tipe 'bulanan' wajib mengisi field bulan")

@@ -84,9 +84,9 @@ def apply_schema():
 
     print("[Schema Sync v3] Database migration & schema sync successfully applied to db_kyfein!")
 
-    # 3. Trigger seed owner
-    from scripts.seed_owner import seed_owner
-    seed_owner()
+    # 3. Trigger seed admin
+    from scripts.seed_admin import seed_admin
+    seed_admin()
 
 if __name__ == "__main__":
     apply_schema()

@@ -24,10 +24,10 @@ async def list_jadwal(
     current_user: Karyawan = Depends(get_current_user)
 ):
     """
-    A11: karyawan hanya melihat jadwalnya sendiri, admin/owner melihat semua.
+    A11: karyawan hanya melihat jadwalnya sendiri, admin melihat semua.
     """
     query = select(JadwalShift)
-    if current_user.role not in ["admin", "owner"]:
+    if current_user.role not in ["admin"]:
         query = query.where(JadwalShift.karyawan_id == current_user.id)
     if tanggal:
         query = query.where(JadwalShift.tanggal == tanggal)
@@ -38,12 +38,18 @@ async def list_jadwal(
 async def create_jadwal(
     data: JadwalShiftCreate,
     db: AsyncSession = Depends(get_db),
-    current_user: Karyawan = Depends(require_roles(["admin", "owner"]))
+    current_user: Karyawan = Depends(require_roles(["admin"]))
 ):
     """
     Buat jadwal shift baru dengan penugasan area_kerja ('kasir', 'bar', 'kitchen')
     - Tolak jika karyawan_id tidak ditemukan atau status_aktif = False (400)
     """
+    if data.jam_selesai < data.jam_mulai:
+        raise HTTPException(
+            status_code=400,
+            detail="Shift dengan jam selesai melewati tengah malam belum didukung"
+        )
+
     karyawan = await db.get(Karyawan, data.karyawan_id)
     if not karyawan or not karyawan.status_aktif:
         raise HTTPException(
@@ -94,7 +100,7 @@ async def list_jadwal_untuk_tukar(
 async def list_tukar_shift(
     status: Optional[Literal['pending', 'disetujui', 'ditolak']] = None,
     db: AsyncSession = Depends(get_db),
-    current_user: Karyawan = Depends(require_roles(["admin", "owner"]))
+    current_user: Karyawan = Depends(require_roles(["admin"]))
 ):
     query = select(TukarShift)
     if status:
@@ -181,7 +187,7 @@ async def approval_tukar_shift(
     id: str,
     data: TukarShiftApproval,
     db: AsyncSession = Depends(get_db),
-    current_user: Karyawan = Depends(require_roles(["admin", "owner"]))
+    current_user: Karyawan = Depends(require_roles(["admin"]))
 ):
     """
     Issue 7: Approval tukar shift dengan locking & re-validation menyeluruh:

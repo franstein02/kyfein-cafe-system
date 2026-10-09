@@ -14,10 +14,10 @@ def seed_dummies():
     hashed_password = get_password_hash("123")
     
     users = [
-        ("owner@kyfein.cafe", "owner", "Owner"),
-        ("manager@kyfein.cafe", "manager", "Manager"),
-        ("kasir@kyfein.cafe", "kasir", "Kasir"),
-        ("barista@kyfein.cafe", "barista", "Barista")
+        ("admin@kyfein.cafe", "admin", "Admin"),
+        ("manager@kyfein.cafe", "karyawan", "Manager"),
+        ("kasir@kyfein.cafe", "karyawan", "Kasir"),
+        ("barista@kyfein.cafe", "karyawan", "Barista")
     ]
     
     with engine.connect() as conn:

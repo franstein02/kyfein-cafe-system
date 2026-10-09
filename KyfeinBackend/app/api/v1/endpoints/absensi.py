@@ -20,6 +20,8 @@ from app.schemas.absensi import (
     IzinTelatOut, IzinTidakMasukOut
 )
 
+from app.services.jadwal_service import get_shift_berjalan
+
 router = APIRouter()
 
 def haversine_distance(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
@@ -42,23 +44,17 @@ async def absen_masuk(
 ):
     """
     Absen masuk karyawan dengan validasi radius GPS server-side
-    A4:
-    - shift.tanggal harus hari ini
-    - ditolak jika ada izin_tidak_masuk disetujui untuk shift itu
     """
-    # 1. Cek Jadwal Shift
-    shift = await db.get(JadwalShift, data.jadwal_shift_id)
-    if not shift or shift.karyawan_id != current_user.id:
-        raise HTTPException(status_code=400, detail="Jadwal shift tidak valid untuk karyawan ini")
-
     now = now_local()
-
-    # Validasi: shift.tanggal == hari ini
-    if shift.tanggal != now.date():
-        raise HTTPException(
-            status_code=400,
-            detail="Absen masuk hanya dapat dilakukan pada tanggal shift hari ini"
-        )
+    active_shift = await get_shift_berjalan(db, current_user.id, now)
+    
+    if not active_shift:
+        raise HTTPException(status_code=400, detail="Tidak ada shift berjalan saat ini")
+        
+    if data.jadwal_shift_id != active_shift.id:
+        raise HTTPException(status_code=400, detail="Absen masuk hanya dapat dilakukan pada shift yang sedang berjalan")
+        
+    shift = active_shift
 
     # Validasi & Claim foto_masuk
     await validate_and_claim_foto(db, data.foto_masuk_id, current_user.id, "absensi", required=True)
@@ -251,7 +247,7 @@ async def create_izin_telat(
 async def list_izin_telat(
     status: Optional[Literal['pending', 'disetujui', 'ditolak']] = None,
     db: AsyncSession = Depends(get_db),
-    current_user: Karyawan = Depends(require_roles(["admin", "owner"]))
+    current_user: Karyawan = Depends(require_roles(["admin"]))
 ):
     query = select(IzinTelat)
     if status:
@@ -264,7 +260,7 @@ async def approval_izin_telat(
     id: str,
     data: IzinApproval,
     db: AsyncSession = Depends(get_db),
-    current_user: Karyawan = Depends(require_roles(["admin", "owner"]))
+    current_user: Karyawan = Depends(require_roles(["admin"]))
 ):
     """
     A3 (approval): approval izin telat hanya boleh jika status == 'pending', selain itu 409.
@@ -333,7 +329,7 @@ async def create_izin_tidak_masuk(
 async def list_izin_tidak_masuk(
     status: Optional[Literal['pending', 'disetujui', 'ditolak']] = None,
     db: AsyncSession = Depends(get_db),
-    current_user: Karyawan = Depends(require_roles(["admin", "owner"]))
+    current_user: Karyawan = Depends(require_roles(["admin"]))
 ):
     query = select(IzinTidakMasuk)
     if status:
@@ -346,7 +342,7 @@ async def approval_izin_tidak_masuk(
     id: str,
     data: IzinApproval,
     db: AsyncSession = Depends(get_db),
-    current_user: Karyawan = Depends(require_roles(["admin", "owner"]))
+    current_user: Karyawan = Depends(require_roles(["admin"]))
 ):
     """
     A3 (approval): approval izin tidak masuk hanya boleh jika status == 'pending', selain itu 409.

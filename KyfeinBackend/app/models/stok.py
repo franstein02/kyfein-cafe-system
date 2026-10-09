@@ -1,5 +1,5 @@
 from datetime import datetime
-from sqlalchemy import Column, String, Integer, DateTime, Numeric, Enum as SQLEnum, ForeignKey, Text
+from sqlalchemy import Column, String, Integer, DateTime, Numeric, Enum as SQLEnum, ForeignKey, Text, Boolean
 from sqlalchemy.orm import relationship
 from app.models.base import Base, generate_uuid
 from app.core.utils import now_local
@@ -83,12 +83,15 @@ class StokOpname(Base):
     tipe = Column(SQLEnum('awal_shift', 'akhir_shift', name='enum_tipe_opname'), nullable=False)
     metode = Column(SQLEnum('hitung_manual', 'carry_forward', name='enum_metode_opname'), nullable=False)
     karyawan_id = Column(String(36), ForeignKey("karyawan.id", ondelete="RESTRICT"), nullable=False)
+    susulan = Column(Boolean, nullable=False, default=False)
+    diinput_oleh = Column(String(36), ForeignKey("karyawan.id", ondelete="SET NULL"), nullable=True)
     waktu_opname = Column(DateTime, nullable=False, default=now_local)
     catatan = Column(Text, nullable=True)
     created_at = Column(DateTime, nullable=False, default=now_local)
 
     jadwal_shift = relationship("JadwalShift")
-    karyawan = relationship("Karyawan")
+    karyawan = relationship("Karyawan", foreign_keys=[karyawan_id])
+    admin_input = relationship("Karyawan", foreign_keys=[diinput_oleh])
     details = relationship("StokOpnameDetail", back_populates="stok_opname", cascade="all, delete-orphan")
 
 class StokOpnameDetail(Base):

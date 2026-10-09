@@ -1,6 +1,6 @@
 # Kyfein — Cafe POS & Management System
 
-Kyfein is an on-premise Cafe POS & Operations Management System built with a **Modular Monolith** architecture. Designed for 1 cafe location, 1 owner, featuring 6 core operational modules.
+Kyfein is an on-premise Cafe POS & Operations Management System built with a **Modular Monolith** architecture. Designed for 1 cafe location, featuring 6 core operational modules.
 
 ---
 
@@ -29,7 +29,7 @@ Project-Kyfein/
 │   │   ├── models/                  # SQLAlchemy ORM Models
 │   │   ├── schemas/                 # Pydantic Schemas
 │   │   └── main.py                  # FastAPI Application & WebSocket Manager
-│   ├── scripts/                     # Seed Owner script
+│   ├── scripts/                     # Seed Admin script
 │   ├── .env.example
 │   └── requirements.txt
 └── KyfeinFrontend/                   # Flutter Web & Mobile Client Application
@@ -71,9 +71,9 @@ Project-Kyfein/
    ```bash
    copy .env.example .env
    ```
-5. Seed initial Owner account directly in the database (as specified in 4.3):
+5. Seed initial Admin account directly in the database (as specified in 4.3):
    ```bash
-   python scripts/seed_owner.py
+   python scripts/seed_admin.py
    ```
 6. Run the FastAPI development server:
    ```bash
@@ -109,4 +109,4 @@ Copy snippet from `nginx.conf.example` into your Nginx virtual host configuratio
    HPP is calculated on-demand from recipes ($\text{recipe} \times \text{sold qty}$), not warehouse purchases.
 4. **KDS Realtime Routing (`kds.py`):** WebSocket broadcasts are filtered by `area_produksi` (`kitchen` vs `bar`).
 5. **Twin Checkpoint Stock Opname (`stok.py`):** Supports `carry_forward` (1-tap handover confirmation for same-day shifts) and `hitung_manual` (mandatory physical count for overnight/cross-day shifts).
-6. **Owner Account Security:** Owner accounts are created exclusively via `scripts/seed_owner.py`, never via API endpoints.
+6. **Admin Account Security:** Admin accounts are created initially via `scripts/seed_admin.py`.

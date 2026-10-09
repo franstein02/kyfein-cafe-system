@@ -5,13 +5,14 @@ import 'package:provider/provider.dart';
 import '../../../auth/providers/auth_provider.dart';
 import '../../providers/dashboard_provider.dart';
 import '../../../pos/presentation/screens/pos_screen.dart';
+import '../../../master_data/presentation/screens/master_data_screen.dart';
 
 // ─── Formatters ───────────────────────────────────────────────────────────────
 final _idr = NumberFormat.currency(locale: 'id_ID', symbol: 'Rp ', decimalDigits: 0);
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 const _brown = Color(0xFF1B4332);
-const _brownLight = Color(0xFF2D6A4F);
+
 const _cream = Color(0xFFE9F5E6);
 const _gold = Color(0xFFD4A373);
 const _surface = Colors.white;
@@ -39,43 +40,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
   Widget? _currentPage;
 
   List<_NavItem> _getNavItems(String? role) {
-    final base = [
+    return [
       const _NavItem(Icons.dashboard_rounded, 'Dashboard'),
       _NavItem(Icons.point_of_sale_rounded, 'POS',
           pageBuilder: (_) => const PosScreen()),
-      const _NavItem(Icons.inventory_2_rounded, 'Stok Opname'),
-      const _NavItem(Icons.fingerprint_rounded, 'Absensi'),
+      _NavItem(Icons.restaurant_menu_rounded, 'Master Data',
+          pageBuilder: (_) => const MasterDataScreen()),
     ];
-
-    if (role == 'karyawan') {
-      return [
-        ...base,
-        const _NavItem(Icons.schedule_rounded, 'Jadwal Saya'),
-        const _NavItem(Icons.swap_horiz_rounded, 'Swap Shift'),
-        const _NavItem(Icons.beach_access_rounded, 'Request Off'),
-        const _NavItem(Icons.person_rounded, 'Profil'),
-      ];
-    } else if (role == 'admin') {
-      return [
-        ...base,
-        const _NavItem(Icons.event_note_rounded, 'Jadwal & Approval'),
-        const _NavItem(Icons.restaurant_menu_rounded, 'Master Data'),
-        const _NavItem(Icons.people_rounded, 'Karyawan'),
-        const _NavItem(Icons.bar_chart_rounded, 'Reporting'),
-        const _NavItem(Icons.receipt_long_rounded, 'Pengeluaran'),
-      ];
-    } else if (role == 'owner') {
-      return [
-        ...base,
-        const _NavItem(Icons.event_note_rounded, 'Jadwal & Approval'),
-        const _NavItem(Icons.restaurant_menu_rounded, 'Master Data'),
-        const _NavItem(Icons.people_rounded, 'Karyawan'),
-        const _NavItem(Icons.bar_chart_rounded, 'Reporting'),
-        const _NavItem(Icons.receipt_long_rounded, 'Pengeluaran'),
-        const _NavItem(Icons.admin_panel_settings_rounded, 'Manajemen Role'),
-      ];
-    }
-    return base;
   }
 
   @override
@@ -207,7 +178,7 @@ class _Sidebar extends StatelessWidget {
                   width: 42,
                   height: 42,
                   decoration: BoxDecoration(
-                    color: Colors.white.withOpacity(0.15),
+                    color: Colors.white.withValues(alpha: 0.15),
                     borderRadius: BorderRadius.circular(10),
                   ),
                   child: const Icon(Icons.coffee_rounded,
@@ -228,7 +199,7 @@ class _Sidebar extends StatelessWidget {
                     ),
                     Text(
                       _roleBadge(auth.role),
-                      style: TextStyle(
+                      style: const TextStyle(
                         color: _gold,
                         fontSize: 11,
                         fontWeight: FontWeight.w500,
@@ -245,7 +216,7 @@ class _Sidebar extends StatelessWidget {
             child: Container(
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
-                color: Colors.white.withOpacity(0.1),
+                color: Colors.white.withValues(alpha: 0.1),
                 borderRadius: BorderRadius.circular(12),
               ),
               child: Row(
@@ -280,7 +251,7 @@ class _Sidebar extends StatelessWidget {
             child: Text(
               'MENU',
               style: TextStyle(
-                color: Colors.white.withOpacity(0.4),
+                color: Colors.white.withValues(alpha: 0.4),
                 fontSize: 10,
                 fontWeight: FontWeight.w700,
                 letterSpacing: 1.5,
@@ -308,7 +279,7 @@ class _Sidebar extends StatelessWidget {
                             horizontal: 14, vertical: 11),
                         decoration: BoxDecoration(
                           color: isSelected
-                              ? Colors.white.withOpacity(0.18)
+                              ? Colors.white.withValues(alpha: 0.18)
                               : Colors.transparent,
                           borderRadius: BorderRadius.circular(10),
                         ),
@@ -352,7 +323,7 @@ class _Sidebar extends StatelessWidget {
                       const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
                   decoration: BoxDecoration(
                     border:
-                        Border.all(color: Colors.white.withOpacity(0.2)),
+                        Border.all(color: Colors.white.withValues(alpha: 0.2)),
                     borderRadius: BorderRadius.circular(10),
                   ),
                   child: const Row(
@@ -488,18 +459,18 @@ class _KaryawanContent extends StatelessWidget {
         const SizedBox(height: 20),
         // Quick actions
         if (dashboard.shiftAktif != null) ...[
-          _SectionTitle('Aksi Cepat'),
+          const _SectionTitle('Aksi Cepat'),
           const SizedBox(height: 12),
           _QuickActions(shift: dashboard.shiftAktif!),
           const SizedBox(height: 20),
         ],
         // Laporan shift
-        _SectionTitle('Laporan Shift Aktif'),
+        const _SectionTitle('Laporan Shift Aktif'),
         const SizedBox(height: 12),
         _LaporanShiftCard(laporan: dashboard.laporanShift),
         const SizedBox(height: 20),
         // Notifikasi
-        _SectionTitle('Notifikasi'),
+        const _SectionTitle('Notifikasi'),
         const SizedBox(height: 12),
         _EmptyNotifCard(),
       ],
@@ -522,7 +493,7 @@ class _ShiftCard extends StatelessWidget {
           border: Border.all(color: Colors.grey.shade200),
           boxShadow: [
             BoxShadow(
-                color: Colors.black.withOpacity(0.04),
+                color: Colors.black.withValues(alpha: 0.04),
                 blurRadius: 8,
                 offset: const Offset(0, 2))
           ],
@@ -570,7 +541,7 @@ class _ShiftCard extends StatelessWidget {
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
-              color: _brown.withOpacity(0.3),
+              color: _brown.withValues(alpha: 0.3),
               blurRadius: 12,
               offset: const Offset(0, 4))
         ],
@@ -583,7 +554,7 @@ class _ShiftCard extends StatelessWidget {
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
                 decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.2),
+                  color: Colors.white.withValues(alpha: 0.2),
                   borderRadius: BorderRadius.circular(20),
                 ),
                 child: Row(
@@ -594,7 +565,7 @@ class _ShiftCard extends StatelessWidget {
                     Text(
                       'Shift Aktif',
                       style: TextStyle(
-                          color: Colors.white.withOpacity(0.9),
+                          color: Colors.white.withValues(alpha: 0.9),
                           fontSize: 12,
                           fontWeight: FontWeight.w600),
                     ),
@@ -647,7 +618,7 @@ class _ShiftChip extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
       decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.15),
+        color: Colors.white.withValues(alpha: 0.15),
         borderRadius: BorderRadius.circular(8),
       ),
       child: Row(
@@ -754,8 +725,8 @@ class _LaporanShiftCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (laporan == null) {
-      return _Card(
-        child: const Center(
+      return const _Card(
+        child: Center(
           child: Padding(
             padding: EdgeInsets.all(24),
             child: Text('Data laporan tidak tersedia',
@@ -806,8 +777,8 @@ class _LaporanShiftCard extends StatelessWidget {
 class _EmptyNotifCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
-    return _Card(
-      child: const Padding(
+    return const _Card(
+      child: Padding(
         padding: EdgeInsets.all(20),
         child: Row(
           children: [
@@ -846,7 +817,7 @@ class _AdminContent extends StatelessWidget {
                   Expanded(
                     child: Column(
                       children: [
-                        _SectionTitle('Stok Menipis'),
+                        const _SectionTitle('Stok Menipis'),
                         const SizedBox(height: 12),
                         _StokMenipisCard(items: dashboard.stokMenipis),
                       ],
@@ -856,7 +827,7 @@ class _AdminContent extends StatelessWidget {
                   Expanded(
                     child: Column(
                       children: [
-                        _SectionTitle('Approval Menunggu'),
+                        const _SectionTitle('Approval Menunggu'),
                         const SizedBox(height: 12),
                         _ApprovalCard(items: dashboard.pendingApprovals),
                       ],
@@ -868,11 +839,11 @@ class _AdminContent extends StatelessWidget {
             return Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                _SectionTitle('Stok Menipis'),
+                const _SectionTitle('Stok Menipis'),
                 const SizedBox(height: 12),
                 _StokMenipisCard(items: dashboard.stokMenipis),
                 const SizedBox(height: 20),
-                _SectionTitle('Approval Menunggu'),
+                const _SectionTitle('Approval Menunggu'),
                 const SizedBox(height: 12),
                 _ApprovalCard(items: dashboard.pendingApprovals),
               ],
@@ -951,7 +922,7 @@ class _SummaryCard extends StatelessWidget {
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
-              color: Colors.black.withOpacity(0.05),
+              color: Colors.black.withValues(alpha: 0.05),
               blurRadius: 8,
               offset: const Offset(0, 2))
         ],
@@ -971,7 +942,7 @@ class _SummaryCard extends StatelessWidget {
               Container(
                 padding: const EdgeInsets.all(8),
                 decoration: BoxDecoration(
-                  color: color.withOpacity(0.1),
+                  color: color.withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: Icon(icon, color: color, size: 16),
@@ -1000,8 +971,8 @@ class _StokMenipisCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (items.isEmpty) {
-      return _Card(
-        child: const Padding(
+      return const _Card(
+        child: Padding(
           padding: EdgeInsets.all(20),
           child: Row(
             children: [
@@ -1050,8 +1021,8 @@ class _ApprovalCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (items.isEmpty) {
-      return _Card(
-        child: const Padding(
+      return const _Card(
+        child: Padding(
           padding: EdgeInsets.all(20),
           child: Row(
             children: [
@@ -1155,7 +1126,7 @@ class _ApprovalTileState extends State<_ApprovalTile> {
     return Container(
       padding: const EdgeInsets.all(8),
       decoration: BoxDecoration(
-        color: color.withOpacity(0.1),
+        color: color.withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(8),
       ),
       child: Icon(icon, color: color, size: 18),
@@ -1190,7 +1161,7 @@ class _OwnerContent extends StatelessWidget {
         _AdminContent(dashboard: dashboard),
         const SizedBox(height: 24),
         // Owner-only: Role management card
-        _SectionTitle('Manajemen Role'),
+        const _SectionTitle('Manajemen Role'),
         const SizedBox(height: 12),
         _RoleManagementCard(),
       ],
@@ -1339,7 +1310,7 @@ class _MobileLayout extends StatelessWidget {
                   leading: Icon(navItems[i].icon),
                   title: Text(navItems[i].label),
                   selected: i == selectedIndex,
-                  selectedTileColor: _brown.withOpacity(0.08),
+                  selectedTileColor: _brown.withValues(alpha: 0.08),
                   selectedColor: _brown,
                   onTap: () {
                     Navigator.pop(context);
@@ -1359,19 +1330,6 @@ class _MobileLayout extends StatelessWidget {
       ),
       body: currentPage ??
           _DashboardContent(auth: auth, dashboard: dashboard),
-      bottomNavigationBar: BottomNavigationBar(
-        type: BottomNavigationBarType.fixed,
-        selectedItemColor: _brown,
-        unselectedItemColor: Colors.grey,
-        currentIndex: selectedIndex < _bottomBarCount ? selectedIndex : 0,
-        onTap: onNavTap,
-        items: bottomItems
-            .map((item) => BottomNavigationBarItem(
-                  icon: Icon(item.icon),
-                  label: item.label,
-                ))
-            .toList(),
-      ),
     );
   }
 }
@@ -1390,7 +1348,7 @@ class _Card extends StatelessWidget {
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
-              color: Colors.black.withOpacity(0.04),
+              color: Colors.black.withValues(alpha: 0.04),
               blurRadius: 8,
               offset: const Offset(0, 2))
         ],

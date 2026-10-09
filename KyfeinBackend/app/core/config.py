@@ -14,6 +14,9 @@ class Settings(BaseSettings):
     DB_PASSWORD: str = os.getenv("DB_PASSWORD", "")
     DB_NAME: str = os.getenv("DB_NAME", "db_kyfein")
     
+    SHIFT_TOLERANSI_JAM: int = int(os.getenv("SHIFT_TOLERANSI_JAM", "3"))
+
+    
     @property
     def ASYNC_DATABASE_URL(self) -> str:
         # Using asyncmy for asyncio MySQL connection

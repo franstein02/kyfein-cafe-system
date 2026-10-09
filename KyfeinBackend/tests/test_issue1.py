@@ -55,8 +55,9 @@ async def test_upload_foto_invalid_jenis(client, sample_data):
         files={"file": ("test.jpg", img_bytes, "image/jpeg")},
         data={"jenis": "invalid_jenis"}
     )
-    assert response.status_code == 400
-    assert "tidak valid" in response.json()["detail"].lower()
+    assert response.status_code == 422
+    details = response.json()["detail"]
+    assert any("jenis" in d["loc"] for d in details)
 
 @pytest.mark.asyncio
 async def test_get_foto_access_control(client, sample_data, test_db):
@@ -114,13 +115,14 @@ async def test_get_foto_menu_public_to_all_logged_in(client, sample_data):
     assert res_k1.status_code == 200
 
 @pytest.mark.asyncio
-async def test_photo_validation_rules(client, sample_data):
+async def test_photo_validation_rules(client, sample_data, mock_time_at):
     """
     Validation rules:
     - Wrong uploader -> 400
     - Wrong jenis -> 400
     - Already dipakai -> 400
     """
+    mock_time_at("10:00")
     # Upload photo as K1 (jenis=absensi)
     img_bytes = create_dummy_image_bytes("JPEG")
     res_upload = await client.post(
@@ -171,6 +173,7 @@ async def test_photo_validation_rules(client, sample_data):
     )
     assert res_k1_absen.status_code == 200
 
+    mock_time_at("20:00")
     # Attempting to reuse already claimed photo -> 400
     res_reuse = await client.post(
         "/api/v1/absensi/masuk",

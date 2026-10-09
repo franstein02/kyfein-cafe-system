@@ -5,12 +5,9 @@ skinparam actorStyle awesome
 
 actor Karyawan
 actor Admin
-actor Owner
 
-' Hierarki hak akses: Admin mewarisi semua use case Karyawan,
-' Owner mewarisi semua use case Admin (superuser)
+' Hierarki hak akses: Admin mewarisi semua use case Karyawan
 Admin --|> Karyawan
-Owner --|> Admin
 
 rectangle "Sistem Kyfein (Cafe POS)" {
 
@@ -68,7 +65,7 @@ rectangle "Sistem Kyfein (Cafe POS)" {
   package "Master Data & Manajemen Akun" {
     usecase "CRUD Master Data\n(menu, kategori_menu, bahan, menu_resep)" as UC_CRUDMaster
     usecase "Kelola Akun Karyawan\n(create/soft-disable)" as UC_KelolaAkunKaryawan
-    usecase "Kelola Akun Admin\n(create/promote/disable)" as UC_KelolaAkunAdmin
+    usecase "Kelola Akun Admin\n(via script server)" as UC_KelolaAkunAdmin
   }
 }
 
@@ -110,11 +107,11 @@ Admin --> UC_BreakdownPengeluaran
 Admin --> UC_CRUDMaster
 Admin --> UC_KelolaAkunKaryawan
 
-' ===== Owner (otomatis mewarisi semua use case Admin) =====
-Owner --> UC_KelolaAkunAdmin
+' ===== Admin (otomatis mewarisi semua use case Karyawan) =====
+Admin --> UC_KelolaAkunAdmin
 
 note right of UC_KelolaAkunAdmin
-  Hak eksklusif Owner.
+  Hak eksklusif via script server.
   Admin diblok API dari membuat/mengubah
   akun ber-role admin lain (termasuk dirinya sendiri).
 end note

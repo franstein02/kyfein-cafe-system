@@ -6,7 +6,7 @@ class KaryawanBase(BaseModel):
     nama: str
     email: EmailStr
     nomor_hp: str
-    role: Literal['karyawan', 'admin', 'owner']
+    role: Literal['karyawan', 'admin']
     foto_profile_id: Optional[str] = None
     status_aktif: bool = True
 

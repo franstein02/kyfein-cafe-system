@@ -74,15 +74,10 @@ def _process_and_save_image(file_bytes: bytes, dest_path: str) -> None:
 @router.post("", response_model=dict, status_code=status.HTTP_201_CREATED)
 async def upload_foto(
     file: UploadFile = File(...),
-    jenis: str = Form(...),
+    jenis: Literal['absensi', 'izin', 'qris', 'menu', 'profil'] = Form(...),
     db: AsyncSession = Depends(get_db),
     current_user: Karyawan = Depends(get_current_user)
 ):
-    if jenis not in ALLOWED_JENIS:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Jenis foto tidak valid. Pilihan: {', '.join(ALLOWED_JENIS)}"
-        )
 
     # 8. Limit unused photos per user (max 50) -> 429
     stmt_count = select(func.count(Foto.id)).where(
@@ -160,7 +155,7 @@ async def get_foto(
 
     # Access control
     if foto.jenis in {'absensi', 'izin', 'qris'}:
-        if current_user.role not in {'admin', 'owner'} and foto.uploader_id != current_user.id:
+        if current_user.role not in {'admin'} and foto.uploader_id != current_user.id:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="Akses ditolak. Anda hanya dapat melihat foto milik Anda sendiri."

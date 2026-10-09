@@ -14,7 +14,7 @@ router = APIRouter()
 @router.get("/", response_model=List[KaryawanOut])
 async def list_karyawan(
     db: AsyncSession = Depends(get_db),
-    current_user: Karyawan = Depends(require_roles(["admin", "owner"]))
+    current_user: Karyawan = Depends(require_roles(["admin"]))
 ):
     result = await db.execute(select(Karyawan).order_by(Karyawan.nama))
     return result.scalars().all()
@@ -23,21 +23,11 @@ async def list_karyawan(
 async def create_karyawan(
     karyawan_in: KaryawanCreate,
     db: AsyncSession = Depends(get_db),
-    current_user: Karyawan = Depends(require_roles(["admin", "owner"]))
+    current_user: Karyawan = Depends(require_roles(["admin"]))
 ):
-    # Enforce role creation rules
-    if karyawan_in.role == "owner":
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Akun dengan role Owner tidak dapat dibuat melalui API."
-        )
-
-    if karyawan_in.role == "admin" and current_user.role != "owner":
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Hanya Owner yang berhak membuat akun dengan role Admin."
-        )
-
+    if karyawan_in.role == "admin":
+        raise HTTPException(status_code=403, detail="Tidak dapat membuat akun admin melalui API")
+        
     existing = await db.execute(select(Karyawan).where(Karyawan.email == karyawan_in.email))
     if existing.scalars().first():
         raise HTTPException(status_code=400, detail="Email sudah terdaftar")
@@ -75,11 +65,11 @@ async def update_karyawan(
     if not target:
         raise HTTPException(status_code=404, detail="Karyawan tidak ditemukan")
 
-    # Admin tidak boleh mengedit/menonaktifkan Admin lain atau Owner
-    if current_user.role == "admin" and target.role in ["admin", "owner"] and target.id != current_user.id:
+    # Admin tidak boleh mengubah akun admin manapun (termasuk dirinya sendiri)
+    if target.role == "admin":
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Admin tidak dapat mengubah atau menonaktifkan akun Admin lain atau Owner."
+            detail="Akun admin tidak dapat diubah melalui API"
         )
 
     if karyawan_in.foto_profile_id is not None and karyawan_in.foto_profile_id != target.foto_profile_id:
@@ -93,36 +83,10 @@ async def update_karyawan(
         target.nomor_hp = karyawan_in.nomor_hp
     if karyawan_in.password:
         target.password = get_password_hash(karyawan_in.password)
-    if karyawan_in.status_aktif is not None and current_user.role in ["admin", "owner"]:
+    if karyawan_in.status_aktif is not None and current_user.role in ["admin"]:
         target.status_aktif = karyawan_in.status_aktif
 
     await db.commit()
     await db.refresh(target)
     return target
 
-@router.put("/{karyawan_id}/promote", response_model=KaryawanOut)
-async def promote_karyawan(
-    karyawan_id: str,
-    role: str,
-    db: AsyncSession = Depends(get_db),
-    current_user: Karyawan = Depends(require_roles(["owner"]))
-):
-    """
-    PROMOTIONS / ROLE CHANGE (OWNER ONLY):
-    Hanya Owner yang berhak mengubah role karyawan (misal: karyawan -> admin).
-    Role owner tidak dapat diset via API.
-    """
-    if role not in ["admin", "karyawan"]:
-        raise HTTPException(status_code=400, detail="Role tujuan harus 'admin' atau 'karyawan'")
-
-    target = await db.get(Karyawan, karyawan_id)
-    if not target:
-        raise HTTPException(status_code=404, detail="Karyawan tidak ditemukan")
-
-    if target.role == "owner":
-        raise HTTPException(status_code=403, detail="Role Owner tidak dapat diubah")
-
-    target.role = role
-    await db.commit()
-    await db.refresh(target)
-    return target

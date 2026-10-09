@@ -7,6 +7,7 @@ import 'features/auth/presentation/screens/login_screen.dart';
 import 'features/dashboard/presentation/screens/dashboard_screen.dart';
 import 'features/dashboard/providers/dashboard_provider.dart';
 import 'features/pos/providers/pos_provider.dart';
+import 'features/master_data/providers/master_data_provider.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -28,6 +29,10 @@ class KyfeinApp extends StatelessWidget {
         ChangeNotifierProxyProvider<AuthProvider, PosProvider>(
           create: (_) => PosProvider(),
           update: (_, auth, pos) => pos!..updateAuth(auth),
+        ),
+        ChangeNotifierProxyProvider<AuthProvider, MasterDataProvider>(
+          create: (_) => MasterDataProvider(),
+          update: (_, auth, master) => master!..updateAuth(auth),
         ),
       ],
       child: Consumer<AuthProvider>(

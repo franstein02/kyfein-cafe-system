@@ -122,7 +122,7 @@
 @endsalt
 
 ' ======================================================================
-' WIREFRAME 6 — Dashboard Reporting (Admin/Owner) (3.6)
+' WIREFRAME 6 — Dashboard Reporting (admin) (3.6)
 ' ======================================================================
 @startsalt wireframe-dashboard-reporting
 {+

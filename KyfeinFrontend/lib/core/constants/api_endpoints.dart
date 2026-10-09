@@ -28,11 +28,11 @@ class ApiConfig {
 
   /// Backend IP reachable from Android device on the cafe's local WiFi.
   /// Run `ipconfig` on the server machine and use its IPv4 address.
-  static const String _androidBaseUrl = 'http://192.168.18.21:8000/api/v1';
-  static const String _androidWsUrl   = 'ws://192.168.18.21:8000/ws';
+  static const String _androidBaseUrl = 'http://192.168.90.177:8000/api/v1';
+  static const String _androidWsUrl   = 'ws://192.168.90.177:8000/ws';
 
   // ── Resolved at runtime ───────────────────────────────────────────────────
-  static const bool _useLocalConfig = false; // Set to true for local testing
+  static const bool _useLocalConfig = true; // Set to true for local testing
 
   static String get baseUrl {
     if (_useLocalConfig) {
@@ -99,7 +99,7 @@ class ApiEndpoints {
   static String get profitHarian => '${ApiConfig.baseUrl}/reporting/profit-harian';
   static String get pengeluaran  => '${ApiConfig.baseUrl}/reporting/pengeluaran';
 
-  // ── Manajemen Role (owner-only) ───────────────────────
+  // ── Manajemen Role (admin) ────────────────────────────
   static String get manajemenRole => '${ApiConfig.baseUrl}/karyawan/manajemen-role';
   static String promoteKaryawan(String id)   => '${ApiConfig.baseUrl}/karyawan/$id/promote';
   static String nonaktifkanAkun(String id)   => '${ApiConfig.baseUrl}/karyawan/$id/nonaktifkan';

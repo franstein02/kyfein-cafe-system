@@ -1,5 +1,6 @@
 import pytest
 import pytest_asyncio
+import datetime
 from datetime import date, time, timedelta
 from decimal import Decimal
 from httpx import AsyncClient, ASGITransport
@@ -193,3 +194,84 @@ async def sample_data(test_db):
         "foto_k1": foto_k1,
         "foto_izin_k1": foto_izin_k1
     }
+
+
+from unittest.mock import patch
+
+
+@pytest.fixture
+def mock_time_10():
+    mock_now = datetime.datetime.now().replace(hour=10, minute=0, second=0, microsecond=0)
+    patches = []
+    modules = [
+        'app.api.v1.endpoints.absensi.now_local',
+        'app.api.v1.endpoints.jadwal.now_local',
+        'app.api.v1.endpoints.reporting.now_local',
+        'app.api.v1.endpoints.stok.now_local',
+        'app.api.v1.endpoints.transaksi.now_local',
+        'app.models.absensi.now_local',
+        'app.models.foto.now_local',
+        'app.models.jadwal.now_local',
+        'app.models.karyawan.now_local',
+        'app.models.master_data.now_local',
+        'app.models.pengeluaran.now_local',
+        'app.models.stok.now_local',
+        'app.models.transaksi.now_local',
+        'app.core.utils.now_local',
+    ]
+    for mod in modules:
+        try:
+            p = patch(mod, return_value=mock_now)
+            patches.append(p)
+            p.start()
+        except Exception:
+            pass
+    yield mock_now
+    for p in patches:
+        p.stop()
+
+
+@pytest.fixture
+def mock_time_at():
+    patches = []
+    
+    def _mock(time_str):
+        nonlocal patches
+        for p in patches:
+            p.stop()
+        patches.clear()
+        
+        import datetime
+        h, m = map(int, time_str.split(':'))
+        mock_now = datetime.datetime.now().replace(hour=h, minute=m, second=0, microsecond=0)
+        
+        modules = [
+            'app.api.v1.endpoints.absensi.now_local',
+            'app.api.v1.endpoints.jadwal.now_local',
+            'app.api.v1.endpoints.reporting.now_local',
+            'app.api.v1.endpoints.stok.now_local',
+            'app.api.v1.endpoints.transaksi.now_local',
+            'app.models.absensi.now_local',
+            'app.models.foto.now_local',
+            'app.models.jadwal.now_local',
+            'app.models.karyawan.now_local',
+            'app.models.master_data.now_local',
+            'app.models.pengeluaran.now_local',
+            'app.models.stok.now_local',
+            'app.models.transaksi.now_local',
+            'app.core.utils.now_local',
+        ]
+        from unittest.mock import patch
+        for mod in modules:
+            try:
+                p = patch(mod, return_value=mock_now)
+                patches.append(p)
+                p.start()
+            except Exception:
+                pass
+        return mock_now
+
+    yield _mock
+
+    for p in patches:
+        p.stop()

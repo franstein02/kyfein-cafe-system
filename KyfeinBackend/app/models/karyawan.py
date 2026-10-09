@@ -8,7 +8,7 @@ class Karyawan(Base):
     __tablename__ = "karyawan"
 
     id = Column(String(36), primary_key=True, default=generate_uuid)
-    role = Column(SQLEnum('karyawan', 'admin', 'owner', name='enum_karyawan_role'), nullable=False)
+    role = Column(SQLEnum('karyawan', 'admin', name='enum_karyawan_role'), nullable=False)
     nama = Column(String(150), nullable=False)
     email = Column(String(150), nullable=False, unique=True, index=True)
     nomor_hp = Column(String(20), nullable=False, unique=True)

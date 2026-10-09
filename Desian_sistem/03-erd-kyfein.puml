@@ -20,7 +20,7 @@ entity "karyawan" as karyawan {
   nama : VARCHAR
   no_hp : VARCHAR
   foto_profil : TEXT
-  role : ENUM('karyawan','admin','owner')
+  role : ENUM('karyawan','admin')
   status_aktif : BOOL
 }
 

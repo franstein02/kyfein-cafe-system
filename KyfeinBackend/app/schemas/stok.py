@@ -30,8 +30,11 @@ class StokOpnameOut(BaseModel):
     tipe: Literal['awal_shift', 'akhir_shift']
     metode: Literal['hitung_manual', 'carry_forward']
     karyawan_id: str
+    susulan: bool = False
+    diinput_oleh: Optional[str] = None
     waktu_opname: datetime
     catatan: Optional[str] = None
+    stok_titik_diperbarui: Optional[bool] = None
     details: List[StokOpnameDetailOut] = []
 
     class Config:
@@ -123,6 +126,17 @@ class MutasiStokOut(BaseModel):
     keterangan: Optional[str] = None
     created_at: datetime
     bahan: Optional[BahanOut] = None
+
+    class Config:
+        from_attributes = True
+
+class OpnameTertundaOut(BaseModel):
+    jadwal_shift_id: str
+    tanggal: str
+    shift: str
+    titik: str
+    nama_karyawan: str
+    belum_ada: List[str]  # ["awal_shift", "akhir_shift"]
 
     class Config:
         from_attributes = True

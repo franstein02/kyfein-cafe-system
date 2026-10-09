@@ -9,12 +9,13 @@ from app.models import (
 )
 
 @pytest.mark.asyncio
-async def test_issue3_hpp_snapshot_and_price_immutability(client, sample_data, test_db):
+async def test_issue3_hpp_snapshot_and_price_immutability(client, sample_data, test_db, mock_time_at):
     """
     Issue 3 Requirements:
     1. Transaction detail snapshots hpp_satuan at creation time.
     2. Changing bahan.harga_rata_rata later does NOT alter existing transaction's hpp_satuan or daily profit report.
     """
+    mock_time_at("20:00")
     today = sample_data["today"]
 
     # 1. Setup Menu & Recipe
@@ -100,12 +101,13 @@ async def test_issue3_hpp_snapshot_and_price_immutability(client, sample_data, t
     assert Decimal(str(res_profit_combined.json()["total_hpp_teoritis"])) == Decimal("6000.00")
 
 @pytest.mark.asyncio
-async def test_issue3_menu_tanpa_resep_and_default_date(client, sample_data, test_db):
+async def test_issue3_menu_tanpa_resep_and_default_date(client, sample_data, test_db, mock_time_at):
     """
     - Menu without recipe has hpp_satuan = 0
     - Appears in menu_tanpa_resep list on profit report
     - Default date param (None -> today) works dynamically
     """
+    mock_time_at("20:00")
     # Create menu without recipe
     menu_no_recipe = Menu(
         id="menu-no-rec",

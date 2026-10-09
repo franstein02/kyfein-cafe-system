@@ -16,7 +16,7 @@ async def login(
     db: AsyncSession = Depends(get_db)
 ):
     """
-    Autentikasi Karyawan / Admin / Owner dan return JWT Access Token
+    Autentikasi Karyawan / Admin dan return JWT Access Token
     """
     result = await db.execute(select(Karyawan).where(Karyawan.email == login_data.email))
     user = result.scalars().first()

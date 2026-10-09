@@ -34,7 +34,7 @@ class MenuItem {
   factory MenuItem.fromJson(Map<String, dynamic> json) => MenuItem(
         id: json['id'].toString(),
         nama: json['nama'] ?? '',
-        harga: (json['harga'] ?? 0).toDouble(),
+        harga: double.tryParse(json['harga']?.toString() ?? '0') ?? 0.0,
         foto: json['foto'],
         kategoriId: json['kategori_id']?.toString() ?? '',
       );
