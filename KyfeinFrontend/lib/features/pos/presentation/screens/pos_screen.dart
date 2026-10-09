@@ -261,6 +261,7 @@ class _KategoriChip extends StatelessWidget {
         label: Text(label),
         selected: selected,
         onSelected: (_) => onTap(),
+        showCheckmark: false,
         selectedColor: _brown.withValues(alpha: 0.15),
         checkmarkColor: _brown,
         labelStyle: TextStyle(
@@ -270,7 +271,6 @@ class _KategoriChip extends StatelessWidget {
         ),
         side: BorderSide(color: selected ? _brown : Colors.grey.shade300),
         backgroundColor: Colors.white,
-        showCheckmark: false,
       ),
     );
   }
@@ -577,7 +577,8 @@ class _CartItemTile extends StatelessWidget {
           ),
           // Catatan field
           const SizedBox(height: 6),
-          TextField(
+          TextFormField(
+            initialValue: item.catatan,
             decoration: InputDecoration(
               hintText: 'Catatan (less sugar, tanpa es, dll)',
               hintStyle: const TextStyle(fontSize: 11, color: Colors.grey),
@@ -594,7 +595,6 @@ class _CartItemTile extends StatelessWidget {
               isDense: true,
             ),
             style: const TextStyle(fontSize: 12),
-            controller: TextEditingController(text: item.catatan),
             onChanged: (v) => pos.updateCatatan(item.menuItem.id, v),
           ),
         ],

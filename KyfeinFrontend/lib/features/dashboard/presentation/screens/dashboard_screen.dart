@@ -1241,13 +1241,8 @@ class _MobileLayout extends StatelessWidget {
     required this.onNavTap,
   });
 
-  // First 4 nav items go in bottom bar; rest in drawer
-  static const int _bottomBarCount = 4;
-
   @override
   Widget build(BuildContext context) {
-    final bottomItems = navItems.take(_bottomBarCount).toList();
-
     return Scaffold(
       backgroundColor: _cream,
       appBar: AppBar(

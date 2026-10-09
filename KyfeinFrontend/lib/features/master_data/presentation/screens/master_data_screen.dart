@@ -173,8 +173,9 @@ class _MasterDataScreenState extends State<MasterDataScreen> {
             children: [
               // Filter categories
               Container(
-                padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
-                color: Theme.of(context).scaffoldBackgroundColor,
+                width: double.infinity,
+                color: Colors.white,
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
                 child: SingleChildScrollView(
                   scrollDirection: Axis.horizontal,
                   child: Row(
@@ -311,9 +312,10 @@ class _MasterDataScreenState extends State<MasterDataScreen> {
 
   Widget _buildFilterChip(String id, String label) {
     final isSelected = _selectedKategoriId == id;
+    final primaryColor = Theme.of(context).primaryColor;
     return Padding(
       padding: const EdgeInsets.only(right: 8),
-      child: ChoiceChip(
+      child: FilterChip(
         label: Text(label),
         selected: isSelected,
         onSelected: (selected) {
@@ -321,16 +323,19 @@ class _MasterDataScreenState extends State<MasterDataScreen> {
             setState(() => _selectedKategoriId = id);
           }
         },
-        selectedColor: Theme.of(context).primaryColor,
+        showCheckmark: false,
+        selectedColor: primaryColor.withValues(alpha: 0.15),
+        checkmarkColor: primaryColor,
         labelStyle: TextStyle(
-          color: isSelected ? Colors.white : Colors.black87,
-          fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+          color: isSelected ? primaryColor : Colors.grey.shade600,
+          fontWeight: isSelected ? FontWeight.w600 : FontWeight.w400,
+          fontSize: 13,
         ),
         backgroundColor: Colors.white,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(20),
           side: BorderSide(
-            color: isSelected ? Theme.of(context).primaryColor : Colors.grey.shade300,
+            color: isSelected ? primaryColor : Colors.grey.shade300,
           ),
         ),
       ),
