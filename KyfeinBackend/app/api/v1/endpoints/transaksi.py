@@ -12,6 +12,7 @@ from app.core.deps import get_db, get_current_user
 from app.core.utils import now_local
 from app.core.foto_helper import validate_and_claim_foto
 from app.core.transaksi_helper import is_transaksi_locked, hitung_hpp_satuan
+from app.core.firebase_config import send_push_notification
 from app.models.transaksi import Transaksi, TransaksiDetail
 from app.models.master_data import Menu, KategoriMenu
 from app.models.jadwal import JadwalShift
@@ -24,7 +25,7 @@ from app.services.jadwal_service import get_shift_berjalan
 
 router = APIRouter()
 
-@router.post("/", response_model=TransaksiOut)
+@router.post("", response_model=TransaksiOut)
 async def create_transaksi(
     data: TransaksiCreate,
     db: AsyncSession = Depends(get_db),
@@ -50,13 +51,13 @@ async def create_transaksi(
             detail="User bukan karyawan dengan area_kerja kasir pada jadwal_shift yang berjalan."
         )
         
-    if data.jadwal_shift_id != active_shift.id:
+    if data.jadwal_shift_id and data.jadwal_shift_id != active_shift.id:
         raise HTTPException(status_code=400, detail="Transaksi hanya dapat dilakukan pada shift yang sedang berjalan")
         
     shift = active_shift
 
     # 3. Cek row absensi untuk shift itu (kasir sudah absen masuk)
-    absensi_res = await db.execute(select(Absensi).where(Absensi.jadwal_shift_id == data.jadwal_shift_id))
+    absensi_res = await db.execute(select(Absensi).where(Absensi.jadwal_shift_id == active_shift.id))
     if not absensi_res.scalars().first():
         raise HTTPException(
             status_code=400,
@@ -122,7 +123,7 @@ async def create_transaksi(
         await validate_and_claim_foto(db, data.foto_bukti_qris_id, current_user.id, "qris", required=True)
 
     new_trx = Transaksi(
-        jadwal_shift_id=data.jadwal_shift_id,
+        jadwal_shift_id=active_shift.id,
         kasir_id=current_user.id,
         nomor_transaksi=nomor_trx,
         metode_bayar=data.metode_bayar,
@@ -137,6 +138,14 @@ async def create_transaksi(
     db.add(new_trx)
     await db.commit()
     await db.refresh(new_trx)
+
+    if current_user.fcm_token:
+        send_push_notification(
+            fcm_token=current_user.fcm_token,
+            title="Transaksi Berhasil ☕",
+            body=f"Transaksi {nomor_trx} senilai Rp{total_harga:,.0f} telah berhasil dicatat.",
+            data={"transaksi_id": str(new_trx.id), "type": "transaksi"}
+        )
 
     # Broadcast KDS Realtime Event
     for kds in kds_items:

@@ -52,7 +52,9 @@ class ApiConfig {
 class ApiEndpoints {
   // ── Auth ──────────────────────────────────────────────
   static String get login => '${ApiConfig.baseUrl}/auth/login';
+  static String get googleLogin => '${ApiConfig.baseUrl}/auth/google';
   static String get me    => '${ApiConfig.baseUrl}/auth/me';
+  static String get fcmToken => '${ApiConfig.baseUrl}/auth/fcm-token';
 
   // ── Karyawan ──────────────────────────────────────────
   static String get karyawan => '${ApiConfig.baseUrl}/karyawan';

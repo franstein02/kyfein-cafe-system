@@ -35,7 +35,7 @@ class MenuItem {
         id: json['id'].toString(),
         nama: json['nama'] ?? '',
         harga: double.tryParse(json['harga']?.toString() ?? '0') ?? 0.0,
-        foto: json['foto'],
+        foto: json['foto_id'],
         kategoriId: json['kategori_id']?.toString() ?? '',
       );
 }
@@ -44,10 +44,53 @@ class CartItem {
   final MenuItem menuItem;
   int qty;
   String catatan;
+  
+  String? suhu; // 'Hot', 'Ice'
+  String? sugarLevel; // 'No Sugar', 'Less Sugar', 'Normal Sugar'
+  String? beansType; // 'Robusta', 'Arabica'
+  
+  bool extraShot; // true/false (+4000)
+  bool extraSyrup; // true/false (+4000)
+  bool oatMilk; // true/false
+  
+  String? levelPedas; // 'Pedas', 'Sedang', 'Tidak Pedas'
 
-  CartItem({required this.menuItem, this.qty = 1, this.catatan = ''});
+  CartItem({
+    required this.menuItem,
+    this.qty = 1,
+    this.catatan = '',
+    this.suhu,
+    this.sugarLevel,
+    this.beansType,
+    this.extraShot = false,
+    this.extraSyrup = false,
+    this.oatMilk = false,
+    this.levelPedas,
+  });
 
-  double get subtotal => menuItem.harga * qty;
+  double get subtotal {
+    double itemPrice = menuItem.harga;
+    if (extraShot) itemPrice += 4000;
+    if (extraSyrup) itemPrice += 4000;
+    return itemPrice * qty;
+  }
+  
+  String get getCombinedCatatan {
+    List<String> parts = [];
+    if (suhu != null) parts.add(suhu!);
+    if (sugarLevel != null) parts.add(sugarLevel!);
+    if (beansType != null) parts.add(beansType!);
+    if (extraShot) parts.add('Extra Shot');
+    if (extraSyrup) parts.add('Extra Syrup');
+    if (oatMilk) parts.add('Oat Milk');
+    if (levelPedas != null) parts.add(levelPedas!);
+    
+    if (catatan.isNotEmpty) {
+      parts.add(catatan);
+    }
+    
+    return parts.join(', ');
+  }
 }
 
 class TransaksiRecord {
@@ -85,6 +128,7 @@ class PosProvider with ChangeNotifier {
   List<KategoriMenu> _kategori = [];
   List<MenuItem> _menu = [];
   String? _selectedKategoriId;
+  String _searchQuery = '';
   bool _isLoadingMenu = false;
 
   // Cart
@@ -108,11 +152,18 @@ class PosProvider with ChangeNotifier {
 
   List<KategoriMenu> get kategori => _kategori;
   String? get selectedKategoriId => _selectedKategoriId;
-  List<MenuItem> get menu => _selectedKategoriId == null
-      ? _menu
-      : _menu
-          .where((m) => m.kategoriId == _selectedKategoriId)
-          .toList();
+  List<MenuItem> get allMenu => _menu;
+  List<MenuItem> get menu {
+    var filtered = _menu;
+    if (_selectedKategoriId != null) {
+      filtered = filtered.where((m) => m.kategoriId == _selectedKategoriId).toList();
+    }
+    if (_searchQuery.isNotEmpty) {
+      final query = _searchQuery.toLowerCase();
+      filtered = filtered.where((m) => m.nama.toLowerCase().contains(query)).toList();
+    }
+    return filtered;
+  }
   List<CartItem> get cart => _cart;
   List<TransaksiRecord> get riwayat => _riwayat;
 
@@ -216,6 +267,11 @@ class PosProvider with ChangeNotifier {
     notifyListeners();
   }
 
+  void setSearchQuery(String query) {
+    _searchQuery = query;
+    notifyListeners();
+  }
+
   void addToCart(MenuItem item) {
     final idx = _cart.indexWhere((c) => c.menuItem.id == item.id);
     if (idx == -1) {
@@ -250,6 +306,27 @@ class PosProvider with ChangeNotifier {
     }
   }
 
+  void updateVarianMinuman(String menuId, {String? suhu, String? sugarLevel, String? beansType, bool? extraShot, bool? extraSyrup, bool? oatMilk}) {
+    final idx = _cart.indexWhere((c) => c.menuItem.id == menuId);
+    if (idx != -1) {
+      if (suhu != null) _cart[idx].suhu = suhu;
+      if (sugarLevel != null) _cart[idx].sugarLevel = sugarLevel;
+      if (beansType != null) _cart[idx].beansType = beansType;
+      if (extraShot != null) _cart[idx].extraShot = extraShot;
+      if (extraSyrup != null) _cart[idx].extraSyrup = extraSyrup;
+      if (oatMilk != null) _cart[idx].oatMilk = oatMilk;
+      notifyListeners();
+    }
+  }
+
+  void updateVarianMakanan(String menuId, {String? levelPedas}) {
+    final idx = _cart.indexWhere((c) => c.menuItem.id == menuId);
+    if (idx != -1) {
+      if (levelPedas != null) _cart[idx].levelPedas = levelPedas;
+      notifyListeners();
+    }
+  }
+
   void clearCart() {
     _cart.clear();
     notifyListeners();
@@ -271,7 +348,7 @@ class PosProvider with ChangeNotifier {
                 'menu_id': int.tryParse(c.menuItem.id) ?? c.menuItem.id,
                 'qty': c.qty,
                 'harga_satuan': c.menuItem.harga,
-                'catatan': c.catatan,
+                'catatan': c.getCombinedCatatan,
                 'subtotal': c.subtotal,
               })
           .toList();
@@ -297,7 +374,14 @@ class PosProvider with ChangeNotifier {
         await _loadRiwayat();
         return data;
       } else {
-        _lastError = 'Gagal menyimpan transaksi (${resp.statusCode})';
+        String msg = 'Gagal menyimpan transaksi (${resp.statusCode})';
+        try {
+          final errData = jsonDecode(resp.body);
+          if (errData['detail'] != null) {
+            msg = errData['detail'];
+          }
+        } catch (_) {}
+        _lastError = msg;
         notifyListeners();
         return null;
       }

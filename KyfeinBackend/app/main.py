@@ -2,14 +2,23 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from sqlalchemy.exc import IntegrityError
+from contextlib import asynccontextmanager
 
 from app.core.config import settings
 from app.api.v1.router import api_router
 
+from app.core.firebase_config import init_firebase
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    init_firebase()
+    yield
+
 app = FastAPI(
     title=settings.PROJECT_NAME,
     openapi_url=f"{settings.API_V1_STR}/openapi.json",
-    description="Backend API Modular Monolith untuk Sistem Kasir Cafe Kyfein"
+    description="Backend API Modular Monolith untuk Sistem Kasir Cafe Kyfein",
+    lifespan=lifespan
 )
 
 @app.exception_handler(IntegrityError)

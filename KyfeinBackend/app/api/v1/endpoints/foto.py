@@ -12,8 +12,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, and_
 
 from app.core.config import settings
-from app.core.deps import get_db, get_current_user
+from app.core.deps import get_db, get_current_user, get_optional_user
 from app.core.foto_helper import get_foto_abs_path
+from fastapi.responses import FileResponse, RedirectResponse
 from app.models.karyawan import Karyawan
 from app.models.foto import Foto
 
@@ -144,7 +145,7 @@ async def upload_foto(
 async def get_foto(
     id: str,
     db: AsyncSession = Depends(get_db),
-    current_user: Karyawan = Depends(get_current_user)
+    current_user: Karyawan = Depends(get_optional_user)
 ):
     stmt = select(Foto).where(Foto.id == id)
     res = await db.execute(stmt)
@@ -155,11 +156,19 @@ async def get_foto(
 
     # Access control
     if foto.jenis in {'absensi', 'izin', 'qris'}:
+        if not current_user:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Akses ditolak. Anda harus login untuk melihat foto ini."
+            )
         if current_user.role not in {'admin'} and foto.uploader_id != current_user.id:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="Akses ditolak. Anda hanya dapat melihat foto milik Anda sendiri."
             )
+
+    if foto.path.startswith("http://") or foto.path.startswith("https://"):
+        return RedirectResponse(url=foto.path)
 
     abs_path = get_foto_abs_path(foto.path)
     if not os.path.exists(abs_path):

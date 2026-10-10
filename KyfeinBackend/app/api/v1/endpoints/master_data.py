@@ -57,7 +57,9 @@ async def list_menu(
     result = await db.execute(stmt)
     return result.scalars().all()
 
+import uuid
 from app.core.foto_helper import validate_and_claim_foto, remove_old_foto_if_replaced
+from app.models.foto import Foto
 
 @router.post("/menu", response_model=MenuOut)
 async def create_menu(
@@ -66,7 +68,14 @@ async def create_menu(
     current_user: Karyawan = Depends(require_roles(["admin"]))
 ):
     if data.foto_id:
-        await validate_and_claim_foto(db, data.foto_id, current_user.id, "menu", required=False)
+        if data.foto_id.startswith('http'):
+            new_foto_id = str(uuid.uuid4())
+            new_foto = Foto(id=new_foto_id, jenis='menu', path=data.foto_id, uploader_id=current_user.id, dipakai=True)
+            db.add(new_foto)
+            await db.flush()
+            data.foto_id = new_foto_id
+        else:
+            await validate_and_claim_foto(db, data.foto_id, current_user.id, "menu", required=False)
 
     item = Menu(**data.dict(), dibuat_oleh=current_user.id)
     db.add(item)
@@ -85,11 +94,24 @@ async def update_menu(
     if not item:
         raise HTTPException(status_code=404, detail="Menu tidak ditemukan")
 
-    if data.foto_id is not None and data.foto_id != item.foto_id:
-        await validate_and_claim_foto(db, data.foto_id, current_user.id, "menu", required=False)
-        await remove_old_foto_if_replaced(db, item.foto_id, data.foto_id)
-
     update_data = data.dict(exclude_unset=True)
+
+    if 'foto_id' in update_data and data.foto_id != item.foto_id:
+        old_foto_id = item.foto_id
+        if data.foto_id is None:
+            await remove_old_foto_if_replaced(db, old_foto_id, None)
+        elif data.foto_id.startswith('http'):
+            new_foto_id = str(uuid.uuid4())
+            new_foto = Foto(id=new_foto_id, jenis='menu', path=data.foto_id, uploader_id=current_user.id, dipakai=True)
+            db.add(new_foto)
+            await db.flush()
+            data.foto_id = new_foto_id
+            update_data['foto_id'] = new_foto_id
+            await remove_old_foto_if_replaced(db, old_foto_id, new_foto_id)
+        else:
+            await validate_and_claim_foto(db, data.foto_id, current_user.id, "menu", required=False)
+            await remove_old_foto_if_replaced(db, old_foto_id, data.foto_id)
+
     for field, val in update_data.items():
         setattr(item, field, val)
 

@@ -84,3 +84,8 @@ KyfeinFrontend/.pub/
 
 # Node / Web artifacts (if any)
 node_modules/
+
+# Firebase
+*firebase-adminsdk.json
+*google-services.json
+firebase.json

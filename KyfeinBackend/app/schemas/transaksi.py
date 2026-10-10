@@ -22,7 +22,7 @@ class TransaksiDetailOut(BaseModel):
         from_attributes = True
 
 class TransaksiCreate(BaseModel):
-    jadwal_shift_id: str = Field(min_length=1)
+    jadwal_shift_id: Optional[str] = None
     metode_bayar: Literal['cash', 'qris']
     uang_diterima: Optional[Decimal] = None
     foto_bukti_qris_id: Optional[str] = None

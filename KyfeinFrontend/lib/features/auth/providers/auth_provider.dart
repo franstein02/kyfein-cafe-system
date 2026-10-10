@@ -2,7 +2,9 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:http/http.dart' as http;
+import 'package:google_sign_in/google_sign_in.dart';
 import '../../../core/constants/api_endpoints.dart';
+import '../../../core/services/firebase_messaging_service.dart';
 
 class AuthProvider with ChangeNotifier {
   final _storage = const FlutterSecureStorage();
@@ -35,6 +37,11 @@ class AuthProvider with ChangeNotifier {
     _nama = await _storage.read(key: 'nama');
     _karyawanId = await _storage.read(key: 'karyawan_id');
     _fotoProfile = await _storage.read(key: 'foto_profile');
+    
+    if (_token != null) {
+      FirebaseMessagingService.sendTokenToBackend(_token!);
+    }
+    
     _isLoading = false;
     notifyListeners();
   }
@@ -65,6 +72,8 @@ class AuthProvider with ChangeNotifier {
           await _storage.write(key: 'foto_profile', value: _fotoProfile);
         }
 
+        FirebaseMessagingService.sendTokenToBackend(_token!);
+
         notifyListeners();
       } else if (response.statusCode == 403) {
         throw Exception('Akun tidak aktif, hubungi admin');
@@ -74,6 +83,63 @@ class AuthProvider with ChangeNotifier {
     } catch (e) {
       if (e is Exception && e.toString().contains('Exception:')) rethrow;
       throw Exception('Tidak bisa terhubung ke server, cek koneksi WiFi cafe');
+    }
+  }
+
+  Future<void> loginWithGoogle() async {
+    try {
+      try {
+        await GoogleSignIn.instance.initialize();
+      } catch (_) {
+        // Already initialized or ignoring error
+      }
+      final GoogleSignInAccount googleUser = await GoogleSignIn.instance.authenticate();
+
+      final GoogleSignInAuthentication googleAuth = googleUser.authentication;
+      final idToken = googleAuth.idToken;
+
+      if (idToken == null) {
+        throw Exception('Gagal mendapatkan token Google');
+      }
+
+      final response = await http
+          .post(
+            Uri.parse(ApiEndpoints.googleLogin),
+            headers: {'Content-Type': 'application/json'},
+            body: jsonEncode({'id_token': idToken}),
+          )
+          .timeout(const Duration(seconds: 8));
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        _token = data['access_token'];
+        _role = data['role'];
+        _nama = data['nama'];
+        _karyawanId = data['karyawan_id']?.toString();
+        _fotoProfile = data['foto_profile'];
+
+        await _storage.write(key: 'jwt_token', value: _token);
+        await _storage.write(key: 'role', value: _role);
+        await _storage.write(key: 'nama', value: _nama);
+        await _storage.write(key: 'karyawan_id', value: _karyawanId);
+        if (_fotoProfile != null) {
+          await _storage.write(key: 'foto_profile', value: _fotoProfile);
+        }
+
+        FirebaseMessagingService.sendTokenToBackend(_token!);
+
+        notifyListeners();
+      } else if (response.statusCode == 403) {
+        await GoogleSignIn.instance.signOut();
+        throw Exception('Akun tidak aktif, hubungi admin');
+      } else {
+        await GoogleSignIn.instance.signOut();
+        final body = jsonDecode(response.body);
+        throw Exception(body['detail'] ?? 'Gagal login menggunakan Google');
+      }
+    } catch (e) {
+      if (e is Exception && e.toString().contains('Exception:')) rethrow;
+      throw Exception('Gagal login dengan Google: $e');
     }
   }
 

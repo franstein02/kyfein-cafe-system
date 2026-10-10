@@ -1,7 +1,10 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:image_picker/image_picker.dart';
 import '../../providers/master_data_provider.dart';
 import 'package:intl/intl.dart';
+import '../../../../core/constants/api_endpoints.dart';
 
 class MasterDataScreen extends StatefulWidget {
   const MasterDataScreen({super.key});
@@ -38,6 +41,10 @@ class _MasterDataScreenState extends State<MasterDataScreen> {
     if (kategoriId == null && provider.categories.isNotEmpty) {
       kategoriId = provider.categories.first.id;
     }
+    
+    File? selectedImage;
+    String? currentFotoUrl = menu?.fotoId;
+    bool isUploading = false;
 
     showDialog(
       context: context,
@@ -82,10 +89,39 @@ class _MasterDataScreenState extends State<MasterDataScreen> {
                     const SizedBox(height: 16),
                     // Placeholder untuk Input Foto Menu (Disiapkan untuk Supabase)
                     InkWell(
-                      onTap: () {
-                        // TODO: Implement image picker and upload to Supabase
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(content: Text('Fitur upload foto belum disambungkan ke Supabase')),
+                      onTap: isUploading ? null : () {
+                        showModalBottomSheet(
+                          context: context,
+                          builder: (bc) {
+                            return SafeArea(
+                              child: Wrap(
+                                children: [
+                                  ListTile(
+                                    leading: const Icon(Icons.photo_library),
+                                    title: const Text('Galeri'),
+                                    onTap: () async {
+                                      Navigator.pop(bc);
+                                      final pickedFile = await ImagePicker().pickImage(source: ImageSource.gallery);
+                                      if (pickedFile != null) {
+                                        setState(() => selectedImage = File(pickedFile.path));
+                                      }
+                                    },
+                                  ),
+                                  ListTile(
+                                    leading: const Icon(Icons.photo_camera),
+                                    title: const Text('Kamera'),
+                                    onTap: () async {
+                                      Navigator.pop(bc);
+                                      final pickedFile = await ImagePicker().pickImage(source: ImageSource.camera);
+                                      if (pickedFile != null) {
+                                        setState(() => selectedImage = File(pickedFile.path));
+                                      }
+                                    },
+                                  ),
+                                ],
+                              ),
+                            );
+                          }
                         );
                       },
                       child: Container(
@@ -95,13 +131,45 @@ class _MasterDataScreenState extends State<MasterDataScreen> {
                           color: Colors.grey.shade200,
                           borderRadius: BorderRadius.circular(8),
                           border: Border.all(color: Colors.grey.shade400, style: BorderStyle.solid),
+                          image: selectedImage != null
+                              ? DecorationImage(image: FileImage(selectedImage!), fit: BoxFit.cover)
+                              : (currentFotoUrl != null && currentFotoUrl!.isNotEmpty
+                                  ? DecorationImage(image: NetworkImage(currentFotoUrl!.startsWith('http') ? currentFotoUrl! : '${ApiConfig.baseUrl}/foto/$currentFotoUrl'), fit: BoxFit.cover)
+                                  : null),
                         ),
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
+                        child: Stack(
                           children: [
-                            Icon(Icons.add_photo_alternate_rounded, size: 40, color: Colors.grey.shade600),
-                            const SizedBox(height: 8),
-                            Text('Pilih Foto Menu', style: TextStyle(color: Colors.grey.shade600)),
+                            if (selectedImage == null && (currentFotoUrl == null || currentFotoUrl!.isEmpty))
+                              Center(
+                                child: Column(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    Icon(Icons.add_photo_alternate_rounded, size: 40, color: Colors.grey.shade600),
+                                    const SizedBox(height: 8),
+                                    Text('Pilih Foto Menu', style: TextStyle(color: Colors.grey.shade600)),
+                                  ],
+                                ),
+                              ),
+                            if (selectedImage != null || (currentFotoUrl != null && currentFotoUrl!.isNotEmpty))
+                              Positioned(
+                                top: 4,
+                                right: 4,
+                                child: Material(
+                                  color: Colors.black45,
+                                  shape: const CircleBorder(),
+                                  child: IconButton(
+                                    icon: const Icon(Icons.close, color: Colors.white, size: 20),
+                                    onPressed: () {
+                                      setState(() {
+                                        selectedImage = null;
+                                        currentFotoUrl = null;
+                                      });
+                                    },
+                                    constraints: const BoxConstraints(),
+                                    padding: const EdgeInsets.all(8),
+                                  ),
+                                ),
+                              ),
                           ],
                         ),
                       ),
@@ -115,15 +183,26 @@ class _MasterDataScreenState extends State<MasterDataScreen> {
                   child: const Text('Batal'),
                 ),
                 ElevatedButton(
-                  onPressed: () async {
+                  onPressed: isUploading ? null : () async {
                     if (nama.isEmpty || kodeMenu.isEmpty || hargaStr.isEmpty || kategoriId == null) return;
                     final harga = double.tryParse(hargaStr) ?? 0;
+                    
+                    setState(() => isUploading = true);
+                    
+                    String? uploadedFotoUrl = currentFotoUrl;
+                    if (selectedImage != null) {
+                      final url = await provider.uploadImage(selectedImage!);
+                      if (url != null) {
+                        uploadedFotoUrl = url;
+                      }
+                    }
                     
                     final data = {
                       'nama': nama,
                       'kode_menu': kodeMenu,
                       'harga': harga,
                       'kategori_id': kategoriId,
+                      'foto_id': uploadedFotoUrl,
                       if (!isEdit) 'status_aktif': true,
                     };
                     
@@ -134,14 +213,23 @@ class _MasterDataScreenState extends State<MasterDataScreen> {
                       success = await provider.createMenu(data);
                     }
                     
-                    if (success && context.mounted) {
-                      Navigator.pop(context);
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('Berhasil menyimpan menu')),
-                      );
+                    if (context.mounted) {
+                      setState(() => isUploading = false);
+                      if (success) {
+                        Navigator.pop(context);
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(content: Text('Berhasil menyimpan menu')),
+                        );
+                      } else {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(content: Text('Gagal menyimpan menu')),
+                        );
+                      }
                     }
                   },
-                  child: const Text('Simpan'),
+                  child: isUploading 
+                      ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
+                      : const Text('Simpan'),
                 ),
               ],
             );
@@ -211,8 +299,16 @@ class _MasterDataScreenState extends State<MasterDataScreen> {
                             decoration: BoxDecoration(
                               color: Colors.grey.shade200,
                               borderRadius: BorderRadius.circular(8),
+                              image: (menu.fotoId != null && menu.fotoId!.isNotEmpty)
+                                ? DecorationImage(
+                                    image: NetworkImage(menu.fotoId!.startsWith('http') ? menu.fotoId! : '${ApiConfig.baseUrl}/foto/${menu.fotoId}'), 
+                                    fit: BoxFit.cover
+                                  )
+                                : null,
                             ),
-                            child: Icon(Icons.image_rounded, color: Colors.grey.shade400),
+                            child: (menu.fotoId == null || menu.fotoId!.isEmpty) 
+                                ? Icon(Icons.image_rounded, color: Colors.grey.shade400)
+                                : null,
                           ),
                           const SizedBox(width: 12),
                           Expanded(
@@ -253,40 +349,65 @@ class _MasterDataScreenState extends State<MasterDataScreen> {
                           ),
                           Row(
                             children: [
-                              IconButton(
-                                icon: const Icon(Icons.edit_rounded, color: Colors.blue),
-                                onPressed: () => _showMenuForm(context, menu),
-                              ),
-                              IconButton(
-                                icon: const Icon(Icons.delete_rounded, color: Colors.red),
-                                onPressed: () {
-                                  showDialog(
-                                    context: context,
-                                    builder: (context) => AlertDialog(
-                                      title: const Text('Hapus Menu'),
-                                      content: Text('Apakah Anda yakin ingin menghapus ${menu.nama}?'),
-                                      actions: [
-                                        TextButton(
-                                          onPressed: () => Navigator.pop(context),
-                                          child: const Text('Batal'),
-                                        ),
-                                        ElevatedButton(
-                                          style: ElevatedButton.styleFrom(backgroundColor: Colors.red, foregroundColor: Colors.white),
-                                          onPressed: () async {
-                                            Navigator.pop(context);
-                                            final success = await provider.deleteMenu(menu.id);
-                                            if (success && context.mounted) {
-                                              ScaffoldMessenger.of(context).showSnackBar(
-                                                const SnackBar(content: Text('Berhasil menghapus menu')),
-                                              );
-                                            }
-                                          },
-                                          child: const Text('Hapus'),
-                                        ),
+                              PopupMenuButton<String>(
+                                icon: const Icon(Icons.more_vert_rounded, color: Colors.grey),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                                onSelected: (value) {
+                                  if (value == 'edit') {
+                                    _showMenuForm(context, menu);
+                                  } else if (value == 'hapus') {
+                                    showDialog(
+                                      context: context,
+                                      builder: (context) => AlertDialog(
+                                        title: const Text('Hapus Menu'),
+                                        content: Text('Apakah Anda yakin ingin menghapus ${menu.nama}?'),
+                                        actions: [
+                                          TextButton(
+                                            onPressed: () => Navigator.pop(context),
+                                            child: const Text('Batal'),
+                                          ),
+                                          ElevatedButton(
+                                            style: ElevatedButton.styleFrom(backgroundColor: Colors.red, foregroundColor: Colors.white),
+                                            onPressed: () async {
+                                              Navigator.pop(context);
+                                              final success = await provider.deleteMenu(menu.id);
+                                              if (success && context.mounted) {
+                                                ScaffoldMessenger.of(context).showSnackBar(
+                                                  const SnackBar(content: Text('Berhasil menghapus menu')),
+                                                );
+                                              }
+                                            },
+                                            child: const Text('Hapus'),
+                                          ),
+                                        ],
+                                      ),
+                                    );
+                                  }
+                                },
+                                itemBuilder: (context) => const [
+                                  PopupMenuItem(
+                                    value: 'edit',
+                                    child: Row(
+                                      children: [
+                                        Icon(Icons.edit_rounded, color: Colors.blue, size: 20),
+                                        SizedBox(width: 8),
+                                        Text('Edit'),
                                       ],
                                     ),
-                                  );
-                                },
+                                  ),
+                                  PopupMenuItem(
+                                    value: 'hapus',
+                                    child: Row(
+                                      children: [
+                                        Icon(Icons.delete_rounded, color: Colors.red, size: 20),
+                                        SizedBox(width: 8),
+                                        Text('Hapus', style: TextStyle(color: Colors.red)),
+                                      ],
+                                    ),
+                                  ),
+                                ],
                               ),
                             ],
                           ),

@@ -4,6 +4,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 import '../../providers/pos_provider.dart';
+import '../../../../core/constants/api_endpoints.dart';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 const _brown = Color(0xFF1B4332);
@@ -168,6 +169,80 @@ class _MenuPanel extends StatelessWidget {
 
     return Column(
       children: [
+        // Search bar
+        Padding(
+          padding: const EdgeInsets.only(left: 16, right: 16, top: 16, bottom: 8),
+          child: Autocomplete<MenuItem>(
+            optionsBuilder: (TextEditingValue textEditingValue) {
+              if (textEditingValue.text.isEmpty) {
+                return const Iterable<MenuItem>.empty();
+              }
+              final query = textEditingValue.text.toLowerCase();
+              return pos.allMenu.where((m) => m.nama.toLowerCase().contains(query));
+            },
+            displayStringForOption: (MenuItem option) => option.nama,
+            onSelected: (MenuItem selection) {
+              pos.addToCart(selection);
+            },
+            fieldViewBuilder: (context, textEditingController, focusNode, onFieldSubmitted) {
+              return TextField(
+                controller: textEditingController,
+                focusNode: focusNode,
+                onChanged: (value) => pos.setSearchQuery(value),
+                decoration: InputDecoration(
+                  hintText: 'Cari nama produk...',
+                  prefixIcon: const Icon(Icons.search, color: Colors.grey),
+                  suffixIcon: IconButton(
+                    icon: const Icon(Icons.clear, color: Colors.grey, size: 20),
+                    onPressed: () {
+                      textEditingController.clear();
+                      pos.setSearchQuery('');
+                      focusNode.unfocus();
+                    },
+                  ),
+                  filled: true,
+                  fillColor: Colors.grey.shade200,
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: BorderSide.none,
+                  ),
+                ),
+                onSubmitted: (String value) {
+                  onFieldSubmitted();
+                },
+              );
+            },
+            optionsViewBuilder: (context, onSelected, options) {
+              return Align(
+                alignment: Alignment.topLeft,
+                child: Material(
+                  elevation: 4.0,
+                  borderRadius: BorderRadius.circular(12),
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(maxHeight: 250, maxWidth: 300),
+                    child: ListView.builder(
+                      padding: EdgeInsets.zero,
+                      shrinkWrap: true,
+                      itemCount: options.length,
+                      itemBuilder: (BuildContext context, int index) {
+                        final MenuItem option = options.elementAt(index);
+                        return ListTile(
+                          title: Text(option.nama),
+                          subtitle: Text(_idr.format(option.harga)),
+                          onTap: () {
+                            onSelected(option);
+                          },
+                        );
+                      },
+                    ),
+                  ),
+                ),
+              );
+            },
+          ),
+        ),
+        
         // Category chips
         if (pos.kategori.isNotEmpty)
           Container(
@@ -326,7 +401,7 @@ class _MenuCard extends StatelessWidget {
                               borderRadius: const BorderRadius.vertical(
                                   top: Radius.circular(14)),
                               child: Image.network(
-                                item.foto!,
+                                item.foto!.startsWith('http') ? item.foto! : '${ApiConfig.baseUrl}/foto/${item.foto}',
                                 fit: BoxFit.cover,
                                 errorBuilder: (_, __, ___) => const Center(
                                     child: Icon(Icons.coffee_rounded,
@@ -575,12 +650,77 @@ class _CartItemTile extends StatelessWidget {
             style: const TextStyle(
                 color: _brown, fontSize: 12, fontWeight: FontWeight.w600),
           ),
+          // Varian
+          if (pos.kategori.isNotEmpty) ...[
+            Builder(builder: (context) {
+              final kategoriName = pos.kategori.firstWhere(
+                  (k) => k.id == item.menuItem.kategoriId, 
+                  orElse: () => KategoriMenu(id: '', nama: '')).nama.toLowerCase();
+              
+              if (kategoriName == 'minuman') {
+                return Padding(
+                  padding: const EdgeInsets.only(top: 8, bottom: 4),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      _VarianSelector(
+                        title: 'Suhu',
+                        options: const ['Hot', 'Ice'],
+                        selectedValue: item.suhu,
+                        onChanged: (v) => pos.updateVarianMinuman(item.menuItem.id, suhu: v),
+                      ),
+                      _VarianSelector(
+                        title: 'Sugar',
+                        options: const ['No Sugar', 'Less Sugar', 'Normal Sugar'],
+                        selectedValue: item.sugarLevel,
+                        onChanged: (v) => pos.updateVarianMinuman(item.menuItem.id, sugarLevel: v),
+                      ),
+                      _VarianSelector(
+                        title: 'Beans',
+                        options: const ['Robusta', 'Arabica'],
+                        selectedValue: item.beansType,
+                        onChanged: (v) => pos.updateVarianMinuman(item.menuItem.id, beansType: v),
+                      ),
+                      const SizedBox(height: 4),
+                      const Text('Adds on', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: _textDim)),
+                      _AddonCheckbox(
+                        label: 'Oat Milk',
+                        value: item.oatMilk,
+                        onChanged: (v) => pos.updateVarianMinuman(item.menuItem.id, oatMilk: v),
+                      ),
+                      _AddonCheckbox(
+                        label: 'Extra Syrup (+4000)',
+                        value: item.extraSyrup,
+                        onChanged: (v) => pos.updateVarianMinuman(item.menuItem.id, extraSyrup: v),
+                      ),
+                      _AddonCheckbox(
+                        label: 'Extra Shot (+4000)',
+                        value: item.extraShot,
+                        onChanged: (v) => pos.updateVarianMinuman(item.menuItem.id, extraShot: v),
+                      ),
+                    ],
+                  ),
+                );
+              } else if (kategoriName == 'makanan') {
+                return Padding(
+                  padding: const EdgeInsets.only(top: 8, bottom: 4),
+                  child: _VarianSelector(
+                    title: 'Level Pedas',
+                    options: const ['Tidak Pedas', 'Sedang', 'Pedas'],
+                    selectedValue: item.levelPedas,
+                    onChanged: (v) => pos.updateVarianMakanan(item.menuItem.id, levelPedas: v),
+                  ),
+                );
+              }
+              return const SizedBox.shrink();
+            }),
+          ],
           // Catatan field
           const SizedBox(height: 6),
           TextFormField(
             initialValue: item.catatan,
             decoration: InputDecoration(
-              hintText: 'Catatan (less sugar, tanpa es, dll)',
+              hintText: 'Catatan tambahan...',
               hintStyle: const TextStyle(fontSize: 11, color: Colors.grey),
               contentPadding:
                   const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
@@ -621,6 +761,94 @@ class _QtyButton extends StatelessWidget {
           child: Icon(icon, size: 16, color: _brown),
         ),
       ),
+    );
+  }
+}
+
+class _VarianSelector extends StatelessWidget {
+  final String title;
+  final List<String> options;
+  final String? selectedValue;
+  final ValueChanged<String?> onChanged;
+
+  const _VarianSelector({
+    required this.title,
+    required this.options,
+    required this.selectedValue,
+    required this.onChanged,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 6),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(title, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: _textDim)),
+          Wrap(
+            spacing: 0,
+            runSpacing: 0,
+            children: options.map((opt) {
+              return Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Radio<String>(
+                    value: opt,
+                    groupValue: selectedValue,
+                    onChanged: onChanged,
+                    activeColor: _brown,
+                    materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    visualDensity: const VisualDensity(horizontal: -4, vertical: -4),
+                  ),
+                  GestureDetector(
+                    onTap: () => onChanged(opt),
+                    child: Padding(
+                      padding: const EdgeInsets.only(right: 12),
+                      child: Text(opt, style: const TextStyle(fontSize: 11)),
+                    ),
+                  ),
+                ],
+              );
+            }).toList(),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _AddonCheckbox extends StatelessWidget {
+  final String label;
+  final bool value;
+  final ValueChanged<bool?> onChanged;
+
+  const _AddonCheckbox({
+    required this.label,
+    required this.value,
+    required this.onChanged,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Checkbox(
+          value: value,
+          onChanged: onChanged,
+          activeColor: _brown,
+          materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+          visualDensity: const VisualDensity(horizontal: -4, vertical: -4),
+        ),
+        GestureDetector(
+          onTap: () => onChanged(!value),
+          child: Padding(
+            padding: const EdgeInsets.only(right: 12),
+            child: Text(label, style: const TextStyle(fontSize: 11)),
+          ),
+        ),
+      ],
     );
   }
 }

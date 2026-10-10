@@ -9,8 +9,23 @@ import 'features/dashboard/providers/dashboard_provider.dart';
 import 'features/pos/providers/pos_provider.dart';
 import 'features/master_data/providers/master_data_provider.dart';
 
-void main() {
+import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:firebase_core/firebase_core.dart';
+import 'firebase_options.dart';
+import 'features/notifications/providers/notification_provider.dart';
+
+void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  
+  await Supabase.initialize(
+    url: 'https://psdeyhujegvaczqyozbz.supabase.co',
+    publishableKey: 'sb_publishable_-uzUI0ciD9S5VJTr-NHeCA_IWZb-eHe',
+  );
+
+  await Firebase.initializeApp(
+    options: DefaultFirebaseOptions.currentPlatform,
+  );
+  
   runApp(const KyfeinApp());
 }
 
@@ -21,6 +36,7 @@ class KyfeinApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MultiProvider(
       providers: [
+        ChangeNotifierProvider(create: (_) => NotificationProvider()),
         ChangeNotifierProvider(create: (_) => AuthProvider()..checkAuthStatus()),
         ChangeNotifierProxyProvider<AuthProvider, DashboardProvider>(
           create: (_) => DashboardProvider(),

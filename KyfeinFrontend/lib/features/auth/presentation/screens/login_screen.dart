@@ -74,6 +74,26 @@ class _LoginScreenState extends State<LoginScreen>
     }
   }
 
+  Future<void> _handleGoogleLogin() async {
+    setState(() {
+      _errorMessage = null;
+      _isLoading = true;
+    });
+
+    try {
+      final auth = context.read<AuthProvider>();
+      await auth.loginWithGoogle();
+      // Navigation happens automatically via Consumer in main.dart
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _errorMessage = e.toString().replaceAll('Exception: ', '');
+          _isLoading = false;
+        });
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -413,6 +433,36 @@ class _LoginScreenState extends State<LoginScreen>
                       style: GoogleFonts.outfit(
                           fontSize: 16, fontWeight: FontWeight.w700),
                     ),
+            ),
+          ),
+          const SizedBox(height: 16),
+
+          // Google Login Button
+          SizedBox(
+            height: 52,
+            child: OutlinedButton(
+              onPressed: _isLoading ? null : _handleGoogleLogin,
+              style: OutlinedButton.styleFrom(
+                foregroundColor: const Color(0xFF1B4332),
+                side: const BorderSide(color: Color(0xFF1B4332), width: 1.5),
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12)),
+              ),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Image.network(
+                    'https://img.icons8.com/color/48/000000/google-logo.png',
+                    height: 24,
+                  ),
+                  const SizedBox(width: 12),
+                  Text(
+                    'Masuk dengan Google',
+                    style: GoogleFonts.outfit(
+                        fontSize: 15, fontWeight: FontWeight.w600),
+                  ),
+                ],
+              ),
             ),
           ),
           const SizedBox(height: 16),

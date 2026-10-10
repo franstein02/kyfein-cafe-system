@@ -1,6 +1,8 @@
 import 'dart:convert';
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
+import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../../core/constants/api_endpoints.dart';
 import '../../auth/providers/auth_provider.dart';
 
@@ -127,6 +129,25 @@ class MasterDataProvider with ChangeNotifier {
       _menus = data.map((e) => MasterMenu.fromJson(e)).toList();
     } else {
       throw Exception('Gagal memuat menu');
+    }
+  }
+
+  Future<String?> uploadImage(File imageFile) async {
+    try {
+      final fileExt = imageFile.path.split('.').last;
+      final fileName = '${DateTime.now().millisecondsSinceEpoch}.$fileExt';
+      final String filePath = 'menu/$fileName';
+      
+      await Supabase.instance.client.storage.from('Storage').upload(
+        filePath,
+        imageFile,
+        fileOptions: const FileOptions(cacheControl: '3600', upsert: false),
+      );
+      
+      return Supabase.instance.client.storage.from('Storage').getPublicUrl(filePath);
+    } catch (e) {
+      debugPrint('Error uploading image: $e');
+      return null;
     }
   }
 

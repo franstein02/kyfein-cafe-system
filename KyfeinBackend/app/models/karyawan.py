@@ -14,6 +14,7 @@ class Karyawan(Base):
     nomor_hp = Column(String(20), nullable=False, unique=True)
     password = Column(String(255), nullable=False)
     foto_profile_id = Column(String(36), ForeignKey("foto.id", ondelete="SET NULL", use_alter=True, name="fk_karyawan_foto_profile"), nullable=True)
+    fcm_token = Column(String(255), nullable=True)
     status_aktif = Column(Boolean, nullable=False, default=True)
     created_at = Column(DateTime, nullable=False, default=now_local)
     updated_at = Column(DateTime, nullable=False, default=now_local, onupdate=now_local)

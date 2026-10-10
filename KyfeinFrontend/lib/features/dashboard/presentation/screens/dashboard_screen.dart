@@ -6,6 +6,9 @@ import '../../../auth/providers/auth_provider.dart';
 import '../../providers/dashboard_provider.dart';
 import '../../../pos/presentation/screens/pos_screen.dart';
 import '../../../master_data/presentation/screens/master_data_screen.dart';
+import '../../../../core/services/firebase_messaging_service.dart';
+import '../../../notifications/presentation/screens/notification_screen.dart';
+import '../../../notifications/providers/notification_provider.dart';
 
 // ─── Formatters ───────────────────────────────────────────────────────────────
 final _idr = NumberFormat.currency(locale: 'id_ID', symbol: 'Rp ', decimalDigits: 0);
@@ -38,6 +41,23 @@ class DashboardScreen extends StatefulWidget {
 class _DashboardScreenState extends State<DashboardScreen> {
   int _selectedIndex = 0;
   Widget? _currentPage;
+  bool _fcmInitialized = false;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!_fcmInitialized) {
+        final auth = context.read<AuthProvider>();
+        final notifProvider = context.read<NotificationProvider>();
+        FirebaseMessagingService.init(notifProvider);
+        if (auth.token != null) {
+          FirebaseMessagingService.sendTokenToBackend(auth.token!);
+        }
+        _fcmInitialized = true;
+      }
+    });
+  }
 
   List<_NavItem> _getNavItems(String? role) {
     return [
@@ -795,17 +815,124 @@ class _EmptyNotifCard extends StatelessWidget {
 }
 
 // ─── Admin Dashboard Content ──────────────────────────────────────────────────
-class _AdminContent extends StatelessWidget {
+class _AdminContent extends StatefulWidget {
   final DashboardProvider dashboard;
   const _AdminContent({required this.dashboard});
+
+  @override
+  State<_AdminContent> createState() => _AdminContentState();
+}
+
+class _AdminContentState extends State<_AdminContent> {
+  DateTimeRange? _selectedDateRange;
+  TimeOfDay? _selectedTime;
 
   @override
   Widget build(BuildContext context) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        Row(
+          children: [
+            Expanded(
+              child: OutlinedButton.icon(
+                style: OutlinedButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                ),
+                icon: const Icon(Icons.date_range_rounded, size: 20),
+                label: FittedBox(
+                  fit: BoxFit.scaleDown,
+                  child: Text(
+                    _selectedDateRange != null 
+                      ? '${DateFormat('dd MMM').format(_selectedDateRange!.start)} - ${DateFormat('dd MMM').format(_selectedDateRange!.end)}'
+                      : 'Rentang Tanggal',
+                    style: const TextStyle(fontSize: 13),
+                  ),
+                ),
+                onPressed: () async {
+                  final range = await showDateRangePicker(
+                    context: context,
+                    firstDate: DateTime(2020),
+                    lastDate: DateTime.now(),
+                    initialDateRange: _selectedDateRange,
+                    builder: (context, child) {
+                      return Theme(
+                        data: Theme.of(context).copyWith(
+                          colorScheme: const ColorScheme.light(
+                            primary: Color(0xFF1B4332), // _brown equivalent / app primary
+                            onPrimary: Colors.white,
+                            onSurface: Colors.black,
+                          ),
+                        ),
+                        child: child!,
+                      );
+                    },
+                  );
+                  if (range != null) {
+                    setState(() => _selectedDateRange = range);
+                  }
+                },
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: OutlinedButton.icon(
+                style: OutlinedButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                ),
+                icon: const Icon(Icons.access_time_rounded, size: 20),
+                label: FittedBox(
+                  fit: BoxFit.scaleDown,
+                  child: Text(
+                    _selectedTime != null 
+                      ? _selectedTime!.format(context)
+                      : 'Waktu Tertentu',
+                    style: const TextStyle(fontSize: 13),
+                  ),
+                ),
+                onPressed: () async {
+                  final time = await showTimePicker(
+                    context: context,
+                    initialTime: _selectedTime ?? TimeOfDay.now(),
+                    builder: (context, child) {
+                      return Theme(
+                        data: Theme.of(context).copyWith(
+                          colorScheme: const ColorScheme.light(
+                            primary: Color(0xFF1B4332),
+                            onPrimary: Colors.white,
+                            onSurface: Colors.black,
+                          ),
+                        ),
+                        child: child!,
+                      );
+                    },
+                  );
+                  if (time != null) {
+                    setState(() => _selectedTime = time);
+                  }
+                },
+              ),
+            ),
+            if (_selectedDateRange != null || _selectedTime != null)
+              Padding(
+                padding: const EdgeInsets.only(left: 8.0),
+                child: IconButton(
+                  icon: const Icon(Icons.clear_rounded, color: Colors.grey),
+                  onPressed: () {
+                    setState(() {
+                      _selectedDateRange = null;
+                      _selectedTime = null;
+                    });
+                  },
+                ),
+              ),
+          ],
+        ),
+        const SizedBox(height: 16),
         // Summary cards row
-        _SummaryCards(summary: dashboard.adminSummary),
+        _SummaryCards(summary: widget.dashboard.adminSummary),
         const SizedBox(height: 24),
         // Two-column layout for stok + approvals
         LayoutBuilder(
@@ -819,7 +946,7 @@ class _AdminContent extends StatelessWidget {
                       children: [
                         const _SectionTitle('Stok Menipis'),
                         const SizedBox(height: 12),
-                        _StokMenipisCard(items: dashboard.stokMenipis),
+                        _StokMenipisCard(items: widget.dashboard.stokMenipis),
                       ],
                     ),
                   ),
@@ -829,7 +956,7 @@ class _AdminContent extends StatelessWidget {
                       children: [
                         const _SectionTitle('Approval Menunggu'),
                         const SizedBox(height: 12),
-                        _ApprovalCard(items: dashboard.pendingApprovals),
+                        _ApprovalCard(items: widget.dashboard.pendingApprovals),
                       ],
                     ),
                   ),
@@ -841,11 +968,11 @@ class _AdminContent extends StatelessWidget {
               children: [
                 const _SectionTitle('Stok Menipis'),
                 const SizedBox(height: 12),
-                _StokMenipisCard(items: dashboard.stokMenipis),
+                _StokMenipisCard(items: widget.dashboard.stokMenipis),
                 const SizedBox(height: 20),
                 const _SectionTitle('Approval Menunggu'),
                 const SizedBox(height: 12),
-                _ApprovalCard(items: dashboard.pendingApprovals),
+                _ApprovalCard(items: widget.dashboard.pendingApprovals),
               ],
             );
           },
@@ -934,11 +1061,16 @@ class _SummaryCard extends StatelessWidget {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text(label,
-                  style: const TextStyle(
-                      color: _textDim,
-                      fontSize: 12,
-                      fontWeight: FontWeight.w500)),
+              Expanded(
+                child: Text(label,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                        color: _textDim,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w500)),
+              ),
+              const SizedBox(width: 4),
               Container(
                 padding: const EdgeInsets.all(8),
                 decoration: BoxDecoration(
@@ -1259,26 +1391,35 @@ class _MobileLayout extends StatelessWidget {
           ],
         ),
         actions: [
-          if (auth.role == 'admin' || auth.role == 'owner')
-            Stack(
-              alignment: Alignment.topRight,
-              children: [
-                IconButton(
+          Consumer<NotificationProvider>(
+            builder: (context, notifProv, _) {
+              return Stack(
+                alignment: Alignment.topRight,
+                children: [
+                  IconButton(
                     icon: const Icon(Icons.notifications_rounded),
-                    onPressed: () {}),
-                if ((dashboard.adminSummary?.pendingApprovals ?? 0) > 0)
-                  Positioned(
-                    right: 8,
-                    top: 8,
-                    child: Container(
-                      width: 8,
-                      height: 8,
-                      decoration: const BoxDecoration(
-                          color: Colors.red, shape: BoxShape.circle),
-                    ),
+                    onPressed: () {
+                      Navigator.push(context, MaterialPageRoute(builder: (_) => const NotificationScreen()));
+                    },
                   ),
-              ],
-            ),
+                  if (notifProv.hasUnread || (auth.role == 'admin' && (dashboard.adminSummary?.pendingApprovals ?? 0) > 0))
+                    Positioned(
+                      right: 8,
+                      top: 8,
+                      child: Container(
+                        width: 10,
+                        height: 10,
+                        decoration: const BoxDecoration(
+                          color: Colors.red,
+                          shape: BoxShape.circle,
+                        ),
+                      ),
+                    ),
+                ],
+              );
+            },
+          ),
+
         ],
       ),
       drawer: Drawer(

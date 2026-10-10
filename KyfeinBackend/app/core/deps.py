@@ -9,6 +9,7 @@ from app.core.security import decode_token
 from app.models.karyawan import Karyawan
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login")
+oauth2_scheme_optional = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login", auto_error=False)
 
 async def get_db() -> AsyncGenerator[AsyncSession, None]:
     async with AsyncSessionLocal() as session:
@@ -48,6 +49,17 @@ async def get_current_user(
         )
         
     return user
+
+async def get_optional_user(
+    db: AsyncSession = Depends(get_db),
+    token: str = Depends(oauth2_scheme_optional)
+) -> Karyawan | None:
+    if not token:
+        return None
+    try:
+        return await get_current_user(db=db, token=token)
+    except HTTPException:
+        return None
 
 def require_roles(allowed_roles: List[str]):
     async def role_checker(current_user: Karyawan = Depends(get_current_user)) -> Karyawan:
