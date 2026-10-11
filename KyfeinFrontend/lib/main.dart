@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
@@ -16,16 +17,20 @@ import 'features/notifications/providers/notification_provider.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  
+
   await Supabase.initialize(
     url: 'https://psdeyhujegvaczqyozbz.supabase.co',
     publishableKey: 'sb_publishable_-uzUI0ciD9S5VJTr-NHeCA_IWZb-eHe',
   );
 
-  await Firebase.initializeApp(
-    options: DefaultFirebaseOptions.currentPlatform,
-  );
-  
+  try {
+    await Firebase.initializeApp(
+      options: DefaultFirebaseOptions.currentPlatform,
+    );
+  } catch (e) {
+    debugPrint('Firebase Web belum dikonfigurasi, dilewati: $e');
+  }
+
   runApp(const KyfeinApp());
 }
 
@@ -65,8 +70,8 @@ class KyfeinApp extends StatelessWidget {
             home: auth.isLoading
                 ? const _SplashScreen()
                 : auth.isAuthenticated
-                    ? const DashboardScreen()
-                    : const LoginScreen(),
+                ? const DashboardScreen()
+                : const LoginScreen(),
           );
         },
       ),

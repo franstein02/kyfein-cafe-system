@@ -9,6 +9,9 @@ import '../../../master_data/presentation/screens/master_data_screen.dart';
 import '../../../../core/services/firebase_messaging_service.dart';
 import '../../../notifications/presentation/screens/notification_screen.dart';
 import '../../../notifications/providers/notification_provider.dart';
+import '../../../stok/presentation/screens/stok_gudang_screen.dart';
+import '../../../stok/presentation/widgets/opname_launcher.dart';
+import '../../../stok/providers/stok_models.dart';
 
 // ─── Formatters ───────────────────────────────────────────────────────────────
 final _idr = NumberFormat.currency(locale: 'id_ID', symbol: 'Rp ', decimalDigits: 0);
@@ -66,6 +69,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
           pageBuilder: (_) => const PosScreen()),
       _NavItem(Icons.restaurant_menu_rounded, 'Master Data',
           pageBuilder: (_) => const MasterDataScreen()),
+      _NavItem(Icons.inventory_2_rounded, 'Stok',
+          pageBuilder: (_) => const StokGudangScreen()),
     ];
   }
 
@@ -657,6 +662,12 @@ class _QuickActions extends StatelessWidget {
   final ShiftAktif shift;
   const _QuickActions({required this.shift});
 
+  Future<void> _jalankanOpname(BuildContext context, TipeOpname tipe) async {
+    final dashboard = context.read<DashboardProvider>();
+    final ok = await bukaOpname(context, areaKerja: shift.areaKerja, tipe: tipe);
+    if (ok) await dashboard.refresh();
+  }
+
   @override
   Widget build(BuildContext context) {
     return Wrap(
@@ -669,20 +680,37 @@ class _QuickActions extends StatelessWidget {
           color: const Color(0xFF10B981),
           onTap: () {},
         ),
-        _ActionButton(
-          icon: Icons.inventory_2_rounded,
-          label: 'Opname Awal Shift',
-          color: const Color(0xFFF59E0B),
-          onTap: () {},
-        ),
+        if (!shift.opnameAwalSubmit)
+          _ActionButton(
+            icon: Icons.inventory_2_rounded,
+            label: 'Opname Awal Shift',
+            color: const Color(0xFFF59E0B),
+            onTap: () => _jalankanOpname(context, TipeOpname.awalShift),
+          )
+        else
+          _ActionButton(
+            icon: Icons.inventory_2_rounded,
+            label: 'Opname Akhir Shift',
+            color: const Color(0xFFF59E0B),
+            onTap: () => _jalankanOpname(context, TipeOpname.akhirShift),
+          ),
         if (shift.areaKerja == 'kasir')
           _ActionButton(
             icon: Icons.point_of_sale_rounded,
             label: 'Buka POS',
             color: _brown,
             onTap: () {
+              if (!shift.opnameAwalSubmit) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('Selesaikan opname awal shift dulu'),
+                  ),
+                );
+                return;
+              }
               Navigator.of(context).push(
-                  MaterialPageRoute(builder: (_) => const PosScreen()));
+                MaterialPageRoute(builder: (_) => const PosScreen()),
+              );
             },
           ),
         if (shift.areaKerja == 'bar' || shift.areaKerja == 'kitchen')

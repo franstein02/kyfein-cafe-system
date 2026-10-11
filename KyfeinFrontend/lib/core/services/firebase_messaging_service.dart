@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart'; // Ditambahkan untuk pengecekan kIsWeb
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
@@ -23,37 +24,46 @@ Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
 }
 
 class FirebaseMessagingService {
-  static final FirebaseMessaging _firebaseMessaging = FirebaseMessaging.instance;
   static NotificationProvider? _notificationProvider;
 
   static void init(NotificationProvider provider) {
     _notificationProvider = provider;
-    
-    // Request permission
-    _firebaseMessaging.requestPermission(
-      alert: true,
-      badge: true,
-      sound: true,
-    );
 
-    // Register background handler
-    FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
+    // Jika berjalan di platform Web dan Firebase belum terkonfigurasi, lewati aman tanpa crash
+    try {
+      final FirebaseMessaging firebaseMessaging = FirebaseMessaging.instance;
 
-    // Foreground messages
-    FirebaseMessaging.onMessage.listen((RemoteMessage message) {
-      if (message.notification != null) {
-        _notificationProvider?.addNotification(
-          title: message.notification!.title ?? 'Notification',
-          body: message.notification!.body ?? '',
-          data: message.data,
-        );
+      // Request permission
+      firebaseMessaging.requestPermission(
+        alert: true,
+        badge: true,
+        sound: true,
+      );
+
+      // Register background handler (Hanya untuk non-web)
+      if (!kIsWeb) {
+        FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
       }
-    });
+
+      // Foreground messages
+      FirebaseMessaging.onMessage.listen((RemoteMessage message) {
+        if (message.notification != null) {
+          _notificationProvider?.addNotification(
+            title: message.notification!.title ?? 'Notification',
+            body: message.notification!.body ?? '',
+            data: message.data,
+          );
+        }
+      });
+    } catch (e) {
+      developer.log('Firebase Messaging di-bypass (Web/Belum terkonfigurasi): $e', name: 'FCM');
+    }
   }
 
   static Future<void> sendTokenToBackend(String token) async {
     try {
-      final fcmToken = await _firebaseMessaging.getToken();
+      final FirebaseMessaging firebaseMessaging = FirebaseMessaging.instance;
+      final fcmToken = await firebaseMessaging.getToken();
       if (fcmToken != null) {
         final response = await http.post(
           Uri.parse(ApiEndpoints.fcmToken),

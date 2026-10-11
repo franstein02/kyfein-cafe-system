@@ -5,6 +5,8 @@ import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 import '../../providers/pos_provider.dart';
 import '../../../../core/constants/api_endpoints.dart';
+import '../../../dashboard/providers/dashboard_provider.dart' show DashboardProvider;
+import '../../../stok/presentation/widgets/opname_launcher.dart';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 const _brown = Color(0xFF1B4332);
@@ -35,6 +37,14 @@ class _PosScreenState extends State<PosScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final shift = context.watch<DashboardProvider>().shiftAktif;
+    if (shift != null && !shift.opnameAwalSubmit) {
+      return OpnameWajibView(
+        areaKerja: shift.areaKerja,
+        onSelesai: () => context.read<DashboardProvider>().refresh(),
+      );
+    }
+
     return LayoutBuilder(
       builder: (context, constraints) {
         if (constraints.maxWidth > 800) {
