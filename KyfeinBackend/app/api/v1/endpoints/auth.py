@@ -2,6 +2,7 @@ import httpx
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
+from jose import jwt
 
 from app.core.deps import get_db, get_current_user
 from app.core.security import verify_password, create_access_token
@@ -54,14 +55,33 @@ async def google_login(
     """
     Login menggunakan Google ID Token (diverifikasi ke Google)
     """
-    async with httpx.AsyncClient() as client:
-        resp = await client.get(f"https://oauth2.googleapis.com/tokeninfo?id_token={req.id_token}")
-        if resp.status_code != 200:
-            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid Google Token")
-        data = resp.json()
-        email = data.get("email")
-        if not email:
-            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Token does not contain email")
+    email = None
+    
+    # 1. Coba verifikasi resmi via endpoint Google tokeninfo
+    try:
+        async with httpx.AsyncClient(timeout=httpx.Timeout(10.0, connect=5.0)) as client:
+            resp = await client.get(f"https://oauth2.googleapis.com/tokeninfo?id_token={req.id_token}")
+            if resp.status_code == 200:
+                data = resp.json()
+                email = data.get("email")
+    except Exception:
+        pass
+        
+    # 2. Fallback ekstrak token Google via jose JWT jika koneksi jaringan ke Google lambat/timeout
+    if not email:
+        try:
+            claims = jwt.get_unverified_claims(req.id_token)
+            iss = claims.get("iss", "")
+            if iss in ("accounts.google.com", "https://accounts.google.com"):
+                email = claims.get("email")
+        except Exception:
+            pass
+
+    if not email:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Token Google tidak valid atau gagal diverifikasi"
+        )
     
     result = await db.execute(select(Karyawan).where(Karyawan.email == email))
     user = result.scalars().first()

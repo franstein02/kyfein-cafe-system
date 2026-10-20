@@ -6,6 +6,56 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../../core/constants/api_endpoints.dart';
 import '../../auth/providers/auth_provider.dart';
 
+class MasterMenuResep {
+  final String? id;
+  final String bahanId;
+  final String namaBahan;
+  final String satuan;
+  final double jumlahTerpakai;
+
+  MasterMenuResep({
+    this.id,
+    required this.bahanId,
+    required this.namaBahan,
+    required this.satuan,
+    required this.jumlahTerpakai,
+  });
+
+  factory MasterMenuResep.fromJson(Map<String, dynamic> json) => MasterMenuResep(
+        id: json['id']?.toString(),
+        bahanId: (json['bahan_id'] ?? '').toString(),
+        namaBahan: json['nama_bahan'] ?? '',
+        satuan: json['satuan'] ?? '',
+        jumlahTerpakai: double.tryParse(json['jumlah_terpakai']?.toString() ?? '0') ?? 0.0,
+      );
+
+  Map<String, dynamic> toJson() => {
+        'bahan_id': bahanId,
+        'jumlah_terpakai': jumlahTerpakai,
+      };
+}
+
+class MasterBahan {
+  final String id;
+  final String nama;
+  final String satuan;
+  final String? kategori;
+
+  MasterBahan({
+    required this.id,
+    required this.nama,
+    required this.satuan,
+    this.kategori,
+  });
+
+  factory MasterBahan.fromJson(Map<String, dynamic> json) => MasterBahan(
+        id: json['id'].toString(),
+        nama: json['nama'] ?? '',
+        satuan: json['satuan'] ?? '',
+        kategori: json['kategori'],
+      );
+}
+
 class MasterMenu {
   final String id;
   final String nama;
@@ -14,6 +64,7 @@ class MasterMenu {
   final String? fotoId;
   final String kategoriId;
   final bool statusAktif;
+  final List<MasterMenuResep> resep;
 
   MasterMenu({
     required this.id,
@@ -23,6 +74,7 @@ class MasterMenu {
     this.fotoId,
     required this.kategoriId,
     required this.statusAktif,
+    this.resep = const [],
   });
 
   factory MasterMenu.fromJson(Map<String, dynamic> json) => MasterMenu(
@@ -33,6 +85,10 @@ class MasterMenu {
         fotoId: json['foto_id'],
         kategoriId: json['kategori_id']?.toString() ?? '',
         statusAktif: json['status_aktif'] ?? true,
+        resep: (json['resep'] as List?)
+                ?.map((e) => MasterMenuResep.fromJson(e))
+                .toList() ??
+            [],
       );
 
   Map<String, dynamic> toJson() => {
@@ -42,6 +98,7 @@ class MasterMenu {
         'kategori_id': kategoriId,
         'status_aktif': statusAktif,
         if (fotoId != null) 'foto_id': fotoId,
+        'resep': resep.map((e) => e.toJson()).toList(),
       };
 }
 
@@ -64,11 +121,13 @@ class MasterDataProvider with ChangeNotifier {
 
   List<MasterMenu> _menus = [];
   List<MasterKategoriMenu> _categories = [];
+  List<MasterBahan> _bahanList = [];
 
   bool get isLoading => _isLoading;
   String get errorMessage => _errorMessage;
   List<MasterMenu> get menus => _menus;
   List<MasterKategoriMenu> get categories => _categories;
+  List<MasterBahan> get bahanList => _bahanList;
 
   void updateAuth(AuthProvider auth) {
     _auth = auth;
@@ -77,6 +136,7 @@ class MasterDataProvider with ChangeNotifier {
     } else {
       _menus = [];
       _categories = [];
+      _bahanList = [];
       notifyListeners();
     }
   }
@@ -94,6 +154,7 @@ class MasterDataProvider with ChangeNotifier {
     try {
       await Future.wait([
         _fetchCategories(),
+        _fetchBahanList(),
         _fetchMenus(),
       ]);
     } catch (e) {
@@ -115,6 +176,22 @@ class MasterDataProvider with ChangeNotifier {
       _categories = data.map((e) => MasterKategoriMenu.fromJson(e)).toList();
     } else {
       throw Exception('Gagal memuat kategori');
+    }
+  }
+
+  Future<void> _fetchBahanList() async {
+    try {
+      final response = await http.get(
+        Uri.parse(ApiEndpoints.bahan),
+        headers: _headers,
+      );
+
+      if (response.statusCode == 200) {
+        final List data = json.decode(response.body);
+        _bahanList = data.map((e) => MasterBahan.fromJson(e)).toList();
+      }
+    } catch (e) {
+      debugPrint('Gagal memuat bahan: $e');
     }
   }
 

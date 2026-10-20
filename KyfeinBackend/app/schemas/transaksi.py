@@ -11,6 +11,7 @@ class TransaksiDetailCreate(BaseModel):
 class TransaksiDetailOut(BaseModel):
     id: str
     menu_id: str
+    nama_menu: Optional[str] = ""
     qty: int
     harga_satuan: Decimal
     hpp_satuan: Decimal = Decimal("0")
@@ -32,6 +33,7 @@ class TransaksiOut(BaseModel):
     id: str
     jadwal_shift_id: str
     kasir_id: str
+    nama_kasir: Optional[str] = ""
     nomor_transaksi: str
     metode_bayar: Literal['cash', 'qris']
     total_harga: Decimal

@@ -3,11 +3,10 @@ import 'package:provider/provider.dart';
 import '../../../auth/providers/auth_provider.dart';
 import '../../providers/stok_gudang_provider.dart';
 import '../widgets/stok_gudang_tile.dart';
+import '../widgets/edit_stok_gudang_dialog.dart';
 import 'barang_keluar_screen.dart';
 import 'barang_masuk_screen.dart';
-import 'opname_screen.dart';
 import 'stok_titik_screen.dart';
-import '../../providers/stok_models.dart';
 
 /// Pembungkus: membuat provider khusus modul stok (tanpa perlu ubah main.dart).
 /// Kalau nanti provider dipakai lintas layar (mis. opname), pindahkan ke MultiProvider.
@@ -61,28 +60,13 @@ class _StokGudangView extends StatelessWidget {
     }
   }
 
-  /// SEMENTARA untuk uji layar opname. Nanti dipicu otomatis dari alur shift (Langkah 7).
-  Future<void> _bukaOpname(
-      BuildContext context, TipeOpname tipe, MetodeOpname metode) async {
-    final messenger = ScaffoldMessenger.of(context);
-    final saved = await Navigator.push<bool>(
-      context,
-      MaterialPageRoute(
-        builder: (_) => OpnameScreen(titik: TitikStok.bar, tipe: tipe, metodeMock: metode),
-      ),
-    );
-    if (saved == true) {
-      messenger.showSnackBar(const SnackBar(content: Text('Opname tersimpan')));
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     final p = context.watch<StokGudangProvider>();
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Stok Gudang'),
+        title: const Text('Gudang'),
         actions: [
           IconButton(
             icon: const Icon(Icons.local_cafe_outlined),
@@ -91,20 +75,6 @@ class _StokGudangView extends StatelessWidget {
               context,
               MaterialPageRoute(builder: (_) => const StokTitikScreen()),
             ),
-          ),
-          PopupMenuButton<int>(
-            icon: const Icon(Icons.fact_check_outlined),
-            tooltip: 'Uji opname (sementara)',
-            onSelected: (v) {
-              if (v == 0) _bukaOpname(context, TipeOpname.awalShift, MetodeOpname.hitungManual);
-              if (v == 1) _bukaOpname(context, TipeOpname.awalShift, MetodeOpname.carryForward);
-              if (v == 2) _bukaOpname(context, TipeOpname.akhirShift, MetodeOpname.hitungManual);
-            },
-            itemBuilder: (_) => const [
-              PopupMenuItem(value: 0, child: Text('Awal shift - hitung manual')),
-              PopupMenuItem(value: 1, child: Text('Awal shift - carry forward')),
-              PopupMenuItem(value: 2, child: Text('Akhir shift')),
-            ],
           ),
         ],
       ),
@@ -127,9 +97,48 @@ class _StokGudangView extends StatelessWidget {
             child: Align(
               alignment: Alignment.centerLeft,
               child: FilterChip(
+                avatar: p.jumlahMenipis > 0
+                    ? Icon(
+                        Icons.warning_amber_rounded,
+                        size: 16,
+                        color: p.hanyaMenipis
+                            ? Colors.red.shade800
+                            : Colors.red.shade600,
+                      )
+                    : null,
                 label: Text('Menipis (${p.jumlahMenipis})'),
                 selected: p.hanyaMenipis,
                 onSelected: context.read<StokGudangProvider>().toggleMenipis,
+                showCheckmark: false,
+                backgroundColor: Colors.white,
+                selectedColor: p.jumlahMenipis > 0
+                    ? Colors.red.shade50
+                    : Theme.of(context).primaryColor.withValues(alpha: 0.15),
+                side: BorderSide(
+                  color: p.hanyaMenipis
+                      ? (p.jumlahMenipis > 0
+                          ? Colors.red.shade400
+                          : Theme.of(context).primaryColor)
+                      : (p.jumlahMenipis > 0
+                          ? Colors.red.shade300
+                          : Colors.grey.shade400),
+                  width: p.hanyaMenipis ? 1.5 : 1.0,
+                ),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                labelStyle: TextStyle(
+                  color: p.hanyaMenipis
+                      ? (p.jumlahMenipis > 0
+                          ? Colors.red.shade800
+                          : Theme.of(context).primaryColor)
+                      : (p.jumlahMenipis > 0
+                          ? Colors.red.shade700
+                          : const Color(0xFF2D312E)),
+                  fontWeight:
+                      p.hanyaMenipis ? FontWeight.w600 : FontWeight.w500,
+                  fontSize: 13,
+                ),
               ),
             ),
           ),
@@ -182,7 +191,27 @@ class _StokGudangView extends StatelessWidget {
           : ListView.builder(
         padding: const EdgeInsets.only(bottom: 12),
         itemCount: p.items.length,
-        itemBuilder: (_, i) => StokGudangTile(stok: p.items[i]),
+        itemBuilder: (ctx, i) {
+          final item = p.items[i];
+          return StokGudangTile(
+            stok: item,
+            onEdit: () async {
+              final updated = await EditStokGudangDialog.show(
+                context,
+                stok: item,
+                provider: p,
+              );
+              if (updated == true && context.mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text('Stok ${item.bahan.nama} berhasil diperbarui'),
+                    backgroundColor: Colors.green.shade700,
+                  ),
+                );
+              }
+            },
+          );
+        },
       ),
     );
   }

@@ -1,4 +1,3 @@
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
@@ -10,6 +9,7 @@ import 'features/dashboard/providers/dashboard_provider.dart';
 import 'features/pos/providers/pos_provider.dart';
 import 'features/master_data/providers/master_data_provider.dart';
 
+import 'package:intl/date_symbol_data_local.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'firebase_options.dart';
@@ -17,6 +17,8 @@ import 'features/notifications/providers/notification_provider.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  await initializeDateFormatting('id_ID', null);
 
   await Supabase.initialize(
     url: 'https://psdeyhujegvaczqyozbz.supabase.co',

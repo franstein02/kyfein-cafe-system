@@ -1,13 +1,13 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:http/http.dart' as http;
+import '../../../core/constants/api_endpoints.dart';
 import '../../auth/providers/auth_provider.dart';
 import 'stok_models.dart';
 
-/// Provider Stok Gudang (pola sama dengan MasterDataProvider: pakai AuthProvider untuk token).
-///
-/// SEKARANG: data mock (useMock = true), tidak menyentuh ApiEndpoints.
-/// NANTI: set useMock = false lalu isi bagian "TITIK SAMBUNG BACKEND" di bawah.
+/// Provider Stok Gudang (terhubung langsung ke API backend).
 class StokGudangProvider with ChangeNotifier {
-  static const bool useMock = true;
+  static const bool useMock = false;
 
   final AuthProvider? _auth;
   StokGudangProvider({AuthProvider? auth}) : _auth = auth;
@@ -106,12 +106,82 @@ class StokGudangProvider with ChangeNotifier {
     required List<BarangKeluarItem> items,
   }) async {
     _isSubmitting = true;
+    _errorMessage = '';
     notifyListeners();
     try {
       final ok = await _postBarangKeluar(titik, items);
       if (ok) await loadData();
       return ok;
     } catch (e) {
+      _errorMessage = 'Tidak dapat terhubung ke server: $e';
+      return false;
+    } finally {
+      _isSubmitting = false;
+      notifyListeners();
+    }
+  }
+
+  /// Update / Edit stok gudang langsung (jumlah kemasan besar, eceran, isi per kemasan, stok minimum).
+  Future<bool> updateStokGudang({
+    required String bahanId,
+    required int jumlahKemasanBesar,
+    required double jumlahSatuanKecil,
+    double? stokMinimum,
+    double? isiPerKemasan,
+  }) async {
+    _isSubmitting = true;
+    _errorMessage = '';
+    notifyListeners();
+
+    try {
+      if (useMock) {
+        await Future.delayed(const Duration(milliseconds: 300));
+        final idx = _semua.indexWhere((s) => s.bahan.id == bahanId);
+        if (idx >= 0) {
+          final cur = _semua[idx];
+          final updatedBahan = cur.bahan.copyWith(
+            stokMinimum: stokMinimum ?? cur.bahan.stokMinimum,
+            isiPerKemasan: isiPerKemasan ?? cur.bahan.isiPerKemasan,
+          );
+          _semua[idx] = StokGudang(
+            bahan: updatedBahan,
+            jumlahKemasanBesar: jumlahKemasanBesar,
+            jumlahSatuanKecil: jumlahSatuanKecil,
+          );
+          notifyListeners();
+        }
+        return true;
+      }
+
+      final uri = Uri.parse(ApiEndpoints.updateStokGudang(bahanId));
+      final res = await http.put(
+        uri,
+        headers: _headers,
+        body: json.encode({
+          'jumlah_kemasan_besar': jumlahKemasanBesar,
+          'jumlah_satuan_kecil': jumlahSatuanKecil,
+          if (stokMinimum != null) 'stok_minimum': stokMinimum,
+          if (isiPerKemasan != null) 'isi_per_kemasan': isiPerKemasan,
+        }),
+      );
+
+      if (res.statusCode == 200 || res.statusCode == 201) {
+        final Map<String, dynamic> data = json.decode(res.body);
+        final updated = StokGudang.fromJson(data);
+        final idx = _semua.indexWhere((s) => s.bahan.id == bahanId);
+        if (idx >= 0) {
+          _semua[idx] = updated;
+        } else {
+          _semua.insert(0, updated);
+        }
+        notifyListeners();
+        return true;
+      } else {
+        _errorMessage = 'Gagal menyimpan perubahan: ${res.statusCode}';
+        return false;
+      }
+    } catch (e) {
+      _errorMessage = 'Terjadi kesalahan: $e';
       return false;
     } finally {
       _isSubmitting = false;
@@ -151,7 +221,7 @@ class StokGudangProvider with ChangeNotifier {
   // ===========================================================================
 
   // --- Mock ---------------------------------------------------------------
-  List<StokGudang> _mockData = const [
+  final List<StokGudang> _mockData = const [
     StokGudang(
         bahan: Bahan(id: '1', nama: 'UHT Full Cream 1L', satuan: 'pcs', isiPerKemasan: 12, stokMinimum: 12),
         jumlahKemasanBesar: 2,
@@ -175,45 +245,60 @@ class StokGudangProvider with ChangeNotifier {
   ];
 
   Future<List<StokGudang>> _fetchStokGudang() async {
-    // Ganti dengan panggilan API (lihat komentar di atas) saat useMock = false.
-    await Future.delayed(const Duration(milliseconds: 500));
-    return List.of(_mockData);
+    if (useMock) {
+      await Future.delayed(const Duration(milliseconds: 500));
+      return List.of(_mockData);
+    }
+    final res = await http.get(Uri.parse(ApiEndpoints.stokGudang), headers: _headers);
+    if (res.statusCode != 200) {
+      throw Exception('Gagal memuat stok gudang: ${res.statusCode}');
+    }
+    final List data = json.decode(res.body);
+    return data.map((e) => StokGudang.fromJson(e)).toList();
   }
 
   Future<bool> _postBarangMasuk(List<BarangMasukItem> items, String? keterangan) async {
-    // Ganti dengan panggilan API (lihat komentar di atas) saat useMock = false.
-    await Future.delayed(const Duration(milliseconds: 700));
-    _mockData = _mockData.map((s) {
-      final masuk = items.where((i) => i.bahan.id == s.bahan.id);
-      var hasil = s;
-      for (final m in masuk) {
-        hasil = hasil.tambah(kemasan: m.kemasan, eceran: m.eceran);
-      }
-      return hasil;
-    }).toList();
-    return true;
+    if (useMock) {
+      await Future.delayed(const Duration(milliseconds: 700));
+      return true;
+    }
+    final res = await http.post(
+      Uri.parse(ApiEndpoints.barangMasuk),
+      headers: _headers,
+      body: json.encode({
+        'catatan': keterangan,
+        'items': items.map((e) => e.toJson()).toList(),
+      }),
+    );
+    return res.statusCode == 200 || res.statusCode == 201;
   }
 
   Future<bool> _postBarangKeluar(TitikStok titik, List<BarangKeluarItem> items) async {
-    // Ganti dengan panggilan API (lihat komentar di atas) saat useMock = false.
-    await Future.delayed(const Duration(milliseconds: 700));
-    _mockData = _mockData.map((s) {
-      final keluar = items.where((i) => i.bahan.id == s.bahan.id).toList();
-      if (keluar.isEmpty) return s;
-      var total = s.totalSatuanKecil;
-      for (final k in keluar) {
-        total -= k.jumlah;
-      }
-      if (total < 0) total = 0;
-      // Mock: kemasan yang dibuka otomatis dipecah jadi eceran.
-      final kemasan =
-      s.bahan.punyaKemasan ? (total / s.bahan.isiPerKemasan).floor() : 0;
-      return StokGudang(
-        bahan: s.bahan,
-        jumlahKemasanBesar: kemasan,
-        jumlahSatuanKecil: total - kemasan * s.bahan.isiPerKemasan,
-      );
-    }).toList();
-    return true;
+    if (useMock) {
+      await Future.delayed(const Duration(milliseconds: 700));
+      return true;
+    }
+    final res = await http.post(
+      Uri.parse(ApiEndpoints.barangKeluar),
+      headers: _headers,
+      body: json.encode({
+        'titik_tujuan': titik.apiValue,
+        'items': items.map((e) => {
+          'bahan_id': e.bahan.id,
+          'jumlah': e.jumlah,
+        }).toList(),
+      }),
+    );
+    if (res.statusCode == 200 || res.statusCode == 201) {
+      _errorMessage = '';
+      return true;
+    }
+    try {
+      final err = json.decode(res.body);
+      _errorMessage = err['detail']?.toString() ?? 'Gagal menyimpan barang keluar (${res.statusCode})';
+    } catch (_) {
+      _errorMessage = 'Gagal menyimpan barang keluar (${res.statusCode})';
+    }
+    return false;
   }
 }

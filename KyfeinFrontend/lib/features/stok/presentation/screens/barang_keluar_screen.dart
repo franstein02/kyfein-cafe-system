@@ -67,8 +67,14 @@ class _BarangKeluarScreenState extends State<BarangKeluarScreen> {
     if (ok) {
       Navigator.pop(context, true);
     } else {
+      final msg = provider.errorMessage.isNotEmpty
+          ? provider.errorMessage
+          : 'Gagal menyimpan barang keluar. Coba lagi.';
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Gagal menyimpan barang keluar. Coba lagi.')),
+        SnackBar(
+          content: Text(msg),
+          backgroundColor: Colors.redAccent,
+        ),
       );
     }
   }

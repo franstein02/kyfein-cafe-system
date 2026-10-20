@@ -1,5 +1,5 @@
-/// Model modul Stok. Mengikuti skema di rencana-pengembangan-kyfein.md (3.0 & 3.2).
-/// Nama key di fromJson/toJson HARUS dicocokkan dengan response/request FastAPI (cek /docs).
+// Model modul Stok. Mengikuti skema di rencana-pengembangan-kyfein.md (3.0 & 3.2).
+// Nama key di fromJson/toJson HARUS dicocokkan dengan response/request FastAPI (cek /docs).
 
 class Bahan {
   final String id;
@@ -32,6 +32,21 @@ class Bahan {
     isiPerKemasan: double.tryParse(json['isi_per_kemasan']?.toString() ?? '') ?? 0,
     stokMinimum: double.tryParse(json['stok_minimum']?.toString() ?? '0') ?? 0,
   );
+
+  Bahan copyWith({
+    String? id,
+    String? nama,
+    String? satuan,
+    double? isiPerKemasan,
+    double? stokMinimum,
+  }) =>
+      Bahan(
+        id: id ?? this.id,
+        nama: nama ?? this.nama,
+        satuan: satuan ?? this.satuan,
+        isiPerKemasan: isiPerKemasan ?? this.isiPerKemasan,
+        stokMinimum: stokMinimum ?? this.stokMinimum,
+      );
 }
 
 /// Satu baris stok gudang: kemasan utuh + sisa eceran dari kemasan yang sudah dibuka.
@@ -59,11 +74,19 @@ class StokGudang {
   );
 
   factory StokGudang.fromJson(Map<String, dynamic> json) => StokGudang(
-    bahan: Bahan.fromJson(json['bahan'] as Map<String, dynamic>),
+    bahan: json['bahan'] != null
+        ? Bahan.fromJson(json['bahan'] as Map<String, dynamic>)
+        : Bahan(
+            id: json['bahan_id']?.toString() ?? '',
+            nama: json['nama_bahan'] ?? '',
+            satuan: '',
+            isiPerKemasan: 1,
+            stokMinimum: 0,
+          ),
     jumlahKemasanBesar:
-    int.tryParse(json['jumlah_kemasan_besar']?.toString() ?? '0') ?? 0,
+        int.tryParse(json['jumlah_kemasan_besar']?.toString() ?? '0') ?? 0,
     jumlahSatuanKecil:
-    double.tryParse(json['jumlah_satuan_kecil']?.toString() ?? '0') ?? 0,
+        double.tryParse(json['jumlah_satuan_kecil']?.toString() ?? '0') ?? 0,
   );
 }
 
@@ -186,7 +209,15 @@ class StokTitik {
   });
 
   factory StokTitik.fromJson(Map<String, dynamic> json) => StokTitik(
-    bahan: Bahan.fromJson(json['bahan'] as Map<String, dynamic>),
+    bahan: json['bahan'] != null
+        ? Bahan.fromJson(json['bahan'] as Map<String, dynamic>)
+        : Bahan(
+            id: json['bahan_id']?.toString() ?? '',
+            nama: json['nama_bahan'] ?? '',
+            satuan: '',
+            isiPerKemasan: 1,
+            stokMinimum: 0,
+          ),
     titik: json['titik'] == 'kitchen' ? TitikStok.kitchen : TitikStok.bar,
     jumlah: double.tryParse(json['jumlah']?.toString() ?? '0') ?? 0,
     diperbaruiPada: DateTime.tryParse(json['updated_at']?.toString() ?? ''),

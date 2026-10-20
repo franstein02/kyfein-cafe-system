@@ -16,12 +16,34 @@ class KategoriMenu {
       );
 }
 
+class MenuResepItem {
+  final String bahanId;
+  final String namaBahan;
+  final String satuan;
+  final double jumlahTerpakai;
+
+  MenuResepItem({
+    required this.bahanId,
+    required this.namaBahan,
+    required this.satuan,
+    required this.jumlahTerpakai,
+  });
+
+  factory MenuResepItem.fromJson(Map<String, dynamic> json) => MenuResepItem(
+        bahanId: (json['bahan_id'] ?? '').toString(),
+        namaBahan: json['nama_bahan'] ?? '',
+        satuan: json['satuan'] ?? '',
+        jumlahTerpakai: double.tryParse(json['jumlah_terpakai']?.toString() ?? '0') ?? 0.0,
+      );
+}
+
 class MenuItem {
   final String id;
   final String nama;
   final double harga;
   final String? foto;
   final String kategoriId;
+  final List<MenuResepItem> resep;
 
   MenuItem({
     required this.id,
@@ -29,6 +51,7 @@ class MenuItem {
     required this.harga,
     this.foto,
     required this.kategoriId,
+    this.resep = const [],
   });
 
   factory MenuItem.fromJson(Map<String, dynamic> json) => MenuItem(
@@ -37,6 +60,10 @@ class MenuItem {
         harga: double.tryParse(json['harga']?.toString() ?? '0') ?? 0.0,
         foto: json['foto_id'],
         kategoriId: json['kategori_id']?.toString() ?? '',
+        resep: (json['resep'] as List?)
+                ?.map((e) => MenuResepItem.fromJson(e))
+                .toList() ??
+            [],
       );
 }
 
@@ -114,7 +141,7 @@ class TransaksiRecord {
       TransaksiRecord(
         id: json['id'].toString(),
         nomorTransaksi: json['nomor_transaksi'] ?? '',
-        total: (json['total_harga'] ?? 0).toDouble(),
+        total: double.tryParse(json['total_harga']?.toString() ?? '0') ?? 0.0,
         metodeBayar: json['metode_bayar'] ?? '',
         status: json['status'] ?? '',
         waktu: json['waktu_transaksi'] ?? '',

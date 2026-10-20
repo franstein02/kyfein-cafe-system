@@ -44,6 +44,7 @@ class Menu(Base):
     pembuat = relationship("Karyawan", foreign_keys=[dibuat_oleh])
     pengubah = relationship("Karyawan", foreign_keys=[diubah_oleh])
     foto_rel = relationship("Foto", foreign_keys=[foto_id])
+    resep = relationship("MenuResep", back_populates="menu", cascade="all, delete-orphan", lazy="selectin")
 
 class Bahan(Base):
     __tablename__ = "bahan"
@@ -65,8 +66,8 @@ class MenuResep(Base):
     bahan_id = Column(String(36), ForeignKey("bahan.id", ondelete="RESTRICT"), nullable=False)
     jumlah_terpakai = Column(Numeric(10, 3), nullable=False)
 
-    menu = relationship("Menu")
-    bahan = relationship("Bahan")
+    menu = relationship("Menu", back_populates="resep")
+    bahan = relationship("Bahan", lazy="selectin")
 
 class KategoriPengeluaran(Base):
     __tablename__ = "kategori_pengeluaran"

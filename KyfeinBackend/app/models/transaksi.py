@@ -24,6 +24,10 @@ class Transaksi(Base):
     foto_bukti_qris = relationship("Foto", foreign_keys=[foto_bukti_qris_id])
     details = relationship("TransaksiDetail", back_populates="transaksi", cascade="all, delete-orphan")
 
+    @property
+    def nama_kasir(self) -> str:
+        return self.kasir.nama if self.kasir else ""
+
 class TransaksiDetail(Base):
     __tablename__ = "transaksi_detail"
     __table_args__ = (
@@ -42,3 +46,7 @@ class TransaksiDetail(Base):
 
     transaksi = relationship("Transaksi", back_populates="details")
     menu = relationship("Menu")
+
+    @property
+    def nama_menu(self) -> str:
+        return self.menu.nama if self.menu else ""

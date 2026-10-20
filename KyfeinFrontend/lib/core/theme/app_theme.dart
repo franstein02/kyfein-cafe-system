@@ -70,8 +70,17 @@ class AppTheme {
     chipTheme: ChipThemeData(
       backgroundColor: Colors.white,
       selectedColor: primaryColor.withValues(alpha: 0.15),
-      side: BorderSide(color: Colors.grey.shade200),
-      labelStyle: const TextStyle(fontSize: 13),
+      side: BorderSide(color: Colors.grey.shade300),
+      labelStyle: const TextStyle(
+        fontSize: 13,
+        color: Color(0xFF2D312E),
+        fontWeight: FontWeight.w500,
+      ),
+      secondaryLabelStyle: const TextStyle(
+        fontSize: 13,
+        color: primaryColor,
+        fontWeight: FontWeight.w600,
+      ),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
     ),
     dividerTheme: DividerThemeData(
@@ -87,6 +96,22 @@ class AppTheme {
       primary: secondaryColor,
       secondary: primaryColor,
       surface: Color(0xFF2A2622),
+    ),
+    chipTheme: ChipThemeData(
+      backgroundColor: const Color(0xFF2A2622),
+      selectedColor: primaryColor.withValues(alpha: 0.3),
+      side: BorderSide(color: Colors.white.withValues(alpha: 0.12)),
+      labelStyle: const TextStyle(
+        fontSize: 13,
+        color: Colors.white,
+        fontWeight: FontWeight.w500,
+      ),
+      secondaryLabelStyle: const TextStyle(
+        fontSize: 13,
+        color: secondaryColor,
+        fontWeight: FontWeight.w600,
+      ),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
     ),
     textTheme: GoogleFonts.outfitTextTheme(
         ThemeData(brightness: Brightness.dark).textTheme),

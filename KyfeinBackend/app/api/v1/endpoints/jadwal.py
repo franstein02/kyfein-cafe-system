@@ -1,4 +1,4 @@
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, timedelta, time
 from typing import List, Optional, Literal
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -360,3 +360,81 @@ async def create_request_off(
     await db.commit()
     await db.refresh(item)
     return item
+
+@router.get("/shift-aktif")
+async def get_shift_aktif(
+    titik: Optional[str] = None,
+    db: AsyncSession = Depends(get_db),
+    current_user: Karyawan = Depends(get_current_user)
+):
+    """
+    Mengembalikan shift berjalan untuk user atau titik tertentu.
+    Jika belum ada (misal mode testing POS / opname), otomatis temukan atau buatkan shift hari ini.
+    """
+    now = now_local()
+    today = now.date()
+    from app.services.jadwal_service import get_shift_berjalan
+
+    active_shift = await get_shift_berjalan(db, current_user.id, now)
+    if active_shift:
+        return {
+            "id": active_shift.id,
+            "tanggal": str(active_shift.tanggal),
+            "area_kerja": active_shift.area_kerja,
+            "shift": active_shift.shift,
+            "karyawan_id": active_shift.karyawan_id
+        }
+
+    # Cari shift hari ini berdasarkan titik / user
+    area = titik if titik in ['bar', 'kitchen', 'kasir'] else 'bar'
+    query = select(JadwalShift).where(
+        and_(
+            JadwalShift.tanggal == today,
+            JadwalShift.area_kerja == area
+        )
+    )
+    shift_res = await db.execute(query)
+    shift = shift_res.scalars().first()
+
+    if not shift:
+        # Fallback 1: Shift milik user hari ini
+        user_shift_q = select(JadwalShift).where(
+            and_(
+                JadwalShift.tanggal == today,
+                JadwalShift.karyawan_id == current_user.id
+            )
+        )
+        user_res = await db.execute(user_shift_q)
+        shift = user_res.scalars().first()
+
+    if not shift:
+        # Fallback 2: Shift apapun hari ini
+        any_shift_q = select(JadwalShift).where(JadwalShift.tanggal == today)
+        any_res = await db.execute(any_shift_q)
+        shift = any_res.scalars().first()
+
+    if not shift:
+        shift = JadwalShift(
+            id=f"shift-{area}-{today.strftime('%Y%m%d')}",
+            karyawan_id=current_user.id,
+            tanggal=today,
+            shift='shift_1',
+            area_kerja=area,
+            jam_mulai=time(0, 0),
+            jam_selesai=time(23, 59, 59),
+            dibuat_oleh=current_user.id,
+            created_at=now,
+            updated_at=now
+        )
+        db.add(shift)
+        await db.commit()
+        await db.refresh(shift)
+
+    return {
+        "id": shift.id,
+        "tanggal": str(shift.tanggal),
+        "area_kerja": shift.area_kerja,
+        "shift": shift.shift,
+        "karyawan_id": shift.karyawan_id
+    }
+

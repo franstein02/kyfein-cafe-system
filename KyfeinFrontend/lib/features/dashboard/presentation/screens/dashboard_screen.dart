@@ -5,11 +5,14 @@ import 'package:provider/provider.dart';
 import '../../../auth/providers/auth_provider.dart';
 import '../../providers/dashboard_provider.dart';
 import '../../../pos/presentation/screens/pos_screen.dart';
+import '../../../pos/presentation/screens/transaksi_screen.dart';
 import '../../../master_data/presentation/screens/master_data_screen.dart';
 import '../../../../core/services/firebase_messaging_service.dart';
 import '../../../notifications/presentation/screens/notification_screen.dart';
 import '../../../notifications/providers/notification_provider.dart';
 import '../../../stok/presentation/screens/stok_gudang_screen.dart';
+import '../../../stok/presentation/screens/catat_opname_screen.dart';
+import '../../../stok/presentation/screens/stok_opname_hub_screen.dart';
 import '../../../stok/presentation/widgets/opname_launcher.dart';
 import '../../../stok/providers/stok_models.dart';
 
@@ -67,10 +70,16 @@ class _DashboardScreenState extends State<DashboardScreen> {
       const _NavItem(Icons.dashboard_rounded, 'Dashboard'),
       _NavItem(Icons.point_of_sale_rounded, 'POS',
           pageBuilder: (_) => const PosScreen()),
+      _NavItem(Icons.receipt_long_rounded, 'Transaksi',
+          pageBuilder: (_) => const TransaksiScreen()),
       _NavItem(Icons.restaurant_menu_rounded, 'Master Data',
           pageBuilder: (_) => const MasterDataScreen()),
-      _NavItem(Icons.inventory_2_rounded, 'Stok',
+      _NavItem(Icons.warehouse_rounded, 'Gudang',
           pageBuilder: (_) => const StokGudangScreen()),
+      _NavItem(Icons.edit_note_rounded, 'Catat Opname',
+          pageBuilder: (_) => const CatatOpnameScreen()),
+      _NavItem(Icons.fact_check_rounded, 'Stok Opname',
+          pageBuilder: (_) => const StokOpnameHubScreen()),
     ];
   }
 
@@ -599,8 +608,13 @@ class _ShiftCard extends StatelessWidget {
               ),
               const Spacer(),
               Text(
-                DateFormat('EEEE, d MMM', 'id_ID')
-                    .format(DateTime.now()),
+                () {
+                  try {
+                    return DateFormat('EEEE, d MMM', 'id_ID').format(DateTime.now());
+                  } catch (_) {
+                    return DateFormat('EEEE, d MMM').format(DateTime.now());
+                  }
+                }(),
                 style: const TextStyle(color: Colors.white70, fontSize: 12),
               ),
             ],

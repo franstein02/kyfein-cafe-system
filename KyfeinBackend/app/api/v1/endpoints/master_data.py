@@ -13,11 +13,18 @@ from app.schemas.master_data import (
     KategoriMenuCreate, KategoriMenuOut,
     MenuCreate, MenuUpdate, MenuOut,
     BahanCreate, BahanOut, BahanAdminOut, BahanStokMenipisOut,
-    MenuResepCreate, MenuResepOut,
+    MenuResepCreate, MenuResepOut, MenuResepItemCreate, MenuResepItemOut,
     KategoriPengeluaranCreate, KategoriPengeluaranOut
 )
 
 router = APIRouter()
+
+def _populate_menu_resep(menu: Menu):
+    if hasattr(menu, 'resep') and menu.resep:
+        for r in menu.resep:
+            if hasattr(r, 'bahan') and r.bahan:
+                setattr(r, 'nama_bahan', r.bahan.nama)
+                setattr(r, 'satuan', r.bahan.satuan)
 
 # --- KATEGORI MENU ---
 @router.get("/kategori-menu", response_model=List[KategoriMenuOut])
@@ -51,11 +58,94 @@ async def list_menu(
     db: AsyncSession = Depends(get_db),
     current_user: Karyawan = Depends(get_current_user)
 ):
-    stmt = select(Menu).options(selectinload(Menu.kategori))
+    stmt = select(Menu).options(
+        selectinload(Menu.kategori),
+        selectinload(Menu.resep).selectinload(MenuResep.bahan)
+    )
     if not (include_nonaktif and current_user.role in ["admin"]):
         stmt = stmt.where(Menu.status_aktif == True)
     result = await db.execute(stmt)
-    return result.scalars().all()
+    menus = result.scalars().all()
+    for m in menus:
+        _populate_menu_resep(m)
+    return menus
+
+@router.get("/menu/{id}", response_model=MenuOut)
+async def get_menu_by_id(
+    id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: Karyawan = Depends(get_current_user)
+):
+    stmt = (
+        select(Menu)
+        .options(
+            selectinload(Menu.kategori),
+            selectinload(Menu.resep).selectinload(MenuResep.bahan)
+        )
+        .where(Menu.id == id)
+    )
+    res = await db.execute(stmt)
+    item = res.scalars().first()
+    if not item:
+        raise HTTPException(status_code=404, detail="Menu tidak ditemukan")
+    _populate_menu_resep(item)
+    return item
+
+@router.get("/menu/{id}/resep", response_model=List[MenuResepItemOut])
+async def get_menu_resep(
+    id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: Karyawan = Depends(get_current_user)
+):
+    menu = await db.get(Menu, id)
+    if not menu:
+        raise HTTPException(status_code=404, detail="Menu tidak ditemukan")
+    stmt = select(MenuResep).options(selectinload(MenuResep.bahan)).where(MenuResep.menu_id == id)
+    res = await db.execute(stmt)
+    reseps = res.scalars().all()
+    for r in reseps:
+        if r.bahan:
+            setattr(r, 'nama_bahan', r.bahan.nama)
+            setattr(r, 'satuan', r.bahan.satuan)
+    return reseps
+
+@router.put("/menu/{id}/resep", response_model=List[MenuResepItemOut])
+async def update_menu_resep(
+    id: str,
+    items: List[MenuResepItemCreate],
+    db: AsyncSession = Depends(get_db),
+    current_user: Karyawan = Depends(require_roles(["admin"]))
+):
+    menu = await db.get(Menu, id)
+    if not menu:
+        raise HTTPException(status_code=404, detail="Menu tidak ditemukan")
+
+    old = await db.execute(select(MenuResep).where(MenuResep.menu_id == id))
+    for r in old.scalars().all():
+        await db.delete(r)
+    await db.flush()
+
+    for item in items:
+        bahan = await db.get(Bahan, item.bahan_id)
+        if not bahan:
+            raise HTTPException(status_code=400, detail=f"Bahan dengan ID {item.bahan_id} tidak ditemukan")
+        db.add(MenuResep(
+            id=str(uuid.uuid4()),
+            menu_id=id,
+            bahan_id=item.bahan_id,
+            jumlah_terpakai=item.jumlah_terpakai
+        ))
+
+    await db.commit()
+
+    stmt = select(MenuResep).options(selectinload(MenuResep.bahan)).where(MenuResep.menu_id == id)
+    res = await db.execute(stmt)
+    reseps = res.scalars().all()
+    for r in reseps:
+        if r.bahan:
+            setattr(r, 'nama_bahan', r.bahan.nama)
+            setattr(r, 'satuan', r.bahan.satuan)
+    return reseps
 
 import uuid
 from app.core.foto_helper import validate_and_claim_foto, remove_old_foto_if_replaced
@@ -77,11 +167,35 @@ async def create_menu(
         else:
             await validate_and_claim_foto(db, data.foto_id, current_user.id, "menu", required=False)
 
-    item = Menu(**data.dict(), dibuat_oleh=current_user.id)
+    resep_items = data.resep or []
+    create_data = data.dict(exclude={'resep'})
+    item = Menu(**create_data, dibuat_oleh=current_user.id)
     db.add(item)
+    await db.flush()
+
+    for r in resep_items:
+        bahan = await db.get(Bahan, r.bahan_id)
+        if not bahan:
+            raise HTTPException(status_code=400, detail=f"Bahan dengan ID {r.bahan_id} tidak ditemukan")
+        db.add(MenuResep(
+            id=str(uuid.uuid4()),
+            menu_id=item.id,
+            bahan_id=r.bahan_id,
+            jumlah_terpakai=r.jumlah_terpakai
+        ))
+
     await db.commit()
-    res = await db.execute(select(Menu).options(selectinload(Menu.kategori)).where(Menu.id == item.id))
-    return res.scalar_one()
+    res = await db.execute(
+        select(Menu)
+        .options(
+            selectinload(Menu.kategori),
+            selectinload(Menu.resep).selectinload(MenuResep.bahan)
+        )
+        .where(Menu.id == item.id)
+    )
+    result_menu = res.scalar_one()
+    _populate_menu_resep(result_menu)
+    return result_menu
 
 @router.put("/menu/{id}", response_model=MenuOut)
 async def update_menu(
@@ -95,6 +209,7 @@ async def update_menu(
         raise HTTPException(status_code=404, detail="Menu tidak ditemukan")
 
     update_data = data.dict(exclude_unset=True)
+    resep_data = update_data.pop('resep', None)
 
     if 'foto_id' in update_data and data.foto_id != item.foto_id:
         old_foto_id = item.foto_id
@@ -115,10 +230,38 @@ async def update_menu(
     for field, val in update_data.items():
         setattr(item, field, val)
 
+    if resep_data is not None:
+        old_reseps = await db.execute(select(MenuResep).where(MenuResep.menu_id == id))
+        for r in old_reseps.scalars().all():
+            await db.delete(r)
+        await db.flush()
+
+        for r in resep_data:
+            b_id = r.bahan_id if hasattr(r, 'bahan_id') else r['bahan_id']
+            jml = r.jumlah_terpakai if hasattr(r, 'jumlah_terpakai') else r['jumlah_terpakai']
+            bahan = await db.get(Bahan, b_id)
+            if not bahan:
+                raise HTTPException(status_code=400, detail=f"Bahan dengan ID {b_id} tidak ditemukan")
+            db.add(MenuResep(
+                id=str(uuid.uuid4()),
+                menu_id=id,
+                bahan_id=b_id,
+                jumlah_terpakai=jml
+            ))
+
     item.diubah_oleh = current_user.id
     await db.commit()
-    res = await db.execute(select(Menu).options(selectinload(Menu.kategori)).where(Menu.id == item.id))
-    return res.scalar_one()
+    res = await db.execute(
+        select(Menu)
+        .options(
+            selectinload(Menu.kategori),
+            selectinload(Menu.resep).selectinload(MenuResep.bahan)
+        )
+        .where(Menu.id == item.id)
+    )
+    result_menu = res.scalar_one()
+    _populate_menu_resep(result_menu)
+    return result_menu
 
 @router.delete("/menu/{id}")
 async def delete_menu(

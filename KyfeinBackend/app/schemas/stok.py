@@ -8,7 +8,7 @@ class OpnameItemInput(BaseModel):
     jumlah: Decimal = Field(ge=0) # Hasil hitung fisik raw
 
 class StokOpnameCreate(BaseModel):
-    jadwal_shift_id: str = Field(min_length=1)
+    jadwal_shift_id: Optional[str] = None
     titik: Literal['bar', 'kitchen']
     tipe: Literal['awal_shift', 'akhir_shift']
     metode: Literal['hitung_manual', 'carry_forward'] = 'hitung_manual'
@@ -103,6 +103,12 @@ class StokGudangOut(BaseModel):
     class Config:
         from_attributes = True
 
+class StokGudangUpdate(BaseModel):
+    jumlah_kemasan_besar: Optional[int] = None
+    jumlah_satuan_kecil: Optional[Decimal] = None
+    stok_minimum: Optional[Decimal] = None
+    isi_per_kemasan: Optional[Decimal] = None
+
 class StokTitikOut(BaseModel):
     id: str
     bahan_id: str
@@ -140,3 +146,68 @@ class OpnameTertundaOut(BaseModel):
 
     class Config:
         from_attributes = True
+
+# --- OPNAME HARIAN & AUDIT SCHEMAS ---
+class OpnameHarianItemOut(BaseModel):
+    bahan_id: str
+    nama_bahan: str
+    satuan: str
+    titik: str
+    stok_awal: Optional[Decimal] = None
+    transfer_masuk: Decimal = Decimal('0')
+    stok_akhir: Optional[Decimal] = None
+    selisih: Optional[Decimal] = None
+    status: str  # 'lengkap', 'hanya_awal', 'hanya_akhir', 'belum_opname'
+
+class OpnameHarianSesiOut(BaseModel):
+    id: str
+    jadwal_shift_id: str
+    titik: str
+    tipe: str
+    metode: str
+    karyawan_nama: Optional[str] = None
+    waktu_opname: datetime
+    catatan: Optional[str] = None
+    items_count: int
+
+class OpnameHarianResponse(BaseModel):
+    tanggal: str
+    titik: Optional[str] = None
+    items: List[OpnameHarianItemOut] = []
+    sesi: List[OpnameHarianSesiOut] = []
+
+class BOMItemDetailOut(BaseModel):
+    menu_id: str
+    nama_menu: str
+    qty_terjual: int
+    takaran: Decimal
+    subtotal_bom: Decimal
+
+class OpnameAuditItemOut(BaseModel):
+    bahan_id: str
+    nama_bahan: str
+    satuan: str
+    titik: str
+    stok_awal: Optional[Decimal] = None
+    transfer_masuk: Decimal = Decimal('0')
+    stok_akhir: Optional[Decimal] = None
+    pemakaian_fisik: Optional[Decimal] = None
+    pemakaian_bom: Decimal = Decimal('0')
+    varians: Optional[Decimal] = None
+    persentase_selisih: Optional[Decimal] = None
+    status_audit: str  # 'sesuai', 'lebih_boros', 'lebih_hemat', 'belum_lengkap'
+    detail_menu: List[BOMItemDetailOut] = []
+
+class OpnameAuditSummaryOut(BaseModel):
+    total_transaksi: int = 0
+    total_item_terjual: int = 0
+    total_bahan_diaudit: int = 0
+    bahan_sesuai: int = 0
+    bahan_selisih: int = 0
+    bahan_belum_lengkap: int = 0
+
+class OpnameAuditResponse(BaseModel):
+    tanggal: str
+    titik: Optional[str] = None
+    summary: OpnameAuditSummaryOut
+    items: List[OpnameAuditItemOut] = []

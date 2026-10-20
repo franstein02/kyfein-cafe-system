@@ -101,49 +101,79 @@ class _MobileKasirView extends StatelessWidget {
       children: [
         const _MenuPanel(),
         // Floating cart bar
-        if (pos.cartItemCount > 0)
-          Positioned(
-            bottom: 16,
-            left: 16,
-            right: 16,
-            child: Material(
-              elevation: 8,
-              borderRadius: BorderRadius.circular(16),
-              color: _brown,
-              child: InkWell(
-                borderRadius: BorderRadius.circular(16),
-                onTap: () => _showCartBottomSheet(context),
-                child: Padding(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
-                  child: Row(
-                    children: [
-                      const Icon(Icons.shopping_cart_rounded,
-                          color: Colors.white),
-                      const SizedBox(width: 12),
-                      Text('${pos.cartItemCount} item',
-                          style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 14,
-                              fontWeight: FontWeight.w600)),
-                      const Spacer(),
-                      Text(
-                        _idr.format(pos.cartTotal),
-                        style: GoogleFonts.outfit(
-                          color: Colors.white,
-                          fontSize: 16,
-                          fontWeight: FontWeight.w700,
+        Positioned(
+          bottom: 16,
+          left: 16,
+          right: 16,
+          child: AnimatedSlide(
+            duration: const Duration(milliseconds: 250),
+            curve: Curves.easeOutCubic,
+            offset: pos.cartItemCount > 0 ? Offset.zero : const Offset(0, 2),
+            child: AnimatedOpacity(
+              duration: const Duration(milliseconds: 200),
+              opacity: pos.cartItemCount > 0 ? 1.0 : 0.0,
+              child: IgnorePointer(
+                ignoring: pos.cartItemCount == 0,
+                child: Container(
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(16),
+                    boxShadow: [
+                      BoxShadow(
+                        color: _brown.withValues(alpha: 0.35),
+                        blurRadius: 14,
+                        offset: const Offset(0, 4),
+                      ),
+                    ],
+                  ),
+                  child: Material(
+                    elevation: 0,
+                    borderRadius: BorderRadius.circular(16),
+                    color: _brown,
+                    child: InkWell(
+                      borderRadius: BorderRadius.circular(16),
+                      onTap: () => _showCartBottomSheet(context),
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 20, vertical: 14),
+                        child: Row(
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.all(6),
+                              decoration: BoxDecoration(
+                                color: Colors.white.withValues(alpha: 0.2),
+                                shape: BoxShape.circle,
+                              ),
+                              child: const Icon(Icons.shopping_cart_rounded,
+                                  color: Colors.white, size: 18),
+                            ),
+                            const SizedBox(width: 12),
+                            Text('${pos.cartItemCount} item',
+                                style: const TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.w600)),
+                            const Spacer(),
+                            Text(
+                              _idr.format(pos.cartTotal),
+                              style: GoogleFonts.outfit(
+                                color: Colors.white,
+                                fontSize: 16,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            const Icon(Icons.keyboard_arrow_up_rounded,
+                                color: Colors.white),
+                          ],
                         ),
                       ),
-                      const SizedBox(width: 8),
-                      const Icon(Icons.keyboard_arrow_up_rounded,
-                          color: Colors.white),
-                    ],
+                    ),
                   ),
                 ),
               ),
             ),
           ),
+        ),
       ],
     );
   }
@@ -301,9 +331,12 @@ class _MenuPanel extends StatelessWidget {
                             )
                           : LayoutBuilder(
                               builder: (context, constraints) {
+                                final isMobile = constraints.maxWidth <= 600;
+                                final bottomPadding = (isMobile && pos.cartItemCount > 0) ? 100.0 : 20.0;
                                 final cols = constraints.maxWidth > 600 ? 4 : 2;
                                 return GridView.builder(
-                                  padding: const EdgeInsets.all(16),
+                                  physics: const AlwaysScrollableScrollPhysics(),
+                                  padding: EdgeInsets.fromLTRB(16, 16, 16, bottomPadding),
                                   gridDelegate:
                                       SliverGridDelegateWithFixedCrossAxisCount(
                                     crossAxisCount: cols,
@@ -378,6 +411,7 @@ class _MenuCard extends StatelessWidget {
           child: InkWell(
             borderRadius: BorderRadius.circular(14),
             onTap: () => pos.addToCart(item),
+            onLongPress: () => _showPosResepInfo(context, item),
             child: Container(
               decoration: BoxDecoration(
                 borderRadius: BorderRadius.circular(14),
@@ -437,12 +471,40 @@ class _MenuCard extends StatelessWidget {
                           overflow: TextOverflow.ellipsis,
                         ),
                         const SizedBox(height: 2),
-                        Text(
-                          _idr.format(item.harga),
-                          style: const TextStyle(
-                              color: _brown,
-                              fontSize: 12,
-                              fontWeight: FontWeight.w700),
+                        Row(
+                          children: [
+                            Text(
+                              _idr.format(item.harga),
+                              style: const TextStyle(
+                                  color: _brown,
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w700),
+                            ),
+                            const Spacer(),
+                            if (item.resep.isNotEmpty)
+                              GestureDetector(
+                                onTap: () => _showPosResepInfo(context, item),
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+                                  decoration: BoxDecoration(
+                                    color: const Color(0xFFE9F5E6),
+                                    borderRadius: BorderRadius.circular(4),
+                                    border: Border.all(color: _brown.withValues(alpha: 0.25)),
+                                  ),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      const Icon(Icons.receipt_long_rounded, size: 10, color: _brown),
+                                      const SizedBox(width: 2),
+                                      Text(
+                                        '${item.resep.length} BOM',
+                                        style: const TextStyle(fontSize: 9, fontWeight: FontWeight.bold, color: _brown),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                          ],
                         ),
                       ],
                     ),
@@ -474,6 +536,129 @@ class _MenuCard extends StatelessWidget {
             ),
           ),
       ],
+    );
+  }
+
+  void _showPosResepInfo(BuildContext context, MenuItem item) {
+    showModalBottomSheet(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (bc) {
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(20, 16, 20, 20),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Center(
+                  child: Container(
+                    width: 40,
+                    height: 4,
+                    decoration: BoxDecoration(
+                      color: Colors.grey.shade300,
+                      borderRadius: BorderRadius.circular(2),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 16),
+                Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFE9F5E6),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: const Icon(Icons.receipt_long_rounded, color: _brown),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text('Resep / BOM: ${item.nama}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                          Text('Bahan baku otomatis terpotong & diaudit saat transaksi POS', style: TextStyle(color: Colors.grey.shade600, fontSize: 12)),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 16),
+                if (item.resep.isEmpty)
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: Colors.amber.shade50,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: Colors.amber.shade300),
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(Icons.warning_amber_rounded, color: Colors.amber.shade800),
+                        const SizedBox(width: 10),
+                        const Expanded(
+                          child: Text(
+                            'Menu ini belum memiliki resep (BOM) terdaftar di Master Data.',
+                            style: TextStyle(fontSize: 13, fontWeight: FontWeight.w500),
+                          ),
+                        ),
+                      ],
+                    ),
+                  )
+                else
+                  Flexible(
+                    child: ListView.separated(
+                      shrinkWrap: true,
+                      itemCount: item.resep.length,
+                      separatorBuilder: (_, __) => const Divider(height: 1),
+                      itemBuilder: (ctx, idx) {
+                        final r = item.resep[idx];
+                        final qtyStr = r.jumlahTerpakai % 1 == 0
+                            ? r.jumlahTerpakai.toInt().toString()
+                            : r.jumlahTerpakai.toString();
+                        return ListTile(
+                          contentPadding: EdgeInsets.zero,
+                          leading: CircleAvatar(
+                            radius: 14,
+                            backgroundColor: const Color(0xFFE9F5E6),
+                            child: Text('${idx + 1}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 11, color: _brown)),
+                          ),
+                          title: Text(r.namaBahan.isNotEmpty ? r.namaBahan : r.bahanId, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
+                          trailing: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFE9F5E6),
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: Text('$qtyStr ${r.satuan}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: _brown)),
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+                const SizedBox(height: 16),
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: _brown,
+                      foregroundColor: Colors.white,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                    ),
+                    onPressed: () => Navigator.pop(bc),
+                    child: const Text('Tutup'),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
     );
   }
 }
@@ -796,31 +981,35 @@ class _VarianSelector extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(title, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: _textDim)),
-          Wrap(
-            spacing: 0,
-            runSpacing: 0,
-            children: options.map((opt) {
-              return Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Radio<String>(
-                    value: opt,
-                    groupValue: selectedValue,
-                    onChanged: onChanged,
-                    activeColor: _brown,
-                    materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                    visualDensity: const VisualDensity(horizontal: -4, vertical: -4),
-                  ),
-                  GestureDetector(
-                    onTap: () => onChanged(opt),
-                    child: Padding(
-                      padding: const EdgeInsets.only(right: 12),
-                      child: Text(opt, style: const TextStyle(fontSize: 11)),
+          RadioGroup<String>(
+            groupValue: selectedValue,
+            onChanged: (val) {
+              if (val != null) onChanged(val);
+            },
+            child: Wrap(
+              spacing: 0,
+              runSpacing: 0,
+              children: options.map((opt) {
+                return Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Radio<String>(
+                      value: opt,
+                      activeColor: _brown,
+                      materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                      visualDensity: const VisualDensity(horizontal: -4, vertical: -4),
                     ),
-                  ),
-                ],
-              );
-            }).toList(),
+                    GestureDetector(
+                      onTap: () => onChanged(opt),
+                      child: Padding(
+                        padding: const EdgeInsets.only(right: 12),
+                        child: Text(opt, style: const TextStyle(fontSize: 11)),
+                      ),
+                    ),
+                  ],
+                );
+              }).toList(),
+            ),
           ),
         ],
       ),
@@ -1136,9 +1325,15 @@ class _PaymentDialogState extends State<_PaymentDialog> {
 }
 
 void _showStrukDialog(BuildContext context, Map<String, dynamic> data) {
+  final kembalian = double.tryParse(data['kembalian']?.toString() ?? '0') ?? 0.0;
+  final totalHarga = double.tryParse(data['total_harga']?.toString() ?? '0') ?? 0.0;
+  final uangDiterima = double.tryParse(data['uang_diterima']?.toString() ?? '0') ?? 0.0;
+  final metodeBayar = (data['metode_bayar'] ?? 'cash').toString();
+
   showDialog(
     context: context,
-    builder: (_) => Dialog(
+    barrierDismissible: true,
+    builder: (dialogCtx) => Dialog(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
       child: Padding(
         padding: const EdgeInsets.all(28),
@@ -1156,8 +1351,41 @@ void _showStrukDialog(BuildContext context, Map<String, dynamic> data) {
               'No. ${data['nomor_transaksi'] ?? '-'}',
               style: const TextStyle(color: _textDim, fontSize: 13),
             ),
-            const SizedBox(height: 24),
-            if (data['kembalian'] != null && data['kembalian'] > 0)
+            const SizedBox(height: 20),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              decoration: BoxDecoration(
+                color: Colors.grey.shade50,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: Colors.grey.shade200),
+              ),
+              child: Column(
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Text('Total Pembayaran', style: TextStyle(color: _textDim, fontSize: 13)),
+                      Text(
+                        _idr.format(totalHarga),
+                        style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14),
+                      ),
+                    ],
+                  ),
+                  if (metodeBayar.toLowerCase() == 'cash' && uangDiterima > 0) ...[
+                    const SizedBox(height: 6),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        const Text('Tunai Diterima', style: TextStyle(color: _textDim, fontSize: 13)),
+                        Text(_idr.format(uangDiterima), style: const TextStyle(fontSize: 13)),
+                      ],
+                    ),
+                  ],
+                ],
+              ),
+            ),
+            if (kembalian > 0) ...[
+              const SizedBox(height: 12),
               Container(
                 padding:
                     const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
@@ -1171,7 +1399,7 @@ void _showStrukDialog(BuildContext context, Map<String, dynamic> data) {
                     const Text('Kembalian',
                         style: TextStyle(fontWeight: FontWeight.w600)),
                     Text(
-                      _idr.format(data['kembalian']),
+                      _idr.format(kembalian),
                       style: const TextStyle(
                           color: _brown,
                           fontWeight: FontWeight.w800,
@@ -1180,11 +1408,14 @@ void _showStrukDialog(BuildContext context, Map<String, dynamic> data) {
                   ],
                 ),
               ),
+            ],
             const SizedBox(height: 20),
             SizedBox(
               width: double.infinity,
               child: ElevatedButton(
-                onPressed: () => Navigator.pop(context),
+                onPressed: () {
+                  Navigator.of(dialogCtx, rootNavigator: true).pop();
+                },
                 style: ElevatedButton.styleFrom(
                   backgroundColor: _brown,
                   foregroundColor: Colors.white,

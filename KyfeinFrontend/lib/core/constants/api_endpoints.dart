@@ -28,8 +28,8 @@ class ApiConfig {
 
   /// Backend IP reachable from Android device on the cafe's local WiFi.
   /// Run `ipconfig` on the server machine and use its IPv4 address.
-  static const String _androidBaseUrl = 'http://192.168.90.177:8000/api/v1';
-  static const String _androidWsUrl   = 'ws://192.168.90.177:8000/ws';
+  static const String _androidBaseUrl = 'http://192.168.13.177:8000/api/v1';
+  static const String _androidWsUrl   = 'ws://192.168.13.177:8000/ws';
 
   // ── Resolved at runtime ───────────────────────────────────────────────────
   static const bool _useLocalConfig = true; // Set to true for local testing
@@ -64,15 +64,22 @@ class ApiEndpoints {
   static String get kategoriMenu => '${ApiConfig.baseUrl}/master/kategori-menu';
   static String get menu         => '${ApiConfig.baseUrl}/master/menu';
   static String get bahan        => '${ApiConfig.baseUrl}/master/bahan';
+  static String menuResep(String id) => '${ApiConfig.baseUrl}/master/menu/$id/resep';
 
   // ── Transaksi POS ─────────────────────────────────────
   static String get transaksi        => '${ApiConfig.baseUrl}/transaksi';
   static String get laporanShiftAktif => '${ApiConfig.baseUrl}/transaksi/shift-aktif/laporan';
   static String voidTransaksi(String id) => '${ApiConfig.baseUrl}/transaksi/$id/void';
 
-  // ── Stok Opname ───────────────────────────────────────
-  static String get opname       => '${ApiConfig.baseUrl}/stok/opname';
+  // ── Stok & Gudang ─────────────────────────────────────
+  static String get stokGudang   => '${ApiConfig.baseUrl}/stok/stok-gudang';
+  static String updateStokGudang(String id) => '${ApiConfig.baseUrl}/stok/stok-gudang/$id';
+  static String get stokTitik    => '${ApiConfig.baseUrl}/stok/stok-titik';
+  static String get barangMasuk  => '${ApiConfig.baseUrl}/stok/barang-masuk';
   static String get barangKeluar => '${ApiConfig.baseUrl}/stok/barang-keluar';
+  static String get opname       => '${ApiConfig.baseUrl}/stok/opname';
+  static String get opnameHarian => '${ApiConfig.baseUrl}/stok/opname/harian';
+  static String get opnameAudit  => '${ApiConfig.baseUrl}/stok/opname/audit';
   static String get stokMenipis  => '${ApiConfig.baseUrl}/stok/menipis';
 
   // ── Absensi ───────────────────────────────────────────

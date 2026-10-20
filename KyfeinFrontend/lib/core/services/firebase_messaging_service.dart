@@ -65,6 +65,10 @@ class FirebaseMessagingService {
       final FirebaseMessaging firebaseMessaging = FirebaseMessaging.instance;
       final fcmToken = await firebaseMessaging.getToken();
       if (fcmToken != null) {
+        debugPrint('================================================================');
+        debugPrint('🔥 [FCM REGISTRATION TOKEN]:');
+        debugPrint(fcmToken);
+        debugPrint('================================================================');
         final response = await http.post(
           Uri.parse(ApiEndpoints.fcmToken),
           headers: {
@@ -74,8 +78,11 @@ class FirebaseMessagingService {
           body: jsonEncode({'fcm_token': fcmToken}),
         );
         developer.log('FCM Token sent to backend: ${response.statusCode}', name: 'FCM');
+      } else {
+        debugPrint('⚠️ FCM Token bernilai null. Pastikan Google Play Services aktif.');
       }
     } catch (e) {
+      debugPrint('❌ Gagal mengambil/mengirim FCM token: $e');
       developer.log('Failed to send FCM token: $e', name: 'FCM');
     }
   }

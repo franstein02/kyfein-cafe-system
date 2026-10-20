@@ -108,7 +108,7 @@ class AuthProvider with ChangeNotifier {
             headers: {'Content-Type': 'application/json'},
             body: jsonEncode({'id_token': idToken}),
           )
-          .timeout(const Duration(seconds: 8));
+          .timeout(const Duration(seconds: 15));
 
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);

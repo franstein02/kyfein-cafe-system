@@ -28,8 +28,22 @@ class MenuBase(BaseModel):
     foto_id: Optional[str] = None
     status_aktif: bool = True
 
+class MenuResepItemCreate(BaseModel):
+    bahan_id: str = Field(min_length=1)
+    jumlah_terpakai: Decimal = Field(gt=0)
+
+class MenuResepItemOut(BaseModel):
+    id: str
+    bahan_id: str
+    nama_bahan: Optional[str] = None
+    satuan: Optional[str] = None
+    jumlah_terpakai: Decimal
+
+    class Config:
+        from_attributes = True
+
 class MenuCreate(MenuBase):
-    pass
+    resep: Optional[List[MenuResepItemCreate]] = []
 
 class MenuUpdate(BaseModel):
     nama: Optional[str] = Field(None, min_length=1)
@@ -37,10 +51,12 @@ class MenuUpdate(BaseModel):
     kategori_id: Optional[str] = Field(None, min_length=1)
     foto_id: Optional[str] = None
     status_aktif: Optional[bool] = None
+    resep: Optional[List[MenuResepItemCreate]] = None
 
 class MenuOut(MenuBase):
     id: str
     kategori: Optional[KategoriMenuOut] = None
+    resep: List[MenuResepItemOut] = []
     created_at: datetime
     updated_at: datetime
 
