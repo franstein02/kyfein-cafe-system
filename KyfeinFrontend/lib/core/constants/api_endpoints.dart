@@ -112,4 +112,11 @@ class ApiEndpoints {
   static String get manajemenRole => '${ApiConfig.baseUrl}/karyawan/manajemen-role';
   static String promoteKaryawan(String id)   => '${ApiConfig.baseUrl}/karyawan/$id/promote';
   static String nonaktifkanAkun(String id)   => '${ApiConfig.baseUrl}/karyawan/$id/nonaktifkan';
+
+    // ── Izin & approval (sesuai backend) ──────────────────
+  static String get izinTelat      => '${ApiConfig.baseUrl}/absensi/izin-telat';
+  static String get izinTidakMasuk => '${ApiConfig.baseUrl}/absensi/izin-tidak-masuk';
+  static String approvalTukarShift(String id)    => '${ApiConfig.baseUrl}/jadwal/tukar-shift/$id/approval';
+  static String approvalIzinTelat(String id)     => '${ApiConfig.baseUrl}/absensi/izin-telat/$id/approval';
+  static String approvalIzinTidakMasuk(String id) => '${ApiConfig.baseUrl}/absensi/izin-tidak-masuk/$id/approval';
 }
