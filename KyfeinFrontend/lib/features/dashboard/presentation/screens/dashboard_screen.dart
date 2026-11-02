@@ -1,6 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
+import 'package:kyfein_frontend/features/attendance/presentation/screens/admin_jadwal_screen.dart';
+import 'package:kyfein_frontend/features/attendance/presentation/screens/admin_absensi_screen.dart';
+import 'package:kyfein_frontend/features/attendance/presentation/screens/kasir_jadwal_screen.dart';
+import 'package:kyfein_frontend/features/attendance/presentation/screens/kasir_absensi_screen.dart';
 import 'package:provider/provider.dart';
 import '../../../auth/providers/auth_provider.dart';
 import '../../providers/dashboard_provider.dart';
@@ -66,28 +70,49 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   List<_NavItem> _getNavItems(String? role) {
-    return [
-      const _NavItem(Icons.dashboard_rounded, 'Dashboard'),
-      _NavItem(Icons.point_of_sale_rounded, 'POS',
-          pageBuilder: (_) => const PosScreen()),
-      _NavItem(Icons.receipt_long_rounded, 'Transaksi',
-          pageBuilder: (_) => const TransaksiScreen()),
+  final isAdminOrOwner = role == 'admin' || role == 'owner';
+  final isKaryawan = role == 'karyawan';
+
+  return [
+    const _NavItem(Icons.dashboard_rounded, 'Dashboard'),
+    _NavItem(Icons.point_of_sale_rounded, 'POS',
+        pageBuilder: (_) => const PosScreen()),
+    _NavItem(Icons.receipt_long_rounded, 'Transaksi',
+        pageBuilder: (_) => const TransaksiScreen()),
+    if (isAdminOrOwner)
       _NavItem(Icons.restaurant_menu_rounded, 'Master Data',
           pageBuilder: (_) => const MasterDataScreen()),
-      _NavItem(Icons.warehouse_rounded, 'Gudang',
-          pageBuilder: (_) => const StokGudangScreen()),
-      _NavItem(Icons.edit_note_rounded, 'Catat Opname',
-          pageBuilder: (_) => const CatatOpnameScreen()),
-      _NavItem(Icons.fact_check_rounded, 'Stok Opname',
-          pageBuilder: (_) => const StokOpnameHubScreen()),
-    ];
-  }
+    _NavItem(Icons.warehouse_rounded, 'Gudang',
+        pageBuilder: (_) => const StokGudangScreen()),
+    _NavItem(Icons.edit_note_rounded, 'Catat Opname',
+        pageBuilder: (_) => const CatatOpnameScreen()),
+    _NavItem(Icons.fact_check_rounded, 'Stok Opname',
+        pageBuilder: (_) => const StokOpnameHubScreen()),
+
+    // Menu admin / owner
+    if (isAdminOrOwner) ...[
+      _NavItem(Icons.calendar_month_rounded, 'Kelola Jadwal',
+          pageBuilder: (_) => const AdminJadwalScreen()),
+      _NavItem(Icons.fingerprint_rounded, 'Rekap Absensi',
+          pageBuilder: (_) => const AdminAbsensiScreen()),
+    ],
+
+    // Menu kasir (karyawan)
+    if (isKaryawan) ...[
+      _NavItem(Icons.calendar_today_rounded, 'Jadwal Saya',
+          pageBuilder: (_) => const KasirJadwalScreen()),
+      _NavItem(Icons.badge_rounded, 'Absensi Saya',
+          pageBuilder: (_) => const KasirAbsensiScreen()),
+    ],
+  ];
+}
 
   @override
   Widget build(BuildContext context) {
     final auth = context.watch<AuthProvider>();
     final dashboard = context.watch<DashboardProvider>();
     final navItems = _getNavItems(auth.role);
+    debugPrint('NAV ITEMS: ${navItems.map((e) => e.label).toList()}');
 
     return LayoutBuilder(
       builder: (context, constraints) {
@@ -1586,3 +1611,4 @@ class _StatRow extends StatelessWidget {
     );
   }
 }
+

@@ -248,26 +248,76 @@ class DashboardProvider with ChangeNotifier {
     } catch (_) {}
   }
 
+  // Gabungan 3 endpoint pending: tukar shift, izin telat, izin tidak masuk
   Future<void> _loadPendingApprovals() async {
     try {
-      final resp = await http.get(
-        Uri.parse(ApiEndpoints.pendingApprovals),
-        headers: _auth!.authHeaders,
-      ).timeout(const Duration(seconds: 8));
-      if (resp.statusCode == 200) {
-        final list = jsonDecode(resp.body) as List;
-        _pendingApprovals =
-            list.map((e) => PendingApproval.fromJson(e)).toList();
+      final h = _auth!.authHeaders;
+      const t = Duration(seconds: 8);
+      final res = await Future.wait([
+        http.get(Uri.parse('${ApiEndpoints.karyawan}/'), headers: h).timeout(t),
+        http
+            .get(Uri.parse('${ApiEndpoints.tukarShift}?status=pending'),
+                headers: h)
+            .timeout(t),
+        http
+            .get(Uri.parse('${ApiEndpoints.izinTelat}?status=pending'),
+                headers: h)
+            .timeout(t),
+        http
+            .get(Uri.parse('${ApiEndpoints.izinTidakMasuk}?status=pending'),
+                headers: h)
+            .timeout(t),
+      ]);
+
+      // Peta id karyawan -> nama
+      final nama = <String, String>{};
+      if (res[0].statusCode == 200) {
+        for (final k in jsonDecode(res[0].body) as List) {
+          nama[k['id'].toString()] = (k['nama'] ?? '').toString();
+        }
       }
+
+      final items = <PendingApproval>[];
+      void tambah(http.Response r, String type, String karyawanKey) {
+        if (r.statusCode != 200) return;
+        for (final e in jsonDecode(r.body) as List) {
+          items.add(PendingApproval(
+            id: e['id'].toString(),
+            type: type,
+            namaKaryawan: nama[e[karyawanKey].toString()] ?? 'Karyawan',
+            keterangan: (e['alasan'] ?? '').toString(),
+            tanggal: (e['diajukan_at'] ?? '').toString().split('T').first,
+          ));
+        }
+      }
+
+      tambah(res[1], 'swap_shift', 'karyawan_pengaju_id');
+      tambah(res[2], 'izin_telat', 'karyawan_id');
+      tambah(res[3], 'izin_tidak_masuk', 'karyawan_id');
+      _pendingApprovals = items;
     } catch (_) {}
   }
 
-  Future<bool> approveItem(String id, String type) async {
+  String _approvalUrl(String id, String type) {
+    switch (type) {
+      case 'swap_shift':
+        return ApiEndpoints.approvalTukarShift(id);
+      case 'izin_telat':
+        return ApiEndpoints.approvalIzinTelat(id);
+      default:
+        return ApiEndpoints.approvalIzinTidakMasuk(id);
+    }
+  }
+
+  Future<bool> _prosesApproval(String id, String type, String status) async {
     try {
-      final url = type == 'swap_shift'
-          ? ApiEndpoints.approveSwapShift(id)
-          : ApiEndpoints.approveIzin(id);
-      final resp = await http.post(Uri.parse(url), headers: _auth!.authHeaders);
+      final resp = await http
+          .put(
+            Uri.parse(_approvalUrl(id, type)),
+            headers: _auth!.authHeaders,
+            body: jsonEncode({'status': status}),
+          )
+          .timeout(const Duration(seconds: 8));
       if (resp.statusCode == 200) {
         _pendingApprovals.removeWhere((p) => p.id == id);
         notifyListeners();
@@ -277,21 +327,11 @@ class DashboardProvider with ChangeNotifier {
     return false;
   }
 
-  Future<bool> rejectItem(String id, String type) async {
-    try {
-      final url = type == 'swap_shift'
-          ? ApiEndpoints.rejectSwapShift(id)
-          : ApiEndpoints.rejectIzin(id);
-      final resp =
-          await http.post(Uri.parse(url), headers: _auth!.authHeaders);
-      if (resp.statusCode == 200) {
-        _pendingApprovals.removeWhere((p) => p.id == id);
-        notifyListeners();
-        return true;
-      }
-    } catch (_) {}
-    return false;
-  }
+  Future<bool> approveItem(String id, String type) =>
+      _prosesApproval(id, type, 'disetujui');
+
+  Future<bool> rejectItem(String id, String type) =>
+      _prosesApproval(id, type, 'ditolak');
 
   @override
   void dispose() {

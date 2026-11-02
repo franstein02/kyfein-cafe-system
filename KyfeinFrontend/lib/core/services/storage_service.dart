@@ -1,3 +1,4 @@
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 class StorageService {
@@ -20,6 +21,10 @@ class StorageService {
   }
 
   Future<String?> getToken() async {
+    try {
+      final secure = await const FlutterSecureStorage().read(key: 'jwt_token');
+      if (secure != null && secure.isNotEmpty) return secure;
+    } catch (_) {}
     final prefs = await SharedPreferences.getInstance();
     return prefs.getString(_keyToken);
   }
