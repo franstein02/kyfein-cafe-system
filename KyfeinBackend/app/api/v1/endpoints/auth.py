@@ -21,7 +21,9 @@ async def login(
     """
     Autentikasi Karyawan / Admin dan return JWT Access Token
     """
-    result = await db.execute(select(Karyawan).where(Karyawan.email == login_data.email))
+    result = await db.execute(
+        select(Karyawan).where(Karyawan.email == login_data.email.strip().lower())
+    )
     user = result.scalars().first()
     
     if not user or not verify_password(login_data.password, user.password):
@@ -44,6 +46,7 @@ async def login(
         token_type="bearer",
         user_id=user.id,
         role=user.role,
+        divisi=user.divisi,
         nama=user.nama
     )
 
@@ -106,6 +109,7 @@ async def google_login(
         token_type="bearer",
         user_id=user.id,
         role=user.role,
+        divisi=user.divisi,
         nama=user.nama
     )
 

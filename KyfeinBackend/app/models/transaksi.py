@@ -49,4 +49,27 @@ class TransaksiDetail(Base):
 
     @property
     def nama_menu(self) -> str:
-        return self.menu.nama if self.menu else ""
+        m = self.__dict__.get("menu")
+        return m.nama if m else ""
+
+    @property
+    def kode_menu(self) -> str:
+        m = self.__dict__.get("menu")
+        return m.kode_menu if m else ""
+
+    @property
+    def area_produksi(self) -> str:
+        m = self.__dict__.get("menu")
+        if m and "kategori" in m.__dict__ and m.kategori:
+            return m.kategori.area_produksi
+        return ""
+
+    @property
+    def nomor_transaksi(self) -> str:
+        t = self.__dict__.get("transaksi")
+        return t.nomor_transaksi if t else ""
+
+    @property
+    def waktu_transaksi(self):
+        t = self.__dict__.get("transaksi")
+        return t.waktu_transaksi if t else None

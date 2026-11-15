@@ -8,6 +8,9 @@ import 'features/dashboard/presentation/screens/dashboard_screen.dart';
 import 'features/dashboard/providers/dashboard_provider.dart';
 import 'features/pos/providers/pos_provider.dart';
 import 'features/master_data/providers/master_data_provider.dart';
+import 'features/attendance/providers/attendance_provider.dart';
+import 'features/reporting/providers/reporting_provider.dart';
+import 'features/kds/providers/kds_provider.dart';
 
 import 'package:intl/date_symbol_data_local.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -56,6 +59,18 @@ class KyfeinApp extends StatelessWidget {
         ChangeNotifierProxyProvider<AuthProvider, MasterDataProvider>(
           create: (_) => MasterDataProvider(),
           update: (_, auth, master) => master!..updateAuth(auth),
+        ),
+        ChangeNotifierProxyProvider<AuthProvider, AttendanceProvider>(
+          create: (_) => AttendanceProvider(),
+          update: (_, auth, attendance) => attendance!..updateAuth(auth),
+        ),
+        ChangeNotifierProxyProvider<AuthProvider, ReportingProvider>(
+          create: (_) => ReportingProvider(),
+          update: (_, auth, reporting) => reporting!..updateAuth(auth),
+        ),
+        ChangeNotifierProxyProvider<AuthProvider, KdsProvider>(
+          create: (_) => KdsProvider(),
+          update: (_, auth, kds) => kds!..updateAuth(auth),
         ),
       ],
       child: Consumer<AuthProvider>(

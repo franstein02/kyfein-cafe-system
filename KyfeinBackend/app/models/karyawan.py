@@ -9,9 +9,10 @@ class Karyawan(Base):
 
     id = Column(String(36), primary_key=True, default=generate_uuid)
     role = Column(SQLEnum('karyawan', 'admin', name='enum_karyawan_role'), nullable=False)
+    divisi = Column(SQLEnum('kasir', 'bar', 'kitchen', name='enum_karyawan_divisi'), nullable=True, default='kasir')
     nama = Column(String(150), nullable=False)
     email = Column(String(150), nullable=False, unique=True, index=True)
-    nomor_hp = Column(String(20), nullable=False, unique=True)
+    nomor_hp = Column(String(20), nullable=True, unique=True)
     password = Column(String(255), nullable=False)
     foto_profile_id = Column(String(36), ForeignKey("foto.id", ondelete="SET NULL", use_alter=True, name="fk_karyawan_foto_profile"), nullable=True)
     fcm_token = Column(String(255), nullable=True)

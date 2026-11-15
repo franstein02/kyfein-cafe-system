@@ -26,10 +26,10 @@ class ApiConfig {
   static const String _webBaseUrl = 'http://127.0.0.1:8000/api/v1';
   static const String _webWsUrl   = 'ws://127.0.0.1:8000/ws';
 
-  /// Backend IP reachable from Android device on the cafe's local WiFi.
+  /// Backend IP reachable from Android device on the cafe's local WiFi. 
   /// Run `ipconfig` on the server machine and use its IPv4 address.
-  static const String _androidBaseUrl = 'http://192.168.13.177:8000/api/v1';
-  static const String _androidWsUrl   = 'ws://192.168.13.177:8000/ws';
+  static const String _androidBaseUrl = 'http://10.145.184.177:8000/api/v1';
+  static const String _androidWsUrl   = 'ws://10.145.184.177:8000/ws';
 
   // ── Resolved at runtime ───────────────────────────────────────────────────
   static const bool _useLocalConfig = true; // Set to true for local testing
@@ -64,6 +64,7 @@ class ApiEndpoints {
   static String get kategoriMenu => '${ApiConfig.baseUrl}/master/kategori-menu';
   static String get menu         => '${ApiConfig.baseUrl}/master/menu';
   static String get bahan        => '${ApiConfig.baseUrl}/master/bahan';
+  static String get kategoriPengeluaran => '${ApiConfig.baseUrl}/master/kategori-pengeluaran';
   static String menuResep(String id) => '${ApiConfig.baseUrl}/master/menu/$id/resep';
 
   // ── Transaksi POS ─────────────────────────────────────
@@ -80,15 +81,21 @@ class ApiEndpoints {
   static String get opname       => '${ApiConfig.baseUrl}/stok/opname';
   static String get opnameHarian => '${ApiConfig.baseUrl}/stok/opname/harian';
   static String get opnameAudit  => '${ApiConfig.baseUrl}/stok/opname/audit';
-  static String get stokMenipis  => '${ApiConfig.baseUrl}/stok/menipis';
+  static String get stokMenipis  => '${ApiConfig.baseUrl}/master/bahan/stok-menipis';
 
   // ── Absensi ───────────────────────────────────────────
+  static String get absensi => '${ApiConfig.baseUrl}/absensi';
+  static String get absensiStatus => '${ApiConfig.baseUrl}/absensi/status';
+  static String get konfigurasiLokasi => '${ApiConfig.baseUrl}/master/konfigurasi-lokasi';
   static String get absenMasuk => '${ApiConfig.baseUrl}/absensi/masuk';
   static String absenPulang(String id) => '${ApiConfig.baseUrl}/absensi/$id/pulang';
 
   // ── Jadwal & Shift ────────────────────────────────────
   static String get jadwal             => '${ApiConfig.baseUrl}/jadwal';
   static String get shiftAktif         => '${ApiConfig.baseUrl}/jadwal/shift-aktif';
+  static String get shiftTemplate      => '${ApiConfig.baseUrl}/jadwal/shift-template';
+  static String shiftTemplateByKey(String shift) =>
+      '${ApiConfig.baseUrl}/jadwal/shift-template/$shift';
   static String get tukarShift         => '${ApiConfig.baseUrl}/jadwal/tukar-shift';
   static String get jadwalUntukTukar   => '${ApiConfig.baseUrl}/jadwal/tukar-shift/jadwal-tersedia';
   static String get requestOff         => '${ApiConfig.baseUrl}/jadwal/request-off';
@@ -105,8 +112,11 @@ class ApiEndpoints {
   static String kdsWs(String area)     => '${ApiConfig.wsUrl}/$area';
 
   // ── Reporting ─────────────────────────────────────────
+  static String get dashboardOverview => '${ApiConfig.baseUrl}/reporting/dashboard-overview';
   static String get profitHarian => '${ApiConfig.baseUrl}/reporting/profit-harian';
+  static String get profitPeriode => '${ApiConfig.baseUrl}/reporting/profit-periode';
   static String get pengeluaran  => '${ApiConfig.baseUrl}/reporting/pengeluaran';
+  static String get pengeluaranBreakdown => '${ApiConfig.baseUrl}/reporting/pengeluaran/breakdown';
 
   // ── Manajemen Role (admin) ────────────────────────────
   static String get manajemenRole => '${ApiConfig.baseUrl}/karyawan/manajemen-role';

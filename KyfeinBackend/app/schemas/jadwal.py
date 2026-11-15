@@ -2,13 +2,29 @@ from datetime import datetime, date, time
 from typing import Optional, Literal
 from pydantic import BaseModel, Field
 
+class ShiftTemplateUpdate(BaseModel):
+    jam_mulai: time
+    jam_selesai: time
+
+
+class ShiftTemplateOut(BaseModel):
+    id: str
+    shift: Literal['shift_1', 'shift_2']
+    jam_mulai: time
+    jam_selesai: time
+    updated_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
 class JadwalShiftCreate(BaseModel):
     karyawan_id: str = Field(min_length=1)
     tanggal: date
     shift: Literal['shift_1', 'shift_2']
     area_kerja: Literal['kasir', 'bar', 'kitchen']
-    jam_mulai: time
-    jam_selesai: time
+    jam_mulai: Optional[time] = None
+    jam_selesai: Optional[time] = None
 
 class JadwalShiftOut(BaseModel):
     id: str
@@ -16,6 +32,7 @@ class JadwalShiftOut(BaseModel):
     tanggal: date
     shift: Literal['shift_1', 'shift_2']
     area_kerja: Literal['kasir', 'bar', 'kitchen']
+    shift_template_id: Optional[str] = None
     jam_mulai: time
     jam_selesai: time
     created_at: datetime

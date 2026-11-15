@@ -10,8 +10,13 @@ class TransaksiDetailCreate(BaseModel):
 
 class TransaksiDetailOut(BaseModel):
     id: str
+    transaksi_id: Optional[str] = ""
+    nomor_transaksi: Optional[str] = ""
+    waktu_transaksi: Optional[datetime] = None
     menu_id: str
+    kode_menu: Optional[str] = ""
     nama_menu: Optional[str] = ""
+    area_produksi: Optional[str] = ""
     qty: int
     harga_satuan: Decimal
     hpp_satuan: Decimal = Decimal("0")
@@ -21,6 +26,10 @@ class TransaksiDetailOut(BaseModel):
 
     class Config:
         from_attributes = True
+
+
+class KdsStatusUpdate(BaseModel):
+    status_item: Literal['menunggu', 'diproses', 'selesai']
 
 class TransaksiCreate(BaseModel):
     jadwal_shift_id: Optional[str] = None

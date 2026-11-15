@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 import '../../../auth/providers/auth_provider.dart';
@@ -8,20 +9,22 @@ import '../../providers/stok_opname_hub_models.dart';
 import '../../providers/stok_opname_hub_provider.dart';
 
 class StokOpnameHubScreen extends StatelessWidget {
-  const StokOpnameHubScreen({super.key});
+  final int initialSection;
+  const StokOpnameHubScreen({super.key, this.initialSection = 0});
 
   @override
   Widget build(BuildContext context) {
     return ChangeNotifierProvider(
       create: (ctx) =>
           StokOpnameHubProvider(auth: ctx.read<AuthProvider>())..loadData(),
-      child: const _StokOpnameHubView(),
+      child: _StokOpnameHubView(initialSection: initialSection),
     );
   }
 }
 
 class _StokOpnameHubView extends StatefulWidget {
-  const _StokOpnameHubView();
+  final int initialSection;
+  const _StokOpnameHubView({required this.initialSection});
 
   @override
   State<_StokOpnameHubView> createState() => _StokOpnameHubViewState();
@@ -53,7 +56,22 @@ class _StokOpnameHubViewState extends State<_StokOpnameHubView>
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 2, vsync: this);
+    _tabController = TabController(
+      length: 2,
+      vsync: this,
+      initialIndex: widget.initialSection.clamp(0, 1),
+    );
+    _tabController.addListener(() {
+      if (mounted) setState(() {});
+    });
+  }
+
+  @override
+  void didUpdateWidget(covariant _StokOpnameHubView oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.initialSection != widget.initialSection) {
+      _tabController.animateTo(widget.initialSection.clamp(0, 1));
+    }
   }
 
   @override
@@ -94,49 +112,118 @@ class _StokOpnameHubViewState extends State<_StokOpnameHubView>
 
     return Scaffold(
       backgroundColor: AppTheme.backgroundColor,
-      appBar: AppBar(
-        title: const Text('Stok Opname'),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.refresh_rounded),
-            tooltip: 'Segarkan data',
-            onPressed: provider.isLoading ? null : provider.loadData,
-          ),
-          const SizedBox(width: 8),
-        ],
-        bottom: PreferredSize(
-          preferredSize: const Size.fromHeight(48),
-          child: Container(
-            color: Colors.white,
-            child: TabBar(
-              controller: _tabController,
-              labelColor: AppTheme.primaryColor,
-              unselectedLabelColor: Colors.grey.shade600,
-              indicatorColor: AppTheme.primaryColor,
-              indicatorWeight: 3,
-              labelStyle: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14),
-              unselectedLabelStyle: const TextStyle(fontWeight: FontWeight.w500, fontSize: 14),
-              tabs: const [
-                Tab(
-                  iconMargin: EdgeInsets.only(bottom: 2),
-                  icon: Icon(Icons.calendar_view_day_rounded, size: 20),
-                  text: 'Stok Harian',
+      body: Column(
+        children: [
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+            decoration: const BoxDecoration(
+              color: Colors.white,
+              border: Border(bottom: BorderSide(color: AppTheme.borderColor)),
+            ),
+            child: Wrap(
+              spacing: 16,
+              runSpacing: 12,
+              alignment: WrapAlignment.spaceBetween,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              children: [
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      _tabController.index == 0 ? 'Rekap Stok Harian' : 'Audit Pemakaian Bahan (BOM)',
+                      style: GoogleFonts.outfit(
+                        fontSize: 18,
+                        fontWeight: FontWeight.w700,
+                        color: AppTheme.textColor,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      _tabController.index == 0
+                          ? 'Pantau stok awal, mutasi masuk, dan stok akhir fisik per titik'
+                          : 'Bandingkan pemakaian bahan teoritis dari penjualan POS dengan opname fisik',
+                      style: GoogleFonts.outfit(
+                        fontSize: 12,
+                        color: Colors.grey.shade600,
+                      ),
+                    ),
+                  ],
                 ),
-                Tab(
-                  iconMargin: EdgeInsets.only(bottom: 2),
-                  icon: Icon(Icons.fact_check_rounded, size: 20),
-                  text: 'Audit Pemakaian BOM',
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: AppTheme.backgroundColor,
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: AppTheme.borderColor),
+                      ),
+                      child: DropdownButtonHideUnderline(
+                        child: DropdownButton<int>(
+                          value: _tabController.index,
+                          isDense: true,
+                          icon: const Icon(Icons.keyboard_arrow_down_rounded, color: AppTheme.primaryColor),
+                          style: GoogleFonts.outfit(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600,
+                            color: AppTheme.textColor,
+                          ),
+                          onChanged: (val) {
+                            if (val != null) {
+                              _tabController.animateTo(val);
+                              setState(() {});
+                            }
+                          },
+                          items: const [
+                            DropdownMenuItem(
+                              value: 0,
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(Icons.calendar_view_day_rounded, size: 16, color: AppTheme.primaryColor),
+                                  SizedBox(width: 8),
+                                  Text('Rekap Stok Harian'),
+                                ],
+                              ),
+                            ),
+                            DropdownMenuItem(
+                              value: 1,
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(Icons.fact_check_rounded, size: 16, color: AppTheme.primaryColor),
+                                  SizedBox(width: 8),
+                                  Text('Audit Pemakaian BOM'),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    IconButton(
+                      onPressed: provider.isLoading ? null : provider.loadData,
+                      tooltip: 'Segarkan data',
+                      style: IconButton.styleFrom(
+                        backgroundColor: AppTheme.backgroundColor,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(10),
+                          side: const BorderSide(color: AppTheme.borderColor),
+                        ),
+                      ),
+                      icon: const Icon(Icons.refresh_rounded, size: 18, color: AppTheme.primaryColor),
+                    ),
+                  ],
                 ),
               ],
             ),
           ),
-        ),
-      ),
-      body: Column(
-        children: [
           // ── Header Bar: Date Selector & Titik Filter ────────────────────────
           Container(
-            padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
+            padding: const EdgeInsets.fromLTRB(24, 14, 24, 14),
             color: Colors.white,
             child: Column(
               children: [

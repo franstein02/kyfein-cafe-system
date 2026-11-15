@@ -9,19 +9,25 @@ import '../../providers/stok_models.dart';
 import 'stok_opname_hub_screen.dart';
 
 class CatatOpnameScreen extends StatelessWidget {
-  const CatatOpnameScreen({super.key});
+  final int initialSection;
+  final TitikStok? initialTitik;
+  const CatatOpnameScreen({super.key, this.initialSection = 0, this.initialTitik});
 
   @override
   Widget build(BuildContext context) {
     return ChangeNotifierProvider(
-      create: (ctx) => CatatOpnameProvider(auth: ctx.read<AuthProvider>())..loadInitialData(),
-      child: const _CatatOpnameView(),
+      create: (ctx) => CatatOpnameProvider(
+        auth: ctx.read<AuthProvider>(),
+        initialTitik: initialTitik,
+      )..loadInitialData(),
+      child: _CatatOpnameView(initialSection: initialSection),
     );
   }
 }
 
 class _CatatOpnameView extends StatefulWidget {
-  const _CatatOpnameView();
+  final int initialSection;
+  const _CatatOpnameView({required this.initialSection});
 
   @override
   State<_CatatOpnameView> createState() => _CatatOpnameViewState();
@@ -34,8 +40,20 @@ class _CatatOpnameViewState extends State<_CatatOpnameView> with SingleTickerPro
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 2, vsync: this);
+    _tabController = TabController(
+      length: 2,
+      vsync: this,
+      initialIndex: widget.initialSection.clamp(0, 1),
+    );
     _tabController.addListener(_onTabChanged);
+  }
+
+  @override
+  void didUpdateWidget(covariant _CatatOpnameView oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.initialSection != widget.initialSection) {
+      _tabController.animateTo(widget.initialSection.clamp(0, 1));
+    }
   }
 
   void _onTabChanged() {
@@ -86,68 +104,138 @@ class _CatatOpnameViewState extends State<_CatatOpnameView> with SingleTickerPro
 
     return Scaffold(
       backgroundColor: AppTheme.backgroundColor,
-      appBar: AppBar(
-        title: Text(
-          'Catat Opname',
-          style: GoogleFonts.outfit(fontWeight: FontWeight.w700),
-        ),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.refresh_rounded),
-            tooltip: 'Segarkan data',
-            onPressed: provider.isLoading ? null : provider.loadInitialData,
-          ),
-        ],
-        bottom: PreferredSize(
-          preferredSize: const Size.fromHeight(48),
-          child: Container(
-            color: Colors.white,
-            child: TabBar(
-              controller: _tabController,
-              labelColor: AppTheme.primaryColor,
-              unselectedLabelColor: Colors.grey.shade600,
-              indicatorColor: AppTheme.primaryColor,
-              indicatorWeight: 3,
-              labelStyle: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14),
-              unselectedLabelStyle: const TextStyle(fontWeight: FontWeight.w500, fontSize: 14),
-              tabs: [
-                Tab(
-                  iconMargin: const EdgeInsets.only(bottom: 2),
-                  icon: Icon(
-                    awalSaved ? Icons.check_circle_rounded : Icons.wb_sunny_rounded,
-                    color: awalSaved ? Colors.green.shade700 : null,
-                    size: 18,
-                  ),
-                  text: 'Stok Awal',
+      body: Column(
+        children: [
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+            decoration: const BoxDecoration(
+              color: Colors.white,
+              border: Border(bottom: BorderSide(color: AppTheme.borderColor)),
+            ),
+            child: Wrap(
+              spacing: 16,
+              runSpacing: 12,
+              alignment: WrapAlignment.spaceBetween,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              children: [
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      _tabController.index == 0 ? 'Opname Stok Awal Shift' : 'Opname Stok Akhir Shift',
+                      style: GoogleFonts.outfit(
+                        fontSize: 18,
+                        fontWeight: FontWeight.w700,
+                        color: AppTheme.textColor,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      _tabController.index == 0
+                          ? 'Catat stok fisik atau konfirmasi Carry Forward sebelum operasional dimulai'
+                          : 'Catat stok fisik akhir shift untuk kalkulasi pemakaian & selisih',
+                      style: GoogleFonts.outfit(
+                        fontSize: 12,
+                        color: Colors.grey.shade600,
+                      ),
+                    ),
+                  ],
                 ),
-                Tab(
-                  iconMargin: const EdgeInsets.only(bottom: 2),
-                  icon: Icon(
-                    akhirSaved
-                        ? Icons.check_circle_rounded
-                        : (awalSaved ? Icons.nights_stay_rounded : Icons.lock_rounded),
-                    color: akhirSaved
-                        ? Colors.green.shade700
-                        : (!awalSaved ? Colors.amber.shade800 : null),
-                    size: 18,
-                  ),
-                  text: 'Stok Akhir',
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: AppTheme.backgroundColor,
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: AppTheme.borderColor),
+                      ),
+                      child: DropdownButtonHideUnderline(
+                        child: DropdownButton<int>(
+                          value: _tabController.index,
+                          isDense: true,
+                          icon: const Icon(Icons.keyboard_arrow_down_rounded, color: AppTheme.primaryColor),
+                          style: GoogleFonts.outfit(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600,
+                            color: AppTheme.textColor,
+                          ),
+                          onChanged: (val) {
+                            if (val != null) {
+                              _tabController.animateTo(val);
+                              setState(() {});
+                            }
+                          },
+                          items: [
+                            DropdownMenuItem(
+                              value: 0,
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(
+                                    awalSaved ? Icons.check_circle_rounded : Icons.wb_sunny_rounded,
+                                    size: 16,
+                                    color: awalSaved ? Colors.green.shade700 : AppTheme.primaryColor,
+                                  ),
+                                  const SizedBox(width: 8),
+                                  const Text('Stok Awal Shift'),
+                                ],
+                              ),
+                            ),
+                            DropdownMenuItem(
+                              value: 1,
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(
+                                    akhirSaved
+                                        ? Icons.check_circle_rounded
+                                        : (awalSaved ? Icons.nights_stay_rounded : Icons.lock_rounded),
+                                    size: 16,
+                                    color: akhirSaved
+                                        ? Colors.green.shade700
+                                        : (!awalSaved ? Colors.amber.shade800 : AppTheme.primaryColor),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  const Text('Stok Akhir Shift'),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    IconButton(
+                      onPressed: provider.isLoading ? null : provider.loadInitialData,
+                      tooltip: 'Segarkan data',
+                      style: IconButton.styleFrom(
+                        backgroundColor: AppTheme.backgroundColor,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(10),
+                          side: const BorderSide(color: AppTheme.borderColor),
+                        ),
+                      ),
+                      icon: const Icon(Icons.refresh_rounded, size: 18, color: AppTheme.primaryColor),
+                    ),
+                  ],
                 ),
               ],
             ),
           ),
-        ),
-      ),
-      body: provider.isLoading
-          ? const Center(child: CircularProgressIndicator())
-          : Column(
-              children: [
-                // ── Area Switcher Bar (Bar / Kitchen) ────────────────────────
-                Container(
-                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
-                  color: Colors.white,
-                  child: Column(
+          Expanded(
+            child: provider.isLoading
+                ? const Center(child: CircularProgressIndicator())
+                : Column(
                     children: [
+                      // ── Area Switcher Bar (Bar / Kitchen) ────────────────────────
+                      Container(
+                        padding: const EdgeInsets.fromLTRB(24, 14, 24, 14),
+                        color: Colors.white,
+                        child: Column(
+                          children: [
                       Row(
                         children: [
                           const Icon(Icons.location_on_rounded, size: 18, color: AppTheme.primaryColor),
@@ -237,6 +325,9 @@ class _CatatOpnameViewState extends State<_CatatOpnameView> with SingleTickerPro
                 ),
               ],
             ),
+          ),
+        ],
+      ),
     );
   }
 
@@ -947,6 +1038,31 @@ class _OpnameFormListState extends State<_OpnameFormList> {
 
     return Column(
       children: [
+        if (isAwal && !widget.isEditing)
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            color: Colors.white,
+            child: Row(
+              children: [
+                const Text(
+                  'Metode Opname Awal:',
+                  style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+                ),
+                const SizedBox(width: 8),
+                ChoiceChip(
+                  label: const Text('Hitung Manual (Hari Baru)', style: TextStyle(fontSize: 11.5)),
+                  selected: provider.metodeAwal == MetodeOpname.hitungManual,
+                  onSelected: (_) => provider.setMetodeAwal(MetodeOpname.hitungManual),
+                ),
+                const SizedBox(width: 6),
+                ChoiceChip(
+                  label: const Text('Carry Forward (Hari Sama)', style: TextStyle(fontSize: 11.5)),
+                  selected: provider.metodeAwal == MetodeOpname.carryForward,
+                  onSelected: (_) => provider.setMetodeAwal(MetodeOpname.carryForward),
+                ),
+              ],
+            ),
+          ),
         if (widget.isEditing)
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),

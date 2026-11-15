@@ -81,6 +81,7 @@ class CatatOpnameProvider with ChangeNotifier {
   final AuthProvider? _auth;
 
   TitikStok _titik = TitikStok.bar;
+  MetodeOpname _metodeAwal = MetodeOpname.hitungManual;
   bool _isLoading = false;
   bool _isSubmitting = false;
   String _errorMessage = '';
@@ -99,9 +100,12 @@ class CatatOpnameProvider with ChangeNotifier {
   final Map<String, Map<String, double>> _savedResults = {};
   final Map<String, bool> _isEditing = {};
 
-  CatatOpnameProvider({AuthProvider? auth}) : _auth = auth;
+  CatatOpnameProvider({AuthProvider? auth, TitikStok? initialTitik})
+      : _auth = auth,
+        _titik = initialTitik ?? TitikStok.bar;
 
   TitikStok get titik => _titik;
+  MetodeOpname get metodeAwal => _metodeAwal;
   bool get isLoading => _isLoading;
   bool get isSubmitting => _isSubmitting;
   String get errorMessage => _errorMessage;
@@ -144,21 +148,44 @@ class CatatOpnameProvider with ChangeNotifier {
   }
 
   List<Bahan> get filteredBahan {
-    var list = <Bahan>[];
-    // Categorize by area: Bar vs Kitchen
-    if (_titik == TitikStok.bar) {
-      // Seluruh bahan saat ini adalah bahan bar (kopi, susu, sirup, cup, creamer, dll.)
-      list = List<Bahan>.from(_allBahan);
-    } else {
-      // Saat ini belum ada bahan untuk kitchen, hanya bar
-      list = [];
-    }
+    var list = List<Bahan>.from(_allBahan);
 
     if (_searchQuery.trim().isNotEmpty) {
       final q = _searchQuery.toLowerCase();
       list = list.where((b) => b.nama.toLowerCase().contains(q)).toList();
     }
     return list;
+  }
+
+  Future<void> setMetodeAwal(MetodeOpname m) async {
+    _metodeAwal = m;
+    if (m == MetodeOpname.carryForward) {
+      await muatStokCarryForward(_titik);
+    }
+    notifyListeners();
+  }
+
+  Future<void> muatStokCarryForward(TitikStok targetTitik) async {
+    try {
+      final res = await http.get(
+        Uri.parse('${ApiEndpoints.stokTitik}?titik=${targetTitik.apiValue}'),
+        headers: _headers,
+      );
+      if (res.statusCode == 200) {
+        final List data = json.decode(res.body);
+        for (final row in data) {
+          final bId = (row['bahan_id'] ?? '').toString();
+          final jml = double.tryParse((row['jumlah'] ?? '0').toString()) ?? 0.0;
+          final bahan = getBahanById(bId);
+          if (bahan != null) {
+            final state = getFormState(targetTitik, TipeOpname.awalShift, bahan);
+            if (state.parts.isEmpty) state.parts.add(OpnamePart());
+            state.parts[0].jumlahC.text = formatAngka(jml);
+            state.parts[0].pengaliC.text = '';
+          }
+        }
+      }
+    } catch (_) {}
   }
 
   OpnameBahanFormState getFormState(TitikStok t, TipeOpname tipe, Bahan bahan) {
@@ -324,7 +351,7 @@ class CatatOpnameProvider with ChangeNotifier {
         'jadwal_shift_id': shiftId,
         'titik': titik.apiValue,
         'tipe': tipe == TipeOpname.awalShift ? 'awal_shift' : 'akhir_shift',
-        'metode': 'hitung_manual',
+        'metode': tipe == TipeOpname.awalShift ? _metodeAwal.apiValue : 'hitung_manual',
         'catatan': catatan?.trim().isEmpty == true ? null : catatan?.trim(),
         'items': itemsPayload,
       });

@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
+import '../../../../core/theme/app_theme.dart';
 import '../../../auth/providers/auth_provider.dart';
 import '../../providers/stok_gudang_provider.dart';
 import '../widgets/stok_gudang_tile.dart';
@@ -65,27 +67,60 @@ class _StokGudangView extends StatelessWidget {
     final p = context.watch<StokGudangProvider>();
 
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Gudang'),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.local_cafe_outlined),
-            tooltip: 'Stok Bar / Kitchen',
-            onPressed: () => Navigator.push(
-              context,
-              MaterialPageRoute(builder: (_) => const StokTitikScreen()),
-            ),
-          ),
-        ],
-      ),
+      backgroundColor: AppTheme.backgroundColor,
       body: Column(
         children: [
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+            decoration: const BoxDecoration(
+              color: Colors.white,
+              border: Border(bottom: BorderSide(color: AppTheme.borderColor)),
+            ),
+            child: Wrap(
+              spacing: 16,
+              runSpacing: 12,
+              alignment: WrapAlignment.spaceBetween,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              children: [
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Stok Gudang & Mutasi Bahan',
+                      style: GoogleFonts.outfit(
+                        fontSize: 18,
+                        fontWeight: FontWeight.w700,
+                        color: AppTheme.textColor,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      'Kelola persediaan gudang utama, catat barang masuk, dan distribusi ke Bar / Kitchen',
+                      style: GoogleFonts.outfit(
+                        fontSize: 12,
+                        color: Colors.grey.shade600,
+                      ),
+                    ),
+                  ],
+                ),
+                OutlinedButton.icon(
+                  onPressed: () => Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (_) => const StokTitikScreen()),
+                  ),
+                  icon: const Icon(Icons.local_cafe_outlined, size: 18),
+                  label: const Text('Lihat Stok Bar / Kitchen'),
+                ),
+              ],
+            ),
+          ),
           Padding(
-            padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+            padding: const EdgeInsets.fromLTRB(24, 16, 24, 8),
             child: TextField(
               onChanged: context.read<StokGudangProvider>().setQuery,
               decoration: InputDecoration(
-                hintText: 'Cari bahan',
+                hintText: 'Cari bahan di gudang...',
                 prefixIcon: const Icon(Icons.search),
                 border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
                 isDense: true,
@@ -93,7 +128,7 @@ class _StokGudangView extends StatelessWidget {
             ),
           ),
           Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16),
+            padding: const EdgeInsets.symmetric(horizontal: 24),
             child: Align(
               alignment: Alignment.centerLeft,
               child: FilterChip(

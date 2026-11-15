@@ -6,17 +6,56 @@ from sqlalchemy import select, and_, or_
 
 from app.core.deps import get_db, get_current_user, require_roles
 from app.core.utils import now_local
-from app.models.jadwal import JadwalShift, TukarShift, RequestOff
+from app.models.jadwal import JadwalShift, ShiftTemplate, TukarShift, RequestOff
 from app.models.absensi import Absensi, IzinTelat, IzinTidakMasuk
 from app.models.karyawan import Karyawan
 from app.schemas.jadwal import (
     JadwalShiftCreate, JadwalShiftOut,
+    ShiftTemplateOut, ShiftTemplateUpdate,
     TukarShiftCreate, TukarShiftApproval, TukarShiftOut,
     RequestOffCreate, RequestOffOut
 )
+from app.services.jadwal_service import ensure_shift_templates, get_shift_berjalan
 
 router = APIRouter()
 
+
+@router.get("/shift-template", response_model=List[ShiftTemplateOut])
+@router.get("/shift-template/", response_model=List[ShiftTemplateOut])
+async def list_shift_templates(
+    db: AsyncSession = Depends(get_db),
+    current_user: Karyawan = Depends(get_current_user)
+):
+    """Mengambil template jam kerja Shift 1 & Shift 2 dari database."""
+    templates = await ensure_shift_templates(db)
+    return [templates["shift_1"], templates["shift_2"]]
+
+
+@router.put("/shift-template/{shift}", response_model=ShiftTemplateOut)
+async def update_shift_template(
+    shift: Literal['shift_1', 'shift_2'],
+    data: ShiftTemplateUpdate,
+    db: AsyncSession = Depends(get_db),
+    current_user: Karyawan = Depends(require_roles(["admin"]))
+):
+    """Admin memperbarui jam mulai & jam selesai template Shift 1 atau Shift 2 di database."""
+    if data.jam_selesai <= data.jam_mulai:
+        raise HTTPException(
+            status_code=400,
+            detail="Jam selesai harus setelah jam mulai (shift melewati tengah malam belum didukung)"
+        )
+
+    templates = await ensure_shift_templates(db)
+    tpl = templates[shift]
+    tpl.jam_mulai = data.jam_mulai
+    tpl.jam_selesai = data.jam_selesai
+    tpl.updated_at = now_local()
+
+    await db.commit()
+    await db.refresh(tpl)
+    return tpl
+
+@router.get("", response_model=List[JadwalShiftOut])
 @router.get("/", response_model=List[JadwalShiftOut])
 async def list_jadwal(
     tanggal: Optional[date] = None,
@@ -34,6 +73,7 @@ async def list_jadwal(
     result = await db.execute(query.order_by(JadwalShift.tanggal, JadwalShift.jam_mulai))
     return result.scalars().all()
 
+@router.post("", response_model=JadwalShiftOut)
 @router.post("/", response_model=JadwalShiftOut)
 async def create_jadwal(
     data: JadwalShiftCreate,
@@ -43,11 +83,17 @@ async def create_jadwal(
     """
     Buat jadwal shift baru dengan penugasan area_kerja ('kasir', 'bar', 'kitchen')
     - Tolak jika karyawan_id tidak ditemukan atau status_aktif = False (400)
+    - Tolak jika karyawan sedang mengajukan Request Off pada tanggal tersebut (400)
     """
-    if data.jam_selesai < data.jam_mulai:
+    templates = await ensure_shift_templates(db)
+    template = templates.get(data.shift)
+    jam_mulai = data.jam_mulai if data.jam_mulai is not None else template.jam_mulai
+    jam_selesai = data.jam_selesai if data.jam_selesai is not None else template.jam_selesai
+
+    if jam_selesai <= jam_mulai:
         raise HTTPException(
             status_code=400,
-            detail="Shift dengan jam selesai melewati tengah malam belum didukung"
+            detail="Jam selesai harus setelah jam mulai (shift melewati tengah malam belum didukung)"
         )
 
     karyawan = await db.get(Karyawan, data.karyawan_id)
@@ -55,6 +101,21 @@ async def create_jadwal(
         raise HTTPException(
             status_code=400,
             detail="Karyawan tidak ditemukan atau status tidak aktif"
+        )
+
+    # Cek apakah karyawan mengajukan Request Off pada tanggal tersebut
+    existing_off = await db.execute(
+        select(RequestOff).where(
+            and_(
+                RequestOff.karyawan_id == data.karyawan_id,
+                RequestOff.tanggal == data.tanggal
+            )
+        )
+    )
+    if existing_off.scalars().first():
+        raise HTTPException(
+            status_code=400,
+            detail="Karyawan ini sedang mengajukan Request Off (libur) pada tanggal tersebut dan tidak dapat dimasukkan ke jadwal"
         )
 
     # Cek constraint 1 karyawan tidak boleh 2 shift di tanggal sama
@@ -69,7 +130,16 @@ async def create_jadwal(
     if existing.scalars().first():
         raise HTTPException(status_code=400, detail="Karyawan ini sudah memiliki jadwal shift pada tanggal tersebut")
 
-    item = JadwalShift(**data.dict(), dibuat_oleh=current_user.id)
+    item = JadwalShift(
+        karyawan_id=data.karyawan_id,
+        tanggal=data.tanggal,
+        shift=data.shift,
+        area_kerja=data.area_kerja,
+        shift_template_id=template.id if template else None,
+        jam_mulai=jam_mulai,
+        jam_selesai=jam_selesai,
+        dibuat_oleh=current_user.id,
+    )
     db.add(item)
     await db.commit()
     await db.refresh(item)
@@ -97,12 +167,20 @@ async def list_jadwal_untuk_tukar(
     return result.scalars().all()
 
 @router.get("/tukar-shift", response_model=List[TukarShiftOut])
+@router.get("/tukar-shift/", response_model=List[TukarShiftOut])
 async def list_tukar_shift(
     status: Optional[Literal['pending', 'disetujui', 'ditolak']] = None,
     db: AsyncSession = Depends(get_db),
-    current_user: Karyawan = Depends(require_roles(["admin"]))
+    current_user: Karyawan = Depends(get_current_user)
 ):
     query = select(TukarShift)
+    if current_user.role not in ["admin"]:
+        query = query.where(
+            or_(
+                TukarShift.karyawan_pengaju_id == current_user.id,
+                TukarShift.karyawan_target_id == current_user.id
+            )
+        )
     if status:
         query = query.where(TukarShift.status == status)
     result = await db.execute(query.order_by(TukarShift.diajukan_at.desc()))
@@ -307,6 +385,7 @@ async def approval_tukar_shift(
     return tukar
 
 @router.get("/request-off", response_model=List[RequestOffOut])
+@router.get("/request-off/", response_model=List[RequestOffOut])
 async def list_request_off(
     db: AsyncSession = Depends(get_db),
     current_user: Karyawan = Depends(get_current_user)
@@ -320,6 +399,7 @@ async def list_request_off(
     return result.scalars().all()
 
 @router.post("/request-off", response_model=RequestOffOut)
+@router.post("/request-off/", response_model=RequestOffOut)
 async def create_request_off(
     data: RequestOffCreate,
     db: AsyncSession = Depends(get_db),
@@ -329,6 +409,7 @@ async def create_request_off(
     Issue 7: Request Off validation:
     - Tolak tanggal di masa lalu (400)
     - Tolak duplikat (karyawan_id, tanggal) (409)
+    - Tolak jika sudah memiliki jadwal shift pada tanggal tersebut (400)
     """
     today = now_local().date()
     if data.tanggal < today:
@@ -351,6 +432,20 @@ async def create_request_off(
             detail="Anda sudah mengajukan request off pada tanggal tersebut"
         )
 
+    existing_shift = await db.execute(
+        select(JadwalShift).where(
+            and_(
+                JadwalShift.karyawan_id == current_user.id,
+                JadwalShift.tanggal == data.tanggal
+            )
+        )
+    )
+    if existing_shift.scalars().first():
+        raise HTTPException(
+            status_code=400,
+            detail="Anda sudah memiliki jadwal shift pada tanggal tersebut. Silakan ajukan Tukar Shift atau Izin Tidak Masuk"
+        )
+
     item = RequestOff(
         karyawan_id=current_user.id,
         tanggal=data.tanggal,
@@ -361,7 +456,40 @@ async def create_request_off(
     await db.refresh(item)
     return item
 
+@router.delete("/request-off/{id}")
+async def delete_request_off(
+    id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: Karyawan = Depends(get_current_user)
+):
+    item = await db.get(RequestOff, id)
+    if not item:
+        raise HTTPException(status_code=404, detail="Data request off tidak ditemukan")
+    if current_user.role not in ["admin"] and item.karyawan_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Akses ditolak")
+    await db.delete(item)
+    await db.commit()
+    return {"message": "Request off berhasil dihapus"}
+
+def _format_time_str(val) -> str:
+    if val is None:
+        return ""
+    if isinstance(val, (time, datetime)):
+        return val.strftime("%H:%M")
+    if isinstance(val, timedelta):
+        total_seconds = int(val.total_seconds())
+        hours = (total_seconds // 3600) % 24
+        minutes = (total_seconds % 3600) // 60
+        return f"{hours:02d}:{minutes:02d}"
+    s = str(val).strip()
+    parts = s.split(":")
+    if len(parts) >= 2:
+        return f"{parts[0].zfill(2)}:{parts[1].zfill(2)}"
+    return s
+
+
 @router.get("/shift-aktif")
+@router.get("/shift-aktif/")
 async def get_shift_aktif(
     titik: Optional[str] = None,
     db: AsyncSession = Depends(get_db),
@@ -373,16 +501,38 @@ async def get_shift_aktif(
     """
     now = now_local()
     today = now.date()
-    from app.services.jadwal_service import get_shift_berjalan
+    templates = await ensure_shift_templates(db)
 
     active_shift = await get_shift_berjalan(db, current_user.id, now)
     if active_shift:
+        tpl_match = templates.get(active_shift.shift) or templates["shift_1"]
+        jam_mulai_str = _format_time_str(active_shift.jam_mulai) or _format_time_str(tpl_match.jam_mulai)
+        jam_selesai_str = _format_time_str(active_shift.jam_selesai) or _format_time_str(tpl_match.jam_selesai)
+
+        abs_stmt = select(Absensi).where(
+            and_(
+                Absensi.jadwal_shift_id == active_shift.id,
+                Absensi.karyawan_id == current_user.id
+            )
+        )
+        abs_res = await db.execute(abs_stmt)
+        abs_obj = abs_res.scalars().first()
+
         return {
             "id": active_shift.id,
             "tanggal": str(active_shift.tanggal),
             "area_kerja": active_shift.area_kerja,
             "shift": active_shift.shift,
-            "karyawan_id": active_shift.karyawan_id
+            "jam_mulai": jam_mulai_str,
+            "jam_selesai": jam_selesai_str,
+            "karyawan_id": active_shift.karyawan_id,
+            "absensi": {
+                "id": abs_obj.id,
+                "jam_masuk": abs_obj.jam_masuk.isoformat() if abs_obj.jam_masuk else None,
+                "jam_pulang": abs_obj.jam_pulang.isoformat() if abs_obj.jam_pulang else None,
+                "menit_telat": abs_obj.menit_telat,
+                "status_pulang": abs_obj.status_pulang,
+            } if abs_obj else None
         }
 
     # Cari shift hari ini berdasarkan titik / user
@@ -414,14 +564,16 @@ async def get_shift_aktif(
         shift = any_res.scalars().first()
 
     if not shift:
+        tpl_default = templates["shift_1"]
         shift = JadwalShift(
             id=f"shift-{area}-{today.strftime('%Y%m%d')}",
             karyawan_id=current_user.id,
             tanggal=today,
             shift='shift_1',
             area_kerja=area,
-            jam_mulai=time(0, 0),
-            jam_selesai=time(23, 59, 59),
+            shift_template_id=tpl_default.id,
+            jam_mulai=tpl_default.jam_mulai,
+            jam_selesai=tpl_default.jam_selesai,
             dibuat_oleh=current_user.id,
             created_at=now,
             updated_at=now
@@ -430,11 +582,33 @@ async def get_shift_aktif(
         await db.commit()
         await db.refresh(shift)
 
+    tpl_shift = templates.get(shift.shift) or templates["shift_1"]
+    jam_mulai_str = _format_time_str(shift.jam_mulai) or _format_time_str(tpl_shift.jam_mulai)
+    jam_selesai_str = _format_time_str(shift.jam_selesai) or _format_time_str(tpl_shift.jam_selesai)
+
+    abs_stmt = select(Absensi).where(
+        and_(
+            Absensi.jadwal_shift_id == shift.id,
+            Absensi.karyawan_id == current_user.id
+        )
+    )
+    abs_res = await db.execute(abs_stmt)
+    abs_obj = abs_res.scalars().first()
+
     return {
         "id": shift.id,
         "tanggal": str(shift.tanggal),
         "area_kerja": shift.area_kerja,
         "shift": shift.shift,
-        "karyawan_id": shift.karyawan_id
+        "jam_mulai": jam_mulai_str,
+        "jam_selesai": jam_selesai_str,
+        "karyawan_id": shift.karyawan_id,
+        "absensi": {
+            "id": abs_obj.id,
+            "jam_masuk": abs_obj.jam_masuk.isoformat() if abs_obj.jam_masuk else None,
+            "jam_pulang": abs_obj.jam_pulang.isoformat() if abs_obj.jam_pulang else None,
+            "menit_telat": abs_obj.menit_telat,
+            "status_pulang": abs_obj.status_pulang,
+        } if abs_obj else None
     }
 

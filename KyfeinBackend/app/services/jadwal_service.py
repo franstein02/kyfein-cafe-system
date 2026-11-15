@@ -1,11 +1,41 @@
-from typing import Optional
+from typing import Dict, Optional
 from datetime import datetime, timedelta, time
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 
-from app.models.jadwal import JadwalShift
+from app.models.jadwal import JadwalShift, ShiftTemplate
 from app.models.absensi import Absensi
 from app.core.config import settings
+
+DEFAULT_SHIFT_TEMPLATES: dict[str, tuple[time, time]] = {
+    "shift_1": (time(8, 0), time(16, 0)),
+    "shift_2": (time(16, 0), time(23, 0)),
+}
+
+
+async def ensure_shift_templates(db: AsyncSession) -> Dict[str, ShiftTemplate]:
+    """Pastikan baris shift_1 dan shift_2 tersedia di tabel shift_template."""
+    res = await db.execute(select(ShiftTemplate))
+    existing = {t.shift: t for t in res.scalars().all()}
+
+    created = False
+    for shift_key, (mulai, selesai) in DEFAULT_SHIFT_TEMPLATES.items():
+        if shift_key not in existing:
+            tpl = ShiftTemplate(
+                shift=shift_key,
+                jam_mulai=mulai,
+                jam_selesai=selesai,
+            )
+            db.add(tpl)
+            existing[shift_key] = tpl
+            created = True
+
+    if created:
+        await db.commit()
+        for shift_key in DEFAULT_SHIFT_TEMPLATES:
+            await db.refresh(existing[shift_key])
+
+    return existing
 
 async def get_shift_berjalan(db: AsyncSession, karyawan_id: str, now: datetime) -> Optional[JadwalShift]:
     toleransi = getattr(settings, 'SHIFT_TOLERANSI_JAM', 3)

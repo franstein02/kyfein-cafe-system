@@ -6,6 +6,7 @@ class Token(BaseModel):
     token_type: str = "bearer"
     user_id: str
     role: str
+    divisi: Optional[str] = None
     nama: str
 
 class TokenPayload(BaseModel):

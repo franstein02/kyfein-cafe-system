@@ -185,25 +185,44 @@ async def submit_stok_opname(
 
     data.jadwal_shift_id = shift.id
 
+    if shift.area_kerja == "kasir":
+        raise HTTPException(
+            status_code=400,
+            detail="Shift kasir tidak memerlukan stok opname"
+        )
+    if shift.area_kerja != data.titik:
+        raise HTTPException(
+            status_code=400,
+            detail="Titik opname harus sesuai dengan area_kerja shift"
+        )
+
     is_susulan = False
-    if current_user.role in ["admin", "owner"] or shift.id.startswith("shift-"):
-        is_susulan = False
+    active_shift = await get_shift_berjalan(db, shift.karyawan_id, now)
+    if active_shift and active_shift.id == shift.id:
+        if current_user.role not in ["admin", "owner"] and shift.karyawan_id != current_user.id:
+            raise HTTPException(
+                status_code=403,
+                detail="Tidak dapat mengisi opname untuk shift milik karyawan lain."
+            )
     else:
-        active_shift = await get_shift_berjalan(db, shift.karyawan_id, now)
-        if active_shift and active_shift.id == shift.id:
-            if shift.karyawan_id != current_user.id:
+        toleransi_hours = getattr(settings, "SHIFT_TOLERANSI_JAM", 3)
+        shift_end_datetime = datetime.combine(shift.tanggal, shift.jam_selesai)
+        if shift.jam_selesai < shift.jam_mulai:
+            shift_end_datetime += timedelta(days=1)
+        window_end = shift_end_datetime + timedelta(hours=toleransi_hours)
+        if now > window_end:
+            if current_user.role not in ["admin", "owner"]:
                 raise HTTPException(
                     status_code=403,
-                    detail="Tidak dapat mengisi opname untuk shift milik karyawan lain."
+                    detail="Jendela shift sudah habis, hanya admin yang dapat menyusulkan opname"
                 )
+            is_susulan = True
         else:
-            toleransi_hours = getattr(settings, "SHIFT_TOLERANSI_JAM", 3)
-            shift_end_datetime = datetime.combine(shift.tanggal, shift.jam_selesai)
-            if shift.jam_selesai < shift.jam_mulai:
-                shift_end_datetime += timedelta(days=1)
-            window_end = shift_end_datetime + timedelta(hours=toleransi_hours)
-            if now > window_end:
-                is_susulan = True
+            if current_user.role not in ["admin", "owner"]:
+                raise HTTPException(
+                    status_code=400,
+                    detail="Shift belum berjalan"
+                )
 
     if is_susulan:
         if not data.catatan or not data.catatan.strip():
@@ -261,7 +280,7 @@ async def submit_stok_opname(
         if data.tipe == 'akhir_shift':
             metode = 'hitung_manual'
         else:
-            if last_opname:
+            if last_opname and prev_shift and prev_shift.tanggal == shift.tanggal:
                 metode = 'carry_forward'
             else:
                 metode = 'hitung_manual'

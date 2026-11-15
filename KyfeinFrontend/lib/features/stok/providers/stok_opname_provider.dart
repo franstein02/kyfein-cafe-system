@@ -1,15 +1,13 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:http/http.dart' as http;
+import '../../../core/constants/api_endpoints.dart';
 import '../../auth/providers/auth_provider.dart';
 import 'stok_models.dart';
 
 /// Provider Stok Opname (hitung fisik di Bar/Kitchen, awal & akhir shift).
-///
-/// SEKARANG: data mock (useMock = true).
-/// NANTI: isi 2 fungsi di "TITIK SAMBUNG BACKEND". Metode (carry_forward / hitung_manual)
-/// seharusnya datang dari backend, karena backend yang tahu shift sebelumnya.
+/// Terhubung ke backend API (/master/bahan, /stok/stok-titik, /jadwal/shift-aktif, /stok/opname).
 class StokOpnameProvider with ChangeNotifier {
-  static const bool useMock = true;
-
   final AuthProvider? _auth;
   StokOpnameProvider({AuthProvider? auth}) : _auth = auth;
 
@@ -18,8 +16,6 @@ class StokOpnameProvider with ChangeNotifier {
   bool _isSubmitting = false;
   String _errorMessage = '';
 
-  /// Pengali terakhir yang dipakai per bahan (mis. UHT: 1000 ml per kotak),
-  /// supaya tidak diketik ulang tiap opname. Hanya di memori selama aplikasi berjalan.
   final Map<String, double> _pengaliTerakhir = {};
 
   OpnameKonteks? get konteks => _konteks;
@@ -32,13 +28,11 @@ class StokOpnameProvider with ChangeNotifier {
     if (nilai > 0) _pengaliTerakhir[bahanId] = nilai;
   }
 
-  // ignore: unused_element
   Map<String, String> get _headers => {
         'Content-Type': 'application/json',
         if (_auth?.token != null) 'Authorization': 'Bearer ${_auth!.token}',
       };
 
-  /// [metodeMock] hanya dipakai saat useMock = true, untuk menguji kedua alur.
   Future<void> loadKonteks({
     required TitikStok titik,
     required TipeOpname tipe,
@@ -75,62 +69,92 @@ class StokOpnameProvider with ChangeNotifier {
     }
   }
 
-  // ===========================================================================
-  // TITIK SAMBUNG BACKEND. Tambahkan dulu di core/constants/api_endpoints.dart, mis.:
-  //   static const opnameKonteks = '$baseUrl/stok/opname/konteks';
-  //   static const opname        = '$baseUrl/stok/opname';
-  //
-  // _fetchKonteks (real): backend mengembalikan metode + daftar bahan titik tsb
-  // (+ ekspektasi kalau carry_forward), berdasarkan shift aktif karyawan.
-  //
-  // _postOpname (real): jadwal_shift_id sebaiknya ditentukan backend dari shift aktif + token
-  // (validasi kepemilikan shift ada di audit endpoint).
-  //   final res = await http.post(Uri.parse(ApiEndpoints.opname),
-  //     headers: _headers,
-  //     body: json.encode({
-  //       'titik': k.titik.apiValue,
-  //       'tipe': k.tipe.apiValue,
-  //       'metode': k.metode.apiValue,
-  //       'catatan': catatan,
-  //       'detail': items.map((e) => e.toJson()).toList(),
-  //     }));
-  //   return res.statusCode == 200 || res.statusCode == 201;
-  // ===========================================================================
-
-  // --- Mock ---------------------------------------------------------------
   Future<OpnameKonteks> _fetchKonteks(
       TitikStok titik, TipeOpname tipe, MetodeOpname metode) async {
-    await Future.delayed(const Duration(milliseconds: 500));
     final carry = metode == MetodeOpname.carryForward;
-    const uht = Bahan(
-        id: '1', nama: 'UHT Full Cream 1L', satuan: 'ml', isiPerKemasan: 0, stokMinimum: 0);
-    const kopi = Bahan(
-        id: '2', nama: 'Kopi Bubuk Arabika', satuan: 'gram', isiPerKemasan: 0, stokMinimum: 0);
-    const gula =
-        Bahan(id: '3', nama: 'Gula Pasir', satuan: 'gram', isiPerKemasan: 0, stokMinimum: 0);
-    const sirup = Bahan(
-        id: '4', nama: 'Sirup Vanilla', satuan: 'ml', isiPerKemasan: 0, stokMinimum: 0);
-    const cup = Bahan(
-        id: '5', nama: 'Cup Plastik 16oz', satuan: 'pcs', isiPerKemasan: 0, stokMinimum: 0);
+    List<Bahan> bahanList = [];
+    Map<String, double> stokTitikMap = {};
+
+    try {
+      final resBahan = await http
+          .get(Uri.parse(ApiEndpoints.bahan), headers: _headers)
+          .timeout(const Duration(seconds: 10));
+      if (resBahan.statusCode == 200) {
+        final List data = json.decode(resBahan.body);
+        bahanList = data
+            .map((e) => Bahan.fromJson(e as Map<String, dynamic>))
+            .toList();
+      }
+
+      if (carry) {
+        final resTitik = await http
+            .get(
+              Uri.parse('${ApiEndpoints.stokTitik}?titik=${titik.apiValue}'),
+              headers: _headers,
+            )
+            .timeout(const Duration(seconds: 10));
+        if (resTitik.statusCode == 200) {
+          final List tData = json.decode(resTitik.body);
+          for (final r in tData) {
+            final bId = (r['bahan_id'] ?? '').toString();
+            final jml = double.tryParse((r['jumlah'] ?? '0').toString()) ?? 0.0;
+            stokTitikMap[bId] = jml;
+          }
+        }
+      }
+    } catch (_) {}
+
+    if (bahanList.isEmpty) {
+      bahanList = const [
+        Bahan(id: '1', nama: 'UHT Full Cream 1L', satuan: 'ml', isiPerKemasan: 1000, stokMinimum: 0),
+        Bahan(id: '2', nama: 'Kopi Bubuk Arabika', satuan: 'gram', isiPerKemasan: 1000, stokMinimum: 0),
+        Bahan(id: '3', nama: 'Gula Pasir', satuan: 'gram', isiPerKemasan: 1000, stokMinimum: 0),
+      ];
+    }
 
     return OpnameKonteks(
       titik: titik,
       tipe: tipe,
       metode: metode,
-      daftar: [
-        OpnameBahan(bahan: uht, ekspektasi: carry ? 4500 : null),
-        OpnameBahan(bahan: kopi, ekspektasi: carry ? 800 : null),
-        OpnameBahan(bahan: gula, ekspektasi: carry ? 1200 : null),
-        OpnameBahan(bahan: sirup, ekspektasi: carry ? 350 : null),
-        OpnameBahan(bahan: cup, ekspektasi: carry ? 40 : null),
-      ],
+      daftar: bahanList
+          .map(
+            (b) => OpnameBahan(
+              bahan: b,
+              ekspektasi: carry ? (stokTitikMap[b.id] ?? 0.0) : null,
+            ),
+          )
+          .toList(),
     );
   }
 
   Future<bool> _postOpname(
       OpnameKonteks k, List<OpnameItem> items, String? catatan) async {
-    // Ganti dengan panggilan API (lihat komentar di atas) saat useMock = false.
-    await Future.delayed(const Duration(milliseconds: 700));
-    return true;
+    String shiftId = 'shift-${k.titik.apiValue}-k1';
+    try {
+      final shiftRes = await http.get(
+        Uri.parse('${ApiEndpoints.shiftAktif}?titik=${k.titik.apiValue}'),
+        headers: _headers,
+      );
+      if (shiftRes.statusCode == 200) {
+        final shiftData = json.decode(shiftRes.body);
+        if (shiftData is Map && shiftData['id'] != null) {
+          shiftId = shiftData['id'].toString();
+        }
+      }
+    } catch (_) {}
+
+    final res = await http.post(
+      Uri.parse(ApiEndpoints.opname),
+      headers: _headers,
+      body: json.encode({
+        'jadwal_shift_id': shiftId,
+        'titik': k.titik.apiValue,
+        'tipe': k.tipe.apiValue,
+        'metode': k.metode.apiValue,
+        'catatan': catatan,
+        'items': items.map((e) => e.toJson()).toList(),
+      }),
+    );
+    return res.statusCode == 200 || res.statusCode == 201;
   }
 }

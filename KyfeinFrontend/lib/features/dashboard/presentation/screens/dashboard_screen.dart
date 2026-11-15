@@ -19,6 +19,9 @@ import '../../../stok/presentation/screens/catat_opname_screen.dart';
 import '../../../stok/presentation/screens/stok_opname_hub_screen.dart';
 import '../../../stok/presentation/widgets/opname_launcher.dart';
 import '../../../stok/providers/stok_models.dart';
+import '../../../reporting/presentation/screens/reporting_screen.dart';
+import '../../../kds/presentation/screens/kds_screen.dart';
+import '../widgets/admin_analytics_widgets.dart';
 
 // ─── Formatters ───────────────────────────────────────────────────────────────
 final _idr = NumberFormat.currency(locale: 'id_ID', symbol: 'Rp ', decimalDigits: 0);
@@ -26,18 +29,40 @@ final _idr = NumberFormat.currency(locale: 'id_ID', symbol: 'Rp ', decimalDigits
 // ─── Constants ────────────────────────────────────────────────────────────────
 const _brown = Color(0xFF1B4332);
 
-const _cream = Color(0xFFE9F5E6);
+const _cream = Color(0xFFF6F8F6);
 const _gold = Color(0xFFD4A373);
 const _surface = Colors.white;
 const _textDim = Color(0xFF7A7A7A);
 
-// ─── Sidebar menu item model ──────────────────────────────────────────────────
-class _NavItem {
+// ─── Sidebar menu item models ─────────────────────────────────────────────────
+class _NavSubItem {
+  final String id;
   final IconData icon;
   final String label;
+  final Widget Function(BuildContext) pageBuilder;
+
+  const _NavSubItem({
+    required this.id,
+    required this.icon,
+    required this.label,
+    required this.pageBuilder,
+  });
+}
+
+class _NavItem {
+  final String id;
+  final IconData icon;
+  final String label;
+  final List<_NavSubItem> children;
   final Widget Function(BuildContext)? pageBuilder;
 
-  const _NavItem(this.icon, this.label, {this.pageBuilder});
+  const _NavItem({
+    required this.id,
+    required this.icon,
+    required this.label,
+    this.children = const [],
+    this.pageBuilder,
+  });
 }
 
 // ─── Dashboard Screen ─────────────────────────────────────────────────────────
@@ -49,7 +74,15 @@ class DashboardScreen extends StatefulWidget {
 }
 
 class _DashboardScreenState extends State<DashboardScreen> {
-  int _selectedIndex = 0;
+  String _selectedGroupId = 'dashboard';
+  String? _selectedSubId;
+  String _activePageLabel = 'Dashboard';
+  final Set<String> _expandedGroupIds = {
+    'pos_group',
+    'stok_group',
+    'kasir_jadwal_group',
+    'laporan_group',
+  };
   Widget? _currentPage;
   bool _fcmInitialized = false;
 
@@ -69,50 +102,480 @@ class _DashboardScreenState extends State<DashboardScreen> {
     });
   }
 
-  List<_NavItem> _getNavItems(String? role) {
-  final isAdminOrOwner = role == 'admin' || role == 'owner';
-  final isKaryawan = role == 'karyawan';
+  List<_NavItem> _getNavItems(String? role, String? divisi, String? activeAreaKerja) {
+    final isAdminOrOwner = role == 'admin' || role == 'owner';
+    final isKaryawan = role == 'karyawan';
+    final effectiveArea = (activeAreaKerja != null && activeAreaKerja.isNotEmpty)
+        ? activeAreaKerja
+        : ((divisi == 'bar' || divisi == 'kitchen' || divisi == 'kasir') ? divisi! : 'kasir');
 
-  return [
-    const _NavItem(Icons.dashboard_rounded, 'Dashboard'),
-    _NavItem(Icons.point_of_sale_rounded, 'POS',
-        pageBuilder: (_) => const PosScreen()),
-    _NavItem(Icons.receipt_long_rounded, 'Transaksi',
-        pageBuilder: (_) => const TransaksiScreen()),
-    if (isAdminOrOwner)
-      _NavItem(Icons.restaurant_menu_rounded, 'Master Data',
-          pageBuilder: (_) => const MasterDataScreen()),
-    _NavItem(Icons.warehouse_rounded, 'Gudang',
-        pageBuilder: (_) => const StokGudangScreen()),
-    _NavItem(Icons.edit_note_rounded, 'Catat Opname',
-        pageBuilder: (_) => const CatatOpnameScreen()),
-    _NavItem(Icons.fact_check_rounded, 'Stok Opname',
-        pageBuilder: (_) => const StokOpnameHubScreen()),
+    return [
+      const _NavItem(
+        id: 'dashboard',
+        icon: Icons.dashboard_rounded,
+        label: 'Dashboard',
+      ),
+      if (isAdminOrOwner) ...[
+        _NavItem(
+          id: 'pos_group',
+          icon: Icons.point_of_sale_rounded,
+          label: 'Kasir & Pesanan',
+          children: [
+            _NavSubItem(
+              id: 'pos_kasir',
+              icon: Icons.storefront_rounded,
+              label: 'Kasir POS',
+              pageBuilder: (_) => const PosScreen(),
+            ),
+            _NavSubItem(
+              id: 'pos_transaksi',
+              icon: Icons.receipt_long_rounded,
+              label: 'Riwayat Transaksi',
+              pageBuilder: (_) => const TransaksiScreen(),
+            ),
+            _NavSubItem(
+              id: 'pos_kds',
+              icon: Icons.tv_rounded,
+              label: 'Layar Pesanan KDS',
+              pageBuilder: (_) => const KdsScreen(areaProduksi: 'all'),
+            ),
+          ],
+        ),
+        _NavItem(
+          id: 'master_group',
+          icon: Icons.restaurant_menu_rounded,
+          label: 'Master Data',
+          children: [
+            _NavSubItem(
+              id: 'master_menu',
+              icon: Icons.fastfood_rounded,
+              label: 'Menu & Resep POS',
+              pageBuilder: (_) => const MasterDataScreen(
+                key: ValueKey('master_0'),
+                initialSection: 0,
+              ),
+            ),
+            _NavSubItem(
+              id: 'master_kategori',
+              icon: Icons.category_rounded,
+              label: 'Kategori Menu',
+              pageBuilder: (_) => const MasterDataScreen(
+                key: ValueKey('master_1'),
+                initialSection: 1,
+              ),
+            ),
+            _NavSubItem(
+              id: 'master_bahan',
+              icon: Icons.inventory_2_rounded,
+              label: 'Master Bahan Baku',
+              pageBuilder: (_) => const MasterDataScreen(
+                key: ValueKey('master_2'),
+                initialSection: 2,
+              ),
+            ),
+            _NavSubItem(
+              id: 'master_kasir',
+              icon: Icons.badge_rounded,
+              label: 'Kelola Karyawan',
+              pageBuilder: (_) => const MasterDataScreen(
+                key: ValueKey('master_3'),
+                initialSection: 3,
+              ),
+            ),
+          ],
+        ),
+        _NavItem(
+          id: 'stok_group',
+          icon: Icons.warehouse_rounded,
+          label: 'Stok & Opname',
+          children: [
+            _NavSubItem(
+              id: 'stok_gudang',
+              icon: Icons.warehouse_rounded,
+              label: 'Stok Gudang & Mutasi',
+              pageBuilder: (_) => const StokGudangScreen(),
+            ),
+            _NavSubItem(
+              id: 'opname_awal',
+              icon: Icons.wb_sunny_rounded,
+              label: 'Opname Awal Shift',
+              pageBuilder: (_) => const CatatOpnameScreen(
+                key: ValueKey('opname_0'),
+                initialSection: 0,
+              ),
+            ),
+            _NavSubItem(
+              id: 'opname_akhir',
+              icon: Icons.nights_stay_rounded,
+              label: 'Opname Akhir Shift',
+              pageBuilder: (_) => const CatatOpnameScreen(
+                key: ValueKey('opname_1'),
+                initialSection: 1,
+              ),
+            ),
+            _NavSubItem(
+              id: 'hub_harian',
+              icon: Icons.calendar_view_day_rounded,
+              label: 'Rekap Stok Harian',
+              pageBuilder: (_) => const StokOpnameHubScreen(
+                key: ValueKey('hub_0'),
+                initialSection: 0,
+              ),
+            ),
+            _NavSubItem(
+              id: 'hub_audit',
+              icon: Icons.fact_check_rounded,
+              label: 'Audit Pemakaian BOM',
+              pageBuilder: (_) => const StokOpnameHubScreen(
+                key: ValueKey('hub_1'),
+                initialSection: 1,
+              ),
+            ),
+          ],
+        ),
+        _NavItem(
+          id: 'jadwal_group',
+          icon: Icons.calendar_month_rounded,
+          label: 'Jadwal & Absensi',
+          children: [
+            _NavSubItem(
+              id: 'adm_jadwal_atur',
+              icon: Icons.edit_calendar_rounded,
+              label: 'Atur Jadwal Shift',
+              pageBuilder: (_) => const AdminJadwalScreen(
+                key: ValueKey('adm_jadwal_0'),
+                initialSection: 0,
+              ),
+            ),
+            _NavSubItem(
+              id: 'adm_jadwal_template',
+              icon: Icons.tune_rounded,
+              label: 'Template Shift',
+              pageBuilder: (_) => const AdminJadwalScreen(
+                key: ValueKey('adm_jadwal_2'),
+                initialSection: 2,
+              ),
+            ),
+            _NavSubItem(
+              id: 'adm_jadwal_approval',
+              icon: Icons.fact_check_rounded,
+              label: 'Approval Izin & Off',
+              pageBuilder: (_) => const AdminJadwalScreen(
+                key: ValueKey('adm_jadwal_1'),
+                initialSection: 1,
+              ),
+            ),
+            _NavSubItem(
+              id: 'adm_absensi_monitor',
+              icon: Icons.fingerprint_rounded,
+              label: 'Monitoring Absensi',
+              pageBuilder: (_) => const AdminAbsensiScreen(
+                key: ValueKey('adm_abs_1'),
+                initialSection: 1,
+              ),
+            ),
+            _NavSubItem(
+              id: 'adm_absensi_lokasi',
+              icon: Icons.location_on_rounded,
+              label: 'Titik & Radius GPS',
+              pageBuilder: (_) => const AdminAbsensiScreen(
+                key: ValueKey('adm_abs_0'),
+                initialSection: 0,
+              ),
+            ),
+          ],
+        ),
+        _NavItem(
+          id: 'laporan_group',
+          icon: Icons.analytics_rounded,
+          label: 'Laporan & Biaya',
+          children: [
+            _NavSubItem(
+              id: 'rep_keuangan',
+              icon: Icons.trending_up_rounded,
+              label: 'Laba Rugi & Penjualan',
+              pageBuilder: (_) => const ReportingScreen(
+                key: ValueKey('rep_0'),
+                initialSection: 0,
+              ),
+            ),
+            _NavSubItem(
+              id: 'rep_stok',
+              icon: Icons.inventory_2_rounded,
+              label: 'Laporan Stok & Opname',
+              pageBuilder: (_) => const ReportingScreen(
+                key: ValueKey('rep_1'),
+                initialSection: 1,
+              ),
+            ),
+            _NavSubItem(
+              id: 'rep_absensi',
+              icon: Icons.badge_rounded,
+              label: 'Laporan Absensi',
+              pageBuilder: (_) => const ReportingScreen(
+                key: ValueKey('rep_2'),
+                initialSection: 2,
+              ),
+            ),
+            _NavSubItem(
+              id: 'rep_pengeluaran',
+              icon: Icons.receipt_long_rounded,
+              label: 'Catat Pengeluaran',
+              pageBuilder: (_) => const ReportingScreen(
+                key: ValueKey('rep_3'),
+                initialSection: 3,
+              ),
+            ),
+            _NavSubItem(
+              id: 'rep_kategori_biaya',
+              icon: Icons.category_rounded,
+              label: 'Kategori Biaya',
+              pageBuilder: (_) => const ReportingScreen(
+                key: ValueKey('rep_4'),
+                initialSection: 4,
+              ),
+            ),
+          ],
+        ),
+      ],
+      if (isKaryawan) ...[
+        if (effectiveArea == 'kasir') ...[
+          _NavItem(
+            id: 'pos_group',
+            icon: Icons.point_of_sale_rounded,
+            label: 'Kasir & Transaksi',
+            children: [
+              _NavSubItem(
+                id: 'pos_kasir',
+                icon: Icons.storefront_rounded,
+                label: 'Kasir POS',
+                pageBuilder: (_) => const PosScreen(),
+              ),
+              _NavSubItem(
+                id: 'pos_transaksi',
+                icon: Icons.receipt_long_rounded,
+                label: 'Riwayat Transaksi',
+                pageBuilder: (_) => const TransaksiScreen(),
+              ),
+            ],
+          ),
+          _NavItem(
+            id: 'stok_group',
+            icon: Icons.warehouse_rounded,
+            label: 'Stok Gudang',
+            children: [
+              _NavSubItem(
+                id: 'stok_gudang',
+                icon: Icons.warehouse_rounded,
+                label: 'Ambil Barang Gudang',
+                pageBuilder: (_) => const StokGudangScreen(),
+              ),
+              _NavSubItem(
+                id: 'hub_harian',
+                icon: Icons.calendar_view_day_rounded,
+                label: 'Rekap Stok Harian',
+                pageBuilder: (_) => const StokOpnameHubScreen(
+                  key: ValueKey('hub_kasir_0'),
+                  initialSection: 0,
+                ),
+              ),
+            ],
+          ),
+        ],
+        if (effectiveArea == 'kitchen') ...[
+          _NavItem(
+            id: 'kds_kitchen',
+            icon: Icons.soup_kitchen_rounded,
+            label: 'Layar Pesanan KDS',
+            pageBuilder: (_) => const KdsScreen(
+              key: ValueKey('kds_kitchen'),
+              areaProduksi: 'kitchen',
+            ),
+          ),
+          _NavItem(
+            id: 'stok_group',
+            icon: Icons.warehouse_rounded,
+            label: 'Stok & Opname Kitchen',
+            children: [
+              _NavSubItem(
+                id: 'stok_gudang',
+                icon: Icons.warehouse_rounded,
+                label: 'Ambil Barang Gudang',
+                pageBuilder: (_) => const StokGudangScreen(),
+              ),
+              _NavSubItem(
+                id: 'opname_awal',
+                icon: Icons.wb_sunny_rounded,
+                label: 'Opname Awal Shift',
+                pageBuilder: (_) => const CatatOpnameScreen(
+                  key: ValueKey('opname_kitchen_0'),
+                  initialSection: 0,
+                  initialTitik: TitikStok.kitchen,
+                ),
+              ),
+              _NavSubItem(
+                id: 'opname_akhir',
+                icon: Icons.nights_stay_rounded,
+                label: 'Opname Akhir Shift',
+                pageBuilder: (_) => const CatatOpnameScreen(
+                  key: ValueKey('opname_kitchen_1'),
+                  initialSection: 1,
+                  initialTitik: TitikStok.kitchen,
+                ),
+              ),
+              _NavSubItem(
+                id: 'hub_harian',
+                icon: Icons.calendar_view_day_rounded,
+                label: 'Rekap Stok Harian',
+                pageBuilder: (_) => const StokOpnameHubScreen(
+                  key: ValueKey('hub_kitchen_0'),
+                  initialSection: 0,
+                ),
+              ),
+            ],
+          ),
+        ],
+        if (effectiveArea == 'bar') ...[
+          _NavItem(
+            id: 'kds_bar',
+            icon: Icons.local_cafe_rounded,
+            label: 'Layar Pesanan KDS (Bar)',
+            pageBuilder: (_) => const KdsScreen(
+              key: ValueKey('kds_bar'),
+              areaProduksi: 'bar',
+            ),
+          ),
+          _NavItem(
+            id: 'stok_group',
+            icon: Icons.warehouse_rounded,
+            label: 'Stok & Opname Bar',
+            children: [
+              _NavSubItem(
+                id: 'stok_gudang',
+                icon: Icons.warehouse_rounded,
+                label: 'Ambil Barang Gudang',
+                pageBuilder: (_) => const StokGudangScreen(),
+              ),
+              _NavSubItem(
+                id: 'opname_awal',
+                icon: Icons.wb_sunny_rounded,
+                label: 'Opname Awal Shift',
+                pageBuilder: (_) => const CatatOpnameScreen(
+                  key: ValueKey('opname_bar_0'),
+                  initialSection: 0,
+                  initialTitik: TitikStok.bar,
+                ),
+              ),
+              _NavSubItem(
+                id: 'opname_akhir',
+                icon: Icons.nights_stay_rounded,
+                label: 'Opname Akhir Shift',
+                pageBuilder: (_) => const CatatOpnameScreen(
+                  key: ValueKey('opname_bar_1'),
+                  initialSection: 1,
+                  initialTitik: TitikStok.bar,
+                ),
+              ),
+              _NavSubItem(
+                id: 'hub_harian',
+                icon: Icons.calendar_view_day_rounded,
+                label: 'Rekap Stok Harian',
+                pageBuilder: (_) => const StokOpnameHubScreen(
+                  key: ValueKey('hub_bar_0'),
+                  initialSection: 0,
+                ),
+              ),
+            ],
+          ),
+        ],
+        _NavItem(
+          id: 'kasir_jadwal_group',
+          icon: Icons.calendar_today_rounded,
+          label: 'Jadwal & Absensi',
+          children: [
+            _NavSubItem(
+              id: 'ksr_jadwal_saya',
+              icon: Icons.calendar_month_rounded,
+              label: 'Jadwal Kerja Saya',
+              pageBuilder: (_) => const KasirJadwalScreen(
+                key: ValueKey('ksr_jadwal_0'),
+                initialSection: 0,
+              ),
+            ),
+            _NavSubItem(
+              id: 'ksr_pengajuan_izin',
+              icon: Icons.assignment_turned_in_rounded,
+              label: 'Pengajuan Izin & Off',
+              pageBuilder: (_) => const KasirJadwalScreen(
+                key: ValueKey('ksr_jadwal_1'),
+                initialSection: 1,
+              ),
+            ),
+            _NavSubItem(
+              id: 'ksr_absensi_gps',
+              icon: Icons.badge_rounded,
+              label: 'Absensi Masuk & Pulang',
+              pageBuilder: (_) => const KasirAbsensiScreen(),
+            ),
+          ],
+        ),
+      ],
+    ];
+  }
 
-    // Menu admin / owner
-    if (isAdminOrOwner) ...[
-      _NavItem(Icons.calendar_month_rounded, 'Kelola Jadwal',
-          pageBuilder: (_) => const AdminJadwalScreen()),
-      _NavItem(Icons.fingerprint_rounded, 'Rekap Absensi',
-          pageBuilder: (_) => const AdminAbsensiScreen()),
-    ],
+  void _onGroupTap(_NavItem item) {
+    setState(() {
+      if (item.children.isEmpty) {
+        _selectedGroupId = item.id;
+        _selectedSubId = null;
+        _activePageLabel = item.label;
+        _currentPage = item.pageBuilder?.call(context);
+      } else {
+        if (_expandedGroupIds.contains(item.id)) {
+          _expandedGroupIds.remove(item.id);
+        } else {
+          _expandedGroupIds.add(item.id);
+        }
+      }
+    });
+  }
 
-    // Menu kasir (karyawan)
-    if (isKaryawan) ...[
-      _NavItem(Icons.calendar_today_rounded, 'Jadwal Saya',
-          pageBuilder: (_) => const KasirJadwalScreen()),
-      _NavItem(Icons.badge_rounded, 'Absensi Saya',
-          pageBuilder: (_) => const KasirAbsensiScreen()),
-    ],
-  ];
-}
+  void _onSubItemTap(_NavItem group, _NavSubItem sub) {
+    setState(() {
+      _selectedGroupId = group.id;
+      _selectedSubId = sub.id;
+      _activePageLabel = sub.label;
+      _expandedGroupIds.add(group.id);
+      _currentPage = sub.pageBuilder(context);
+    });
+  }
+
+  void _navigateToNav(List<_NavItem> navItems, String groupId, [String? subId]) {
+    for (final group in navItems) {
+      if (group.id == groupId) {
+        if (subId == null) {
+          _onGroupTap(group);
+          return;
+        }
+        for (final sub in group.children) {
+          if (sub.id == subId) {
+            _onSubItemTap(group, sub);
+            return;
+          }
+        }
+      }
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
     final auth = context.watch<AuthProvider>();
     final dashboard = context.watch<DashboardProvider>();
-    final navItems = _getNavItems(auth.role);
-    debugPrint('NAV ITEMS: ${navItems.map((e) => e.label).toList()}');
+    final navItems = _getNavItems(
+      auth.role,
+      auth.divisi,
+      dashboard.shiftAktif?.areaKerja,
+    );
 
     return LayoutBuilder(
       builder: (context, constraints) {
@@ -121,34 +584,27 @@ class _DashboardScreenState extends State<DashboardScreen> {
             auth: auth,
             dashboard: dashboard,
             navItems: navItems,
-            selectedIndex: _selectedIndex,
+            selectedGroupId: _selectedGroupId,
+            selectedSubId: _selectedSubId,
+            expandedGroupIds: _expandedGroupIds,
             currentPage: _currentPage,
-            onNavTap: (i) {
-              setState(() {
-                _selectedIndex = i;
-                final item = navItems[i];
-                _currentPage = item.pageBuilder != null
-                    ? item.pageBuilder!(context)
-                    : null;
-              });
-            },
+            onGroupTap: _onGroupTap,
+            onSubItemTap: _onSubItemTap,
+            onNavigate: (g, [s]) => _navigateToNav(navItems, g, s),
           );
         }
         return _MobileLayout(
           auth: auth,
           dashboard: dashboard,
           navItems: navItems,
-          selectedIndex: _selectedIndex,
+          selectedGroupId: _selectedGroupId,
+          selectedSubId: _selectedSubId,
+          activePageLabel: _activePageLabel,
+          expandedGroupIds: _expandedGroupIds,
           currentPage: _currentPage,
-          onNavTap: (i) {
-            setState(() {
-              _selectedIndex = i;
-              final item = navItems[i];
-              _currentPage = item.pageBuilder != null
-                  ? item.pageBuilder!(context)
-                  : null;
-            });
-          },
+          onGroupTap: _onGroupTap,
+          onSubItemTap: _onSubItemTap,
+          onNavigate: (g, [s]) => _navigateToNav(navItems, g, s),
         );
       },
     );
@@ -160,17 +616,25 @@ class _WebLayout extends StatelessWidget {
   final AuthProvider auth;
   final DashboardProvider dashboard;
   final List<_NavItem> navItems;
-  final int selectedIndex;
+  final String selectedGroupId;
+  final String? selectedSubId;
+  final Set<String> expandedGroupIds;
   final Widget? currentPage;
-  final ValueChanged<int> onNavTap;
+  final ValueChanged<_NavItem> onGroupTap;
+  final void Function(_NavItem, _NavSubItem) onSubItemTap;
+  final void Function(String groupId, [String? subId]) onNavigate;
 
   const _WebLayout({
     required this.auth,
     required this.dashboard,
     required this.navItems,
-    required this.selectedIndex,
+    required this.selectedGroupId,
+    required this.selectedSubId,
+    required this.expandedGroupIds,
     required this.currentPage,
-    required this.onNavTap,
+    required this.onGroupTap,
+    required this.onSubItemTap,
+    required this.onNavigate,
   });
 
   @override
@@ -182,14 +646,22 @@ class _WebLayout extends StatelessWidget {
           // ── Sidebar ──────────────────────────────────────
           _Sidebar(
             auth: auth,
+            activeAreaKerja: dashboard.shiftAktif?.areaKerja,
             navItems: navItems,
-            selectedIndex: selectedIndex,
-            onNavTap: onNavTap,
+            selectedGroupId: selectedGroupId,
+            selectedSubId: selectedSubId,
+            expandedGroupIds: expandedGroupIds,
+            onGroupTap: onGroupTap,
+            onSubItemTap: onSubItemTap,
           ),
           // ── Main Content ─────────────────────────────────
           Expanded(
             child: currentPage ??
-                _DashboardContent(auth: auth, dashboard: dashboard),
+                _DashboardContent(
+                  auth: auth,
+                  dashboard: dashboard,
+                  onNavigate: onNavigate,
+                ),
           ),
         ],
       ),
@@ -200,29 +672,33 @@ class _WebLayout extends StatelessWidget {
 // ─── Sidebar ─────────────────────────────────────────────────────────────────
 class _Sidebar extends StatelessWidget {
   final AuthProvider auth;
+  final String? activeAreaKerja;
   final List<_NavItem> navItems;
-  final int selectedIndex;
-  final ValueChanged<int> onNavTap;
+  final String selectedGroupId;
+  final String? selectedSubId;
+  final Set<String> expandedGroupIds;
+  final ValueChanged<_NavItem> onGroupTap;
+  final void Function(_NavItem, _NavSubItem) onSubItemTap;
 
   const _Sidebar({
     required this.auth,
+    this.activeAreaKerja,
     required this.navItems,
-    required this.selectedIndex,
-    required this.onNavTap,
+    required this.selectedGroupId,
+    required this.selectedSubId,
+    required this.expandedGroupIds,
+    required this.onGroupTap,
+    required this.onSubItemTap,
   });
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      width: 240,
+      width: 260,
       decoration: const BoxDecoration(
-        gradient: LinearGradient(
-          colors: [Color(0xFF5C3D2E), _brown],
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
-        ),
+        color: _brown,
         boxShadow: [
-          BoxShadow(color: Colors.black26, blurRadius: 8, offset: Offset(2, 0)),
+          BoxShadow(color: Colors.black12, blurRadius: 10, offset: Offset(2, 0)),
         ],
       ),
       child: Column(
@@ -230,18 +706,18 @@ class _Sidebar extends StatelessWidget {
         children: [
           // Logo area
           Padding(
-            padding: const EdgeInsets.fromLTRB(20, 36, 20, 28),
+            padding: const EdgeInsets.fromLTRB(20, 32, 20, 20),
             child: Row(
               children: [
                 Container(
-                  width: 42,
-                  height: 42,
+                  width: 40,
+                  height: 40,
                   decoration: BoxDecoration(
-                    color: Colors.white.withValues(alpha: 0.15),
+                    color: Colors.white.withValues(alpha: 0.14),
                     borderRadius: BorderRadius.circular(10),
                   ),
                   child: const Icon(Icons.coffee_rounded,
-                      color: Colors.white, size: 24),
+                      color: Colors.white, size: 22),
                 ),
                 const SizedBox(width: 12),
                 Column(
@@ -257,7 +733,11 @@ class _Sidebar extends StatelessWidget {
                       ),
                     ),
                     Text(
-                      _roleBadge(auth.role),
+                      _roleBadge(
+                        auth.role,
+                        divisi: auth.divisi,
+                        activeAreaKerja: activeAreaKerja,
+                      ),
                       style: const TextStyle(
                         color: _gold,
                         fontSize: 11,
@@ -271,17 +751,17 @@ class _Sidebar extends StatelessWidget {
           ),
           // User info
           Padding(
-            padding: const EdgeInsets.fromLTRB(16, 0, 16, 20),
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 18),
             child: Container(
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
-                color: Colors.white.withValues(alpha: 0.1),
+                color: Colors.white.withValues(alpha: 0.08),
                 borderRadius: BorderRadius.circular(12),
               ),
               child: Row(
                 children: [
                   CircleAvatar(
-                    radius: 18,
+                    radius: 17,
                     backgroundColor: _gold,
                     child: Text(
                       (auth.nama ?? '?')[0].toUpperCase(),
@@ -308,62 +788,139 @@ class _Sidebar extends StatelessWidget {
           Padding(
             padding: const EdgeInsets.fromLTRB(20, 0, 20, 8),
             child: Text(
-              'MENU',
+              'MENU NAVIGASI',
               style: TextStyle(
-                color: Colors.white.withValues(alpha: 0.4),
+                color: Colors.white.withValues(alpha: 0.45),
                 fontSize: 10,
                 fontWeight: FontWeight.w700,
                 letterSpacing: 1.5,
               ),
             ),
           ),
-          // Nav items
+          // Nav items with expandable dropdown children
           Expanded(
             child: ListView.builder(
-              padding: const EdgeInsets.symmetric(horizontal: 12),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
               itemCount: navItems.length,
               itemBuilder: (_, i) {
                 final item = navItems[i];
-                final isSelected = i == selectedIndex;
+                final hasChildren = item.children.isNotEmpty;
+                final isGroupSelected = item.id == selectedGroupId;
+                final isExpanded = expandedGroupIds.contains(item.id);
+
                 return Padding(
-                  padding: const EdgeInsets.only(bottom: 2),
-                  child: Material(
-                    color: Colors.transparent,
-                    child: InkWell(
-                      borderRadius: BorderRadius.circular(10),
-                      onTap: () => onNavTap(i),
-                      child: AnimatedContainer(
-                        duration: const Duration(milliseconds: 150),
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 14, vertical: 11),
-                        decoration: BoxDecoration(
-                          color: isSelected
-                              ? Colors.white.withValues(alpha: 0.18)
-                              : Colors.transparent,
+                  padding: const EdgeInsets.only(bottom: 4),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Material(
+                        color: Colors.transparent,
+                        child: InkWell(
                           borderRadius: BorderRadius.circular(10),
-                        ),
-                        child: Row(
-                          children: [
-                            Icon(item.icon,
-                                color: isSelected ? Colors.white : Colors.white60,
-                                size: 20),
-                            const SizedBox(width: 12),
-                            Text(
-                              item.label,
-                              style: TextStyle(
-                                color: isSelected
-                                    ? Colors.white
-                                    : Colors.white60,
-                                fontSize: 14,
-                                fontWeight: isSelected
-                                    ? FontWeight.w600
-                                    : FontWeight.w400,
-                              ),
+                          onTap: () => onGroupTap(item),
+                          child: AnimatedContainer(
+                            duration: const Duration(milliseconds: 150),
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 14, vertical: 11),
+                            decoration: BoxDecoration(
+                              color: (isGroupSelected && !hasChildren)
+                                  ? Colors.white.withValues(alpha: 0.18)
+                                  : (isGroupSelected && hasChildren)
+                                      ? Colors.white.withValues(alpha: 0.08)
+                                      : Colors.transparent,
+                              borderRadius: BorderRadius.circular(10),
                             ),
-                          ],
+                            child: Row(
+                              children: [
+                                Icon(item.icon,
+                                    color: isGroupSelected
+                                        ? Colors.white
+                                        : Colors.white70,
+                                    size: 19),
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: Text(
+                                    item.label,
+                                    style: TextStyle(
+                                      color: isGroupSelected
+                                          ? Colors.white
+                                          : Colors.white70,
+                                      fontSize: 13.5,
+                                      fontWeight: isGroupSelected
+                                          ? FontWeight.w600
+                                          : FontWeight.w500,
+                                    ),
+                                  ),
+                                ),
+                                if (hasChildren)
+                                  Icon(
+                                    isExpanded
+                                        ? Icons.keyboard_arrow_up_rounded
+                                        : Icons.keyboard_arrow_down_rounded,
+                                    color: Colors.white60,
+                                    size: 18,
+                                  ),
+                              ],
+                            ),
+                          ),
                         ),
                       ),
-                    ),
+                      if (hasChildren && isExpanded)
+                        Padding(
+                          padding: const EdgeInsets.only(left: 16, top: 4, bottom: 4),
+                          child: Column(
+                            children: item.children.map((sub) {
+                              final isSubSelected = sub.id == selectedSubId;
+                              return Padding(
+                                padding: const EdgeInsets.only(bottom: 2),
+                                child: Material(
+                                  color: Colors.transparent,
+                                  child: InkWell(
+                                    borderRadius: BorderRadius.circular(8),
+                                    onTap: () => onSubItemTap(item, sub),
+                                    child: Container(
+                                      padding: const EdgeInsets.symmetric(
+                                          horizontal: 12, vertical: 9),
+                                      decoration: BoxDecoration(
+                                        color: isSubSelected
+                                            ? Colors.white.withValues(alpha: 0.18)
+                                            : Colors.transparent,
+                                        borderRadius: BorderRadius.circular(8),
+                                      ),
+                                      child: Row(
+                                        children: [
+                                          Icon(
+                                            sub.icon,
+                                            size: 16,
+                                            color: isSubSelected
+                                                ? _gold
+                                                : Colors.white54,
+                                          ),
+                                          const SizedBox(width: 10),
+                                          Expanded(
+                                            child: Text(
+                                              sub.label,
+                                              style: TextStyle(
+                                                color: isSubSelected
+                                                    ? Colors.white
+                                                    : Colors.white70,
+                                                fontSize: 12.5,
+                                                fontWeight: isSubSelected
+                                                    ? FontWeight.w600
+                                                    : FontWeight.w400,
+                                              ),
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              );
+                            }).toList(),
+                          ),
+                        ),
+                    ],
                   ),
                 );
               },
@@ -406,14 +963,26 @@ class _Sidebar extends StatelessWidget {
   }
 }
 
-String _roleBadge(String? role) {
+String _roleBadge(String? role, {String? divisi, String? activeAreaKerja}) {
   switch (role) {
     case 'owner':
       return '★ OWNER';
     case 'admin':
       return '⚙ ADMIN';
     case 'karyawan':
-      return '☕ BARISTA';
+      final area = (activeAreaKerja != null && activeAreaKerja.isNotEmpty)
+          ? activeAreaKerja
+          : divisi;
+      switch (area) {
+        case 'kitchen':
+          return '🍳 KITCHEN';
+        case 'bar':
+          return '☕ BAR / BARISTA';
+        case 'kasir':
+          return '🧾 KASIR';
+        default:
+          return '👤 KARYAWAN';
+      }
     default:
       return role?.toUpperCase() ?? '';
   }
@@ -423,8 +992,13 @@ String _roleBadge(String? role) {
 class _DashboardContent extends StatelessWidget {
   final AuthProvider auth;
   final DashboardProvider dashboard;
+  final void Function(String groupId, [String? subId]) onNavigate;
 
-  const _DashboardContent({required this.auth, required this.dashboard});
+  const _DashboardContent({
+    required this.auth,
+    required this.dashboard,
+    required this.onNavigate,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -492,7 +1066,11 @@ class _DashboardContent extends StatelessWidget {
   Widget _buildRoleContent(BuildContext context) {
     switch (auth.role) {
       case 'karyawan':
-        return _KaryawanContent(dashboard: dashboard);
+        return _KaryawanContent(
+          auth: auth,
+          dashboard: dashboard,
+          onNavigate: onNavigate,
+        );
       case 'admin':
         return _AdminContent(dashboard: dashboard);
       case 'owner':
@@ -505,11 +1083,21 @@ class _DashboardContent extends StatelessWidget {
 
 // ─── Karyawan Dashboard Content ───────────────────────────────────────────────
 class _KaryawanContent extends StatelessWidget {
+  final AuthProvider auth;
   final DashboardProvider dashboard;
-  const _KaryawanContent({required this.dashboard});
+  final void Function(String groupId, [String? subId]) onNavigate;
+
+  const _KaryawanContent({
+    required this.auth,
+    required this.dashboard,
+    required this.onNavigate,
+  });
 
   @override
   Widget build(BuildContext context) {
+    final effectiveArea = dashboard.shiftAktif?.areaKerja ?? auth.divisiEfektif;
+    final isKasir = effectiveArea == 'kasir';
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -517,16 +1105,37 @@ class _KaryawanContent extends StatelessWidget {
         _ShiftCard(shift: dashboard.shiftAktif),
         const SizedBox(height: 20),
         // Quick actions
-        if (dashboard.shiftAktif != null) ...[
-          const _SectionTitle('Aksi Cepat'),
-          const SizedBox(height: 12),
-          _QuickActions(shift: dashboard.shiftAktif!),
-          const SizedBox(height: 20),
-        ],
-        // Laporan shift
-        const _SectionTitle('Laporan Shift Aktif'),
+        const _SectionTitle('Aksi Cepat'),
         const SizedBox(height: 12),
-        _LaporanShiftCard(laporan: dashboard.laporanShift),
+        if (dashboard.shiftAktif != null)
+          _QuickActions(
+            shift: dashboard.shiftAktif!,
+            onNavigate: onNavigate,
+          )
+        else
+          _NoShiftQuickActions(
+            effectiveArea: effectiveArea,
+            onNavigate: onNavigate,
+          ),
+        const SizedBox(height: 20),
+        if (isKasir) ...[
+          const _SectionTitle('Laporan Shift Aktif'),
+          const SizedBox(height: 12),
+          _LaporanShiftCard(laporan: dashboard.laporanShift),
+        ] else ...[
+          _SectionTitle(
+            effectiveArea == 'kitchen' ? 'Ruang Kerja Kitchen' : 'Ruang Kerja Bar',
+          ),
+          const SizedBox(height: 12),
+          _ProduksiFocusCard(
+            area: effectiveArea,
+            onOpenKds: () => onNavigate(
+              effectiveArea == 'kitchen' ? 'kds_kitchen' : 'kds_bar',
+            ),
+            onOpenStok: () => onNavigate('stok_group', 'stok_gudang'),
+            onOpenAbsensi: () => onNavigate('kasir_jadwal_group', 'ksr_absensi_gps'),
+          ),
+        ],
         const SizedBox(height: 20),
         // Notifikasi
         const _SectionTitle('Notifikasi'),
@@ -646,7 +1255,7 @@ class _ShiftCard extends StatelessWidget {
           ),
           const SizedBox(height: 16),
           Text(
-            shift!.shift.toUpperCase(),
+            shift!.shift.replaceAll('_', ' ').toUpperCase(),
             style: GoogleFonts.outfit(
               color: Colors.white,
               fontSize: 22,
@@ -699,7 +1308,12 @@ class _ShiftChip extends StatelessWidget {
 
 class _QuickActions extends StatelessWidget {
   final ShiftAktif shift;
-  const _QuickActions({required this.shift});
+  final void Function(String groupId, [String? subId]) onNavigate;
+
+  const _QuickActions({
+    required this.shift,
+    required this.onNavigate,
+  });
 
   Future<void> _jalankanOpname(BuildContext context, TipeOpname tipe) async {
     final dashboard = context.read<DashboardProvider>();
@@ -709,57 +1323,202 @@ class _QuickActions extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isProduksi = shift.areaKerja == 'bar' || shift.areaKerja == 'kitchen';
+    final isKitchen = shift.areaKerja == 'kitchen';
+
     return Wrap(
       spacing: 12,
       runSpacing: 12,
       children: [
         _ActionButton(
           icon: Icons.fingerprint_rounded,
-          label: 'Absen Masuk',
-          color: const Color(0xFF10B981),
-          onTap: () {},
+          label: shift.sudahAbsenMasuk && !shift.sudahAbsenPulang ? 'Absen Pulang' : 'Absen Masuk',
+          color: shift.sudahAbsenMasuk && !shift.sudahAbsenPulang ? const Color(0xFFEF4444) : const Color(0xFF10B981),
+          onTap: () async {
+            await Navigator.of(context).push(
+              MaterialPageRoute(builder: (_) => const KasirAbsensiScreen()),
+            );
+            if (context.mounted) {
+              context.read<DashboardProvider>().refresh();
+            }
+          },
         ),
-        if (!shift.opnameAwalSubmit)
-          _ActionButton(
-            icon: Icons.inventory_2_rounded,
-            label: 'Opname Awal Shift',
-            color: const Color(0xFFF59E0B),
-            onTap: () => _jalankanOpname(context, TipeOpname.awalShift),
-          )
-        else
-          _ActionButton(
-            icon: Icons.inventory_2_rounded,
-            label: 'Opname Akhir Shift',
-            color: const Color(0xFFF59E0B),
-            onTap: () => _jalankanOpname(context, TipeOpname.akhirShift),
-          ),
+        if (isProduksi)
+          if (!shift.opnameAwalSubmit)
+            _ActionButton(
+              icon: Icons.inventory_2_rounded,
+              label: 'Opname Awal Shift',
+              color: const Color(0xFFF59E0B),
+              onTap: () => _jalankanOpname(context, TipeOpname.awalShift),
+            )
+          else
+            _ActionButton(
+              icon: Icons.inventory_2_rounded,
+              label: 'Opname Akhir Shift',
+              color: const Color(0xFFF59E0B),
+              onTap: () => _jalankanOpname(context, TipeOpname.akhirShift),
+            ),
         if (shift.areaKerja == 'kasir')
           _ActionButton(
             icon: Icons.point_of_sale_rounded,
             label: 'Buka POS',
             color: _brown,
-            onTap: () {
-              if (!shift.opnameAwalSubmit) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text('Selesaikan opname awal shift dulu'),
-                  ),
-                );
-                return;
-              }
-              Navigator.of(context).push(
-                MaterialPageRoute(builder: (_) => const PosScreen()),
-              );
-            },
+            onTap: () => onNavigate('pos_group', 'pos_kasir'),
           ),
-        if (shift.areaKerja == 'bar' || shift.areaKerja == 'kitchen')
+        if (isProduksi)
           _ActionButton(
-            icon: Icons.kitchen_rounded,
-            label: 'Buka KDS',
+            icon: isKitchen ? Icons.soup_kitchen_rounded : Icons.local_cafe_rounded,
+            label: isKitchen ? 'Buka KDS Kitchen' : 'Buka KDS Bar',
             color: const Color(0xFF6366F1),
-            onTap: () {},
+            onTap: () => onNavigate(isKitchen ? 'kds_kitchen' : 'kds_bar'),
           ),
       ],
+    );
+  }
+}
+
+class _NoShiftQuickActions extends StatelessWidget {
+  final String effectiveArea;
+  final void Function(String groupId, [String? subId]) onNavigate;
+
+  const _NoShiftQuickActions({
+    required this.effectiveArea,
+    required this.onNavigate,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final isKitchen = effectiveArea == 'kitchen';
+    final isBar = effectiveArea == 'bar';
+
+    return Wrap(
+      spacing: 12,
+      runSpacing: 12,
+      children: [
+        _ActionButton(
+          icon: Icons.fingerprint_rounded,
+          label: 'Absensi GPS',
+          color: const Color(0xFF10B981),
+          onTap: () async {
+            await Navigator.of(context).push(
+              MaterialPageRoute(builder: (_) => const KasirAbsensiScreen()),
+            );
+            if (context.mounted) {
+              context.read<DashboardProvider>().refresh();
+            }
+          },
+        ),
+        _ActionButton(
+          icon: Icons.calendar_month_rounded,
+          label: 'Jadwal Kerja Saya',
+          color: _brown,
+          onTap: () => onNavigate('kasir_jadwal_group', 'ksr_jadwal_saya'),
+        ),
+        if (isKitchen || isBar)
+          _ActionButton(
+            icon: isKitchen ? Icons.soup_kitchen_rounded : Icons.local_cafe_rounded,
+            label: isKitchen ? 'Buka KDS Kitchen' : 'Buka KDS Bar',
+            color: const Color(0xFF6366F1),
+            onTap: () => onNavigate(isKitchen ? 'kds_kitchen' : 'kds_bar'),
+          )
+        else
+          _ActionButton(
+            icon: Icons.point_of_sale_rounded,
+            label: 'Buka POS',
+            color: _brown,
+            onTap: () => onNavigate('pos_group', 'pos_kasir'),
+          ),
+      ],
+    );
+  }
+}
+
+class _ProduksiFocusCard extends StatelessWidget {
+  final String area;
+  final VoidCallback onOpenKds;
+  final VoidCallback onOpenStok;
+  final VoidCallback onOpenAbsensi;
+
+  const _ProduksiFocusCard({
+    required this.area,
+    required this.onOpenKds,
+    required this.onOpenStok,
+    required this.onOpenAbsensi,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final isKitchen = area == 'kitchen';
+    return _Card(
+      child: Padding(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: _brown.withValues(alpha: 0.08),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Icon(
+                    isKitchen ? Icons.soup_kitchen_rounded : Icons.local_cafe_rounded,
+                    color: _brown,
+                    size: 22,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        isKitchen ? 'Fokus Operasional Kitchen' : 'Fokus Operasional Bar',
+                        style: GoogleFonts.outfit(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w700,
+                          color: const Color(0xFF1A1A1A),
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        isKitchen
+                            ? 'Pantau antrian masak realtime di KDS Kitchen, stok bahan dapur, serta jadwal & absensi.'
+                            : 'Pantau antrian minuman di KDS Bar, stok bahan bar, serta jadwal & absensi.',
+                        style: const TextStyle(fontSize: 12.5, color: _textDim),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            Wrap(
+              spacing: 10,
+              runSpacing: 10,
+              children: [
+                OutlinedButton.icon(
+                  onPressed: onOpenKds,
+                  icon: const Icon(Icons.tv_rounded, size: 17),
+                  label: Text(isKitchen ? 'Antrian KDS Kitchen' : 'Antrian KDS Bar'),
+                ),
+                OutlinedButton.icon(
+                  onPressed: onOpenStok,
+                  icon: const Icon(Icons.warehouse_rounded, size: 17),
+                  label: const Text('Ambil Barang Gudang'),
+                ),
+                OutlinedButton.icon(
+                  onPressed: onOpenAbsensi,
+                  icon: const Icon(Icons.fingerprint_rounded, size: 17),
+                  label: const Text('Halaman Absensi'),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
     );
   }
 }
@@ -872,8 +1631,12 @@ class _EmptyNotifCard extends StatelessWidget {
             Icon(Icons.notifications_none_rounded,
                 color: Colors.grey, size: 24),
             SizedBox(width: 12),
-            Text('Tidak ada notifikasi baru',
-                style: TextStyle(color: _textDim)),
+            Expanded(
+              child: Text(
+                'Tidak ada notifikasi baru',
+                style: TextStyle(color: _textDim),
+              ),
+            ),
           ],
         ),
       ),
@@ -882,148 +1645,46 @@ class _EmptyNotifCard extends StatelessWidget {
 }
 
 // ─── Admin Dashboard Content ──────────────────────────────────────────────────
-class _AdminContent extends StatefulWidget {
+class _AdminContent extends StatelessWidget {
   final DashboardProvider dashboard;
   const _AdminContent({required this.dashboard});
-
-  @override
-  State<_AdminContent> createState() => _AdminContentState();
-}
-
-class _AdminContentState extends State<_AdminContent> {
-  DateTimeRange? _selectedDateRange;
-  TimeOfDay? _selectedTime;
 
   @override
   Widget build(BuildContext context) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Row(
-          children: [
-            Expanded(
-              child: OutlinedButton.icon(
-                style: OutlinedButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(vertical: 12),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                ),
-                icon: const Icon(Icons.date_range_rounded, size: 20),
-                label: FittedBox(
-                  fit: BoxFit.scaleDown,
-                  child: Text(
-                    _selectedDateRange != null 
-                      ? '${DateFormat('dd MMM').format(_selectedDateRange!.start)} - ${DateFormat('dd MMM').format(_selectedDateRange!.end)}'
-                      : 'Rentang Tanggal',
-                    style: const TextStyle(fontSize: 13),
-                  ),
-                ),
-                onPressed: () async {
-                  final range = await showDateRangePicker(
-                    context: context,
-                    firstDate: DateTime(2020),
-                    lastDate: DateTime.now(),
-                    initialDateRange: _selectedDateRange,
-                    builder: (context, child) {
-                      return Theme(
-                        data: Theme.of(context).copyWith(
-                          colorScheme: const ColorScheme.light(
-                            primary: Color(0xFF1B4332), // _brown equivalent / app primary
-                            onPrimary: Colors.white,
-                            onSurface: Colors.black,
-                          ),
-                        ),
-                        child: child!,
-                      );
-                    },
-                  );
-                  if (range != null) {
-                    setState(() => _selectedDateRange = range);
-                  }
-                },
-              ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: OutlinedButton.icon(
-                style: OutlinedButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(vertical: 12),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                ),
-                icon: const Icon(Icons.access_time_rounded, size: 20),
-                label: FittedBox(
-                  fit: BoxFit.scaleDown,
-                  child: Text(
-                    _selectedTime != null 
-                      ? _selectedTime!.format(context)
-                      : 'Waktu Tertentu',
-                    style: const TextStyle(fontSize: 13),
-                  ),
-                ),
-                onPressed: () async {
-                  final time = await showTimePicker(
-                    context: context,
-                    initialTime: _selectedTime ?? TimeOfDay.now(),
-                    builder: (context, child) {
-                      return Theme(
-                        data: Theme.of(context).copyWith(
-                          colorScheme: const ColorScheme.light(
-                            primary: Color(0xFF1B4332),
-                            onPrimary: Colors.white,
-                            onSurface: Colors.black,
-                          ),
-                        ),
-                        child: child!,
-                      );
-                    },
-                  );
-                  if (time != null) {
-                    setState(() => _selectedTime = time);
-                  }
-                },
-              ),
-            ),
-            if (_selectedDateRange != null || _selectedTime != null)
-              Padding(
-                padding: const EdgeInsets.only(left: 8.0),
-                child: IconButton(
-                  icon: const Icon(Icons.clear_rounded, color: Colors.grey),
-                  onPressed: () {
-                    setState(() {
-                      _selectedDateRange = null;
-                      _selectedTime = null;
-                    });
-                  },
-                ),
-              ),
-          ],
-        ),
+        AdminPeriodFilterBar(dashboard: dashboard),
         const SizedBox(height: 16),
-        // Summary cards row
-        _SummaryCards(summary: widget.dashboard.adminSummary),
-        const SizedBox(height: 24),
-        // Two-column layout for stok + approvals
+        AdminKpiSection(dashboard: dashboard),
+        const SizedBox(height: 16),
+        AdminSalesChartCard(dashboard: dashboard),
+        const SizedBox(height: 20),
         LayoutBuilder(
           builder: (context, constraints) {
-            if (constraints.maxWidth > 700) {
+            if (constraints.maxWidth >= 900) {
               return Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Expanded(
-                    child: Column(
-                      children: [
-                        const _SectionTitle('Stok Menipis'),
-                        const SizedBox(height: 12),
-                        _StokMenipisCard(items: widget.dashboard.stokMenipis),
-                      ],
-                    ),
+                    flex: 3,
+                    child: AdminEmployeeBehaviorCard(dashboard: dashboard),
                   ),
                   const SizedBox(width: 20),
                   Expanded(
+                    flex: 2,
                     child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        const _SectionTitle('Approval Menunggu'),
+                        _SectionTitle(
+                            'Approval Menunggu (${dashboard.pendingApprovals.length})'),
                         const SizedBox(height: 12),
-                        _ApprovalCard(items: widget.dashboard.pendingApprovals),
+                        _ApprovalCard(items: dashboard.pendingApprovals),
+                        const SizedBox(height: 20),
+                        _SectionTitle(
+                            'Stok Menipis (${dashboard.stokMenipis.length})'),
+                        const SizedBox(height: 12),
+                        _StokMenipisCard(items: dashboard.stokMenipis),
                       ],
                     ),
                   ),
@@ -1033,132 +1694,22 @@ class _AdminContentState extends State<_AdminContent> {
             return Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const _SectionTitle('Stok Menipis'),
-                const SizedBox(height: 12),
-                _StokMenipisCard(items: widget.dashboard.stokMenipis),
+                AdminEmployeeBehaviorCard(dashboard: dashboard),
                 const SizedBox(height: 20),
-                const _SectionTitle('Approval Menunggu'),
+                _SectionTitle(
+                    'Stok Menipis (${dashboard.stokMenipis.length})'),
                 const SizedBox(height: 12),
-                _ApprovalCard(items: widget.dashboard.pendingApprovals),
+                _StokMenipisCard(items: dashboard.stokMenipis),
+                const SizedBox(height: 20),
+                _SectionTitle(
+                    'Approval Menunggu (${dashboard.pendingApprovals.length})'),
+                const SizedBox(height: 12),
+                _ApprovalCard(items: dashboard.pendingApprovals),
               ],
             );
           },
         ),
       ],
-    );
-  }
-}
-
-class _SummaryCards extends StatelessWidget {
-  final AdminSummary? summary;
-  const _SummaryCards({required this.summary});
-
-  @override
-  Widget build(BuildContext context) {
-    final s = summary;
-    final isMobile = MediaQuery.of(context).size.width < 700;
-    return GridView.count(
-      crossAxisCount: isMobile ? 2 : 4,
-      shrinkWrap: true,
-      physics: const NeverScrollableScrollPhysics(),
-      crossAxisSpacing: 16,
-      mainAxisSpacing: 16,
-      childAspectRatio: isMobile ? 1.3 : 1.6,
-      children: [
-        _SummaryCard(
-          label: 'Total Penjualan',
-          value: _idr.format(s?.totalPenjualan ?? 0),
-          icon: Icons.trending_up_rounded,
-          color: const Color(0xFF10B981),
-        ),
-        _SummaryCard(
-          label: 'Profit Harian',
-          value: _idr.format(s?.profitHarian ?? 0),
-          icon: Icons.savings_rounded,
-          color: const Color(0xFF6366F1),
-        ),
-        _SummaryCard(
-          label: 'Transaksi',
-          value: '${s?.jumlahTransaksi ?? 0}',
-          icon: Icons.receipt_rounded,
-          color: _brown,
-        ),
-        _SummaryCard(
-          label: 'Approval Pending',
-          value: '${s?.pendingApprovals ?? 0}',
-          icon: Icons.pending_actions_rounded,
-          color: const Color(0xFFF59E0B),
-        ),
-      ],
-    );
-  }
-}
-
-class _SummaryCard extends StatelessWidget {
-  final String label;
-  final String value;
-  final IconData icon;
-  final Color color;
-
-  const _SummaryCard({
-    required this.label,
-    required this.value,
-    required this.icon,
-    required this.color,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(18),
-      decoration: BoxDecoration(
-        color: _surface,
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-              color: Colors.black.withValues(alpha: 0.05),
-              blurRadius: 8,
-              offset: const Offset(0, 2))
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Expanded(
-                child: Text(label,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                        color: _textDim,
-                        fontSize: 12,
-                        fontWeight: FontWeight.w500)),
-              ),
-              const SizedBox(width: 4),
-              Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: color.withValues(alpha: 0.1),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Icon(icon, color: color, size: 16),
-              ),
-            ],
-          ),
-          Text(
-            value,
-            style: GoogleFonts.outfit(
-              fontSize: 20,
-              fontWeight: FontWeight.w700,
-              color: const Color(0xFF1A1A1A),
-            ),
-            overflow: TextOverflow.ellipsis,
-          ),
-        ],
-      ),
     );
   }
 }
@@ -1178,7 +1729,10 @@ class _StokMenipisCard extends StatelessWidget {
               Icon(Icons.check_circle_rounded,
                   color: Color(0xFF10B981), size: 20),
               SizedBox(width: 12),
-              Text('Semua stok aman', style: TextStyle(color: _textDim)),
+              Expanded(
+                child: Text('Semua stok aman',
+                    style: TextStyle(color: _textDim)),
+              ),
             ],
           ),
         ),
@@ -1228,8 +1782,10 @@ class _ApprovalCard extends StatelessWidget {
               Icon(Icons.check_circle_rounded,
                   color: Color(0xFF10B981), size: 20),
               SizedBox(width: 12),
-              Text('Tidak ada approval menunggu',
-                  style: TextStyle(color: _textDim)),
+              Expanded(
+                child: Text('Tidak ada approval menunggu',
+                    style: TextStyle(color: _textDim)),
+              ),
             ],
           ),
         ),
@@ -1266,7 +1822,7 @@ class _ApprovalTileState extends State<_ApprovalTile> {
           style:
               const TextStyle(fontSize: 14, fontWeight: FontWeight.w500)),
       subtitle: Text(
-        '${_typeLabel(widget.item.type)} · ${widget.item.tanggal}',
+        '${_typeLabel(widget.item.type)} · ${widget.item.tanggal}${widget.item.keterangan.isNotEmpty ? '\nAlasan: ${widget.item.keterangan}' : ''}',
         style: const TextStyle(fontSize: 12, color: _textDim),
       ),
       dense: true,
@@ -1318,6 +1874,10 @@ class _ApprovalTileState extends State<_ApprovalTile> {
         icon = Icons.access_time_rounded;
         color = const Color(0xFFF59E0B);
         break;
+      case 'request_off':
+        icon = Icons.event_busy_rounded;
+        color = Colors.deepOrange;
+        break;
       default:
         icon = Icons.beach_access_rounded;
         color = Colors.blue;
@@ -1340,6 +1900,8 @@ class _ApprovalTileState extends State<_ApprovalTile> {
         return 'Izin Telat';
       case 'izin_tidak_masuk':
         return 'Izin Tidak Masuk';
+      case 'request_off':
+        return 'Request Off (Libur)';
       default:
         return type;
     }
@@ -1427,17 +1989,27 @@ class _MobileLayout extends StatelessWidget {
   final AuthProvider auth;
   final DashboardProvider dashboard;
   final List<_NavItem> navItems;
-  final int selectedIndex;
+  final String selectedGroupId;
+  final String? selectedSubId;
+  final String activePageLabel;
+  final Set<String> expandedGroupIds;
   final Widget? currentPage;
-  final ValueChanged<int> onNavTap;
+  final ValueChanged<_NavItem> onGroupTap;
+  final void Function(_NavItem, _NavSubItem) onSubItemTap;
+  final void Function(String groupId, [String? subId]) onNavigate;
 
   const _MobileLayout({
     required this.auth,
     required this.dashboard,
     required this.navItems,
-    required this.selectedIndex,
+    required this.selectedGroupId,
+    required this.selectedSubId,
+    required this.activePageLabel,
+    required this.expandedGroupIds,
     required this.currentPage,
-    required this.onNavTap,
+    required this.onGroupTap,
+    required this.onSubItemTap,
+    required this.onNavigate,
   });
 
   @override
@@ -1447,14 +2019,27 @@ class _MobileLayout extends StatelessWidget {
       appBar: AppBar(
         backgroundColor: _brown,
         foregroundColor: Colors.white,
-        title: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+        elevation: 0,
+        title: Row(
           children: [
-            Text(auth.nama ?? 'User',
-                style: GoogleFonts.outfit(
-                    fontSize: 16, fontWeight: FontWeight.w600)),
-            Text(_roleBadge(auth.role),
-                style: const TextStyle(fontSize: 11, color: Colors.white70)),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    activePageLabel,
+                    style: GoogleFonts.outfit(
+                        fontSize: 16, fontWeight: FontWeight.w700),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  Text(
+                    '${auth.nama ?? 'User'} · ${_roleBadge(auth.role, divisi: auth.divisi, activeAreaKerja: dashboard.shiftAktif?.areaKerja)}',
+                    style: const TextStyle(fontSize: 11, color: Colors.white70),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ],
+              ),
+            ),
           ],
         ),
         actions: [
@@ -1466,10 +2051,16 @@ class _MobileLayout extends StatelessWidget {
                   IconButton(
                     icon: const Icon(Icons.notifications_rounded),
                     onPressed: () {
-                      Navigator.push(context, MaterialPageRoute(builder: (_) => const NotificationScreen()));
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                            builder: (_) => const NotificationScreen()),
+                      );
                     },
                   ),
-                  if (notifProv.hasUnread || (auth.role == 'admin' && (dashboard.adminSummary?.pendingApprovals ?? 0) > 0))
+                  if (notifProv.hasUnread ||
+                      (auth.role == 'admin' &&
+                          (dashboard.adminSummary?.pendingApprovals ?? 0) > 0))
                     Positioned(
                       right: 8,
                       top: 8,
@@ -1486,53 +2077,262 @@ class _MobileLayout extends StatelessWidget {
               );
             },
           ),
-
+          const SizedBox(width: 4),
         ],
       ),
       drawer: Drawer(
-        child: Column(
-          children: [
-            UserAccountsDrawerHeader(
-              decoration: const BoxDecoration(color: _brown),
-              accountName: Text(auth.nama ?? '',
-                  style: GoogleFonts.outfit(fontWeight: FontWeight.w600)),
-              accountEmail: Text(_roleBadge(auth.role)),
-              currentAccountPicture: CircleAvatar(
-                backgroundColor: _gold,
-                child: Text(
-                  (auth.nama ?? '?')[0].toUpperCase(),
-                  style: const TextStyle(
-                      color: _brown, fontWeight: FontWeight.bold, fontSize: 20),
+        backgroundColor: Colors.white,
+        child: StatefulBuilder(
+          builder: (drawerCtx, setDrawerState) {
+            return Column(
+              children: [
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.fromLTRB(24, 48, 24, 24),
+                  decoration: const BoxDecoration(color: _brown),
+                  child: Row(
+                    children: [
+                      CircleAvatar(
+                        radius: 24,
+                        backgroundColor: _gold,
+                        child: Text(
+                          (auth.nama ?? '?')[0].toUpperCase(),
+                          style: const TextStyle(
+                            color: _brown,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 20,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 14),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              auth.nama ?? 'User',
+                              style: GoogleFonts.outfit(
+                                color: Colors.white,
+                                fontSize: 17,
+                                fontWeight: FontWeight.w700,
+                              ),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              _roleBadge(
+                                auth.role,
+                                divisi: auth.divisi,
+                                activeAreaKerja: dashboard.shiftAktif?.areaKerja,
+                              ),
+                              style: const TextStyle(
+                                color: _gold,
+                                fontSize: 11.5,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
-              ),
-            ),
-            Expanded(
-              child: ListView.builder(
-                itemCount: navItems.length,
-                itemBuilder: (_, i) => ListTile(
-                  leading: Icon(navItems[i].icon),
-                  title: Text(navItems[i].label),
-                  selected: i == selectedIndex,
-                  selectedTileColor: _brown.withValues(alpha: 0.08),
-                  selectedColor: _brown,
-                  onTap: () {
-                    Navigator.pop(context);
-                    onNavTap(i);
-                  },
+                Expanded(
+                  child: ListView.builder(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 14, vertical: 14),
+                    itemCount: navItems.length,
+                    itemBuilder: (_, i) {
+                      final item = navItems[i];
+                      final hasChildren = item.children.isNotEmpty;
+                      final isGroupSelected = item.id == selectedGroupId;
+                      final isExpanded = expandedGroupIds.contains(item.id);
+
+                      return Padding(
+                        padding: const EdgeInsets.only(bottom: 6),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            Material(
+                              color: Colors.transparent,
+                              child: InkWell(
+                                borderRadius: BorderRadius.circular(12),
+                                onTap: () {
+                                  if (!hasChildren) {
+                                    Navigator.pop(context);
+                                    onGroupTap(item);
+                                  } else {
+                                    onGroupTap(item);
+                                    setDrawerState(() {});
+                                  }
+                                },
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 14, vertical: 12),
+                                  decoration: BoxDecoration(
+                                    color: (isGroupSelected && !hasChildren)
+                                        ? _brown.withValues(alpha: 0.1)
+                                        : (isGroupSelected && hasChildren)
+                                            ? _brown.withValues(alpha: 0.05)
+                                            : Colors.transparent,
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                  child: Row(
+                                    children: [
+                                      Icon(
+                                        item.icon,
+                                        size: 20,
+                                        color: isGroupSelected
+                                            ? _brown
+                                            : Colors.grey.shade700,
+                                      ),
+                                      const SizedBox(width: 14),
+                                      Expanded(
+                                        child: Text(
+                                          item.label,
+                                          style: GoogleFonts.outfit(
+                                            fontSize: 14,
+                                            fontWeight: isGroupSelected
+                                                ? FontWeight.w700
+                                                : FontWeight.w600,
+                                            color: isGroupSelected
+                                                ? _brown
+                                                : const Color(0xFF2D312E),
+                                          ),
+                                        ),
+                                      ),
+                                      if (hasChildren)
+                                        Icon(
+                                          isExpanded
+                                              ? Icons.keyboard_arrow_up_rounded
+                                              : Icons
+                                                  .keyboard_arrow_down_rounded,
+                                          size: 20,
+                                          color: isGroupSelected
+                                              ? _brown
+                                              : Colors.grey.shade500,
+                                        ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            ),
+                            if (hasChildren && isExpanded)
+                              Padding(
+                                padding: const EdgeInsets.only(
+                                    left: 18, top: 4, bottom: 4),
+                                child: Container(
+                                  decoration: const BoxDecoration(
+                                    border: Border(
+                                      left: BorderSide(
+                                          color: Color(0xFFE5EBE7), width: 2),
+                                    ),
+                                  ),
+                                  padding: const EdgeInsets.only(left: 10),
+                                  child: Column(
+                                    children: item.children.map((sub) {
+                                      final isSubSelected =
+                                          sub.id == selectedSubId;
+                                      return Padding(
+                                        padding:
+                                            const EdgeInsets.only(bottom: 2),
+                                        child: Material(
+                                          color: Colors.transparent,
+                                          child: InkWell(
+                                            borderRadius:
+                                                BorderRadius.circular(10),
+                                            onTap: () {
+                                              Navigator.pop(context);
+                                              onSubItemTap(item, sub);
+                                            },
+                                            child: Container(
+                                              padding:
+                                                  const EdgeInsets.symmetric(
+                                                      horizontal: 12,
+                                                      vertical: 10),
+                                              decoration: BoxDecoration(
+                                                color: isSubSelected
+                                                    ? _brown.withValues(
+                                                        alpha: 0.1)
+                                                    : Colors.transparent,
+                                                borderRadius:
+                                                    BorderRadius.circular(10),
+                                              ),
+                                              child: Row(
+                                                children: [
+                                                  Icon(
+                                                    sub.icon,
+                                                    size: 17,
+                                                    color: isSubSelected
+                                                        ? _brown
+                                                        : Colors.grey.shade600,
+                                                  ),
+                                                  const SizedBox(width: 10),
+                                                  Expanded(
+                                                    child: Text(
+                                                      sub.label,
+                                                      style: GoogleFonts.outfit(
+                                                        fontSize: 13,
+                                                        fontWeight:
+                                                            isSubSelected
+                                                                ? FontWeight
+                                                                    .w700
+                                                                : FontWeight
+                                                                    .w500,
+                                                        color: isSubSelected
+                                                            ? _brown
+                                                            : Colors
+                                                                .grey.shade800,
+                                                      ),
+                                                    ),
+                                                  ),
+                                                ],
+                                              ),
+                                            ),
+                                          ),
+                                        ),
+                                      );
+                                    }).toList(),
+                                  ),
+                                ),
+                              ),
+                          ],
+                        ),
+                      );
+                    },
+                  ),
                 ),
-              ),
-            ),
-            ListTile(
-              leading: const Icon(Icons.logout),
-              title: const Text('Logout'),
-              onTap: () => auth.logout(),
-            ),
-            const SizedBox(height: 16),
-          ],
+                const Divider(height: 1, color: Color(0xFFE5EBE7)),
+                Padding(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                  child: ListTile(
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12)),
+                    leading: Icon(Icons.logout_rounded,
+                        color: Colors.red.shade700, size: 20),
+                    title: Text(
+                      'Keluar Akun (Logout)',
+                      style: GoogleFonts.outfit(
+                        fontSize: 13.5,
+                        fontWeight: FontWeight.w600,
+                        color: Colors.red.shade700,
+                      ),
+                    ),
+                    onTap: () => auth.logout(),
+                  ),
+                ),
+              ],
+            );
+          },
         ),
       ),
       body: currentPage ??
-          _DashboardContent(auth: auth, dashboard: dashboard),
+          _DashboardContent(
+            auth: auth,
+            dashboard: dashboard,
+            onNavigate: onNavigate,
+          ),
     );
   }
 }
@@ -1549,9 +2349,10 @@ class _Card extends StatelessWidget {
       decoration: BoxDecoration(
         color: _surface,
         borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: const Color(0xFFE5EBE7)),
         boxShadow: [
           BoxShadow(
-              color: Colors.black.withValues(alpha: 0.04),
+              color: Colors.black.withValues(alpha: 0.03),
               blurRadius: 8,
               offset: const Offset(0, 2))
         ],

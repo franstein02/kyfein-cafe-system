@@ -1,5 +1,6 @@
-from typing import List
-from fastapi import APIRouter, Depends, HTTPException, status
+from typing import List, Optional, Literal
+from fastapi import APIRouter, Depends, HTTPException, Query, status
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 
@@ -11,13 +12,27 @@ from app.schemas.karyawan import KaryawanCreate, KaryawanUpdate, KaryawanOut
 
 router = APIRouter()
 
+
+def _normalize_optional_str(value: Optional[str]) -> Optional[str]:
+    if value is None:
+        return None
+    cleaned = value.strip()
+    return cleaned if cleaned else None
+
+
+@router.get("", response_model=List[KaryawanOut])
 @router.get("/", response_model=List[KaryawanOut])
 async def list_karyawan(
+    divisi: Optional[Literal['kasir', 'bar', 'kitchen']] = Query(default=None),
     db: AsyncSession = Depends(get_db),
     current_user: Karyawan = Depends(require_roles(["admin"]))
 ):
-    result = await db.execute(select(Karyawan).order_by(Karyawan.nama))
+    stmt = select(Karyawan)
+    if divisi is not None:
+        stmt = stmt.where(Karyawan.divisi == divisi)
+    result = await db.execute(stmt.order_by(Karyawan.nama))
     return result.scalars().all()
+
 
 @router.post("/", response_model=KaryawanOut)
 async def create_karyawan(
@@ -27,27 +42,48 @@ async def create_karyawan(
 ):
     if karyawan_in.role == "admin":
         raise HTTPException(status_code=403, detail="Tidak dapat membuat akun admin melalui API")
-        
-    existing = await db.execute(select(Karyawan).where(Karyawan.email == karyawan_in.email))
-    if existing.scalars().first():
-        raise HTTPException(status_code=400, detail="Email sudah terdaftar")
+
+    email = karyawan_in.email.strip().lower()
+    nama = karyawan_in.nama.strip()
+    nomor_hp = _normalize_optional_str(karyawan_in.nomor_hp)
+    divisi = karyawan_in.divisi or "kasir"
+
+    if not nama:
+        raise HTTPException(status_code=400, detail="Nama karyawan tidak boleh kosong")
+    if not karyawan_in.password or not karyawan_in.password.strip():
+        raise HTTPException(status_code=400, detail="Password wajib diisi")
+
+    existing_email = await db.execute(select(Karyawan).where(Karyawan.email == email))
+    if existing_email.scalars().first():
+        raise HTTPException(status_code=409, detail="Email sudah terdaftar")
+
+    if nomor_hp is not None:
+        existing_hp = await db.execute(select(Karyawan).where(Karyawan.nomor_hp == nomor_hp))
+        if existing_hp.scalars().first():
+            raise HTTPException(status_code=409, detail="Nomor HP sudah terdaftar")
 
     if karyawan_in.foto_profile_id:
         await validate_and_claim_foto(db, karyawan_in.foto_profile_id, current_user.id, "profil", required=False)
 
     new_karyawan = Karyawan(
-        nama=karyawan_in.nama,
-        email=karyawan_in.email,
-        nomor_hp=karyawan_in.nomor_hp,
+        nama=nama,
+        email=email,
+        nomor_hp=nomor_hp,
         role=karyawan_in.role,
+        divisi=divisi,
         password=get_password_hash(karyawan_in.password),
         foto_profile_id=karyawan_in.foto_profile_id,
         status_aktif=karyawan_in.status_aktif
     )
     db.add(new_karyawan)
-    await db.commit()
+    try:
+        await db.commit()
+    except IntegrityError:
+        await db.rollback()
+        raise HTTPException(status_code=409, detail="Email atau nomor HP sudah terdaftar")
     await db.refresh(new_karyawan)
     return new_karyawan
+
 
 @router.put("/{karyawan_id}", response_model=KaryawanOut)
 async def update_karyawan(
@@ -78,15 +114,45 @@ async def update_karyawan(
         target.foto_profile_id = karyawan_in.foto_profile_id
 
     if karyawan_in.nama is not None:
-        target.nama = karyawan_in.nama
+        cleaned_nama = karyawan_in.nama.strip()
+        if not cleaned_nama:
+            raise HTTPException(status_code=400, detail="Nama karyawan tidak boleh kosong")
+        target.nama = cleaned_nama
+
+    if karyawan_in.email is not None and current_user.role == "admin":
+        new_email = karyawan_in.email.strip().lower()
+        if new_email != target.email:
+            existing_email = await db.execute(
+                select(Karyawan).where(Karyawan.email == new_email, Karyawan.id != target.id)
+            )
+            if existing_email.scalars().first():
+                raise HTTPException(status_code=409, detail="Email sudah terdaftar")
+            target.email = new_email
+
     if karyawan_in.nomor_hp is not None:
-        target.nomor_hp = karyawan_in.nomor_hp
-    if karyawan_in.password:
+        new_hp = _normalize_optional_str(karyawan_in.nomor_hp)
+        if new_hp is not None and new_hp != target.nomor_hp:
+            existing_hp = await db.execute(
+                select(Karyawan).where(Karyawan.nomor_hp == new_hp, Karyawan.id != target.id)
+            )
+            if existing_hp.scalars().first():
+                raise HTTPException(status_code=409, detail="Nomor HP sudah terdaftar")
+        target.nomor_hp = new_hp
+
+    if karyawan_in.divisi is not None and current_user.role == "admin":
+        target.divisi = karyawan_in.divisi
+
+    if karyawan_in.password is not None and karyawan_in.password.strip():
         target.password = get_password_hash(karyawan_in.password)
-    if karyawan_in.status_aktif is not None and current_user.role in ["admin"]:
+
+    if karyawan_in.status_aktif is not None and current_user.role == "admin":
         target.status_aktif = karyawan_in.status_aktif
 
-    await db.commit()
+    try:
+        await db.commit()
+    except IntegrityError:
+        await db.rollback()
+        raise HTTPException(status_code=409, detail="Email atau nomor HP sudah terdaftar")
     await db.refresh(target)
     return target
 

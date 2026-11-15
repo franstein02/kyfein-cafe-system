@@ -1,13 +1,18 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 import 'package:image_picker/image_picker.dart';
 import '../../providers/master_data_provider.dart';
 import 'package:intl/intl.dart';
 import '../../../../core/constants/api_endpoints.dart';
+import '../../../../core/theme/app_theme.dart';
+import '../widgets/kelola_karyawan_view.dart';
 
 class MasterDataScreen extends StatefulWidget {
-  const MasterDataScreen({super.key});
+  final int initialSection;
+
+  const MasterDataScreen({super.key, this.initialSection = 0});
 
   @override
   State<MasterDataScreen> createState() => _MasterDataScreenState();
@@ -30,13 +35,32 @@ class _ResepInputItem {
 class _MasterDataScreenState extends State<MasterDataScreen> {
   final _currencyFormat = NumberFormat.currency(locale: 'id_ID', symbol: 'Rp ', decimalDigits: 0);
   String _selectedKategoriId = 'Semua';
+  late int _currentSection;
+
+  static const List<(int, String, String, IconData)> _sections = [
+    (0, 'Menu & Resep POS', 'Kelola daftar menu, harga jual, resep BOM, dan ketersediaan POS', Icons.restaurant_menu_rounded),
+    (1, 'Kategori Menu', 'Kelola kategori menu dan routing area produksi KDS (Bar / Kitchen)', Icons.category_outlined),
+    (2, 'Master Bahan Baku', 'Kelola bahan baku, satuan, kemasan, batas minimum, dan HPP rata-rata', Icons.inventory_2_outlined),
+    (3, 'Kelola Karyawan', 'Buat, edit, dan atur divisi kerja (Kasir, Bar, Kitchen) serta status akun', Icons.badge_outlined),
+  ];
 
   @override
   void initState() {
     super.initState();
+    _currentSection = widget.initialSection.clamp(0, 3);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       context.read<MasterDataProvider>().loadData();
     });
+  }
+
+  @override
+  void didUpdateWidget(covariant MasterDataScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.initialSection != widget.initialSection) {
+      setState(() {
+        _currentSection = widget.initialSection.clamp(0, 3);
+      });
+    }
   }
 
   void _showMenuForm(BuildContext context, [MasterMenu? menu]) {
@@ -103,10 +127,18 @@ class _MasterDataScreenState extends State<MasterDataScreen> {
                       ),
                       const SizedBox(height: 16),
                       DropdownButtonFormField<String>(
+                        isExpanded: true,
                         decoration: const InputDecoration(labelText: 'Kategori'),
                         initialValue: kategoriId,
                         items: provider.categories.map((c) {
-                          return DropdownMenuItem(value: c.id, child: Text(c.nama));
+                          return DropdownMenuItem(
+                            value: c.id,
+                            child: Text(
+                              c.nama,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          );
                         }).toList(),
                         onChanged: (val) {
                           if (val != null) setState(() => kategoriId = val);
@@ -461,43 +493,184 @@ class _MasterDataScreenState extends State<MasterDataScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final currentMeta = _sections[_currentSection];
+
     return Scaffold(
-      body: Consumer<MasterDataProvider>(
-        builder: (context, provider, child) {
-          if (provider.isLoading && provider.menus.isEmpty) {
-            return const Center(child: CircularProgressIndicator());
-          }
-          
-          if (provider.errorMessage.isNotEmpty && provider.menus.isEmpty) {
-            return Center(child: Text(provider.errorMessage));
-          }
-
-          // Filter menus
-          final filteredMenus = _selectedKategoriId == 'Semua' 
-              ? provider.menus 
-              : provider.menus.where((m) => m.kategoriId == _selectedKategoriId).toList();
-
-          return Column(
-            children: [
-              // Filter categories
-              Container(
-                width: double.infinity,
-                color: Colors.white,
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-                child: SingleChildScrollView(
-                  scrollDirection: Axis.horizontal,
-                  child: Row(
-                    children: [
-                      _buildFilterChip('Semua', 'Semua'),
-                      ...provider.categories.map((c) => _buildFilterChip(c.id, c.nama)),
-                    ],
-                  ),
+      backgroundColor: AppTheme.backgroundColor,
+      body: Column(
+        children: [
+          // ── Minimalist Top Header with Dropdown Selector ───────────────────
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.fromLTRB(24, 18, 24, 18),
+            decoration: const BoxDecoration(
+              color: Colors.white,
+              border: Border(bottom: BorderSide(color: AppTheme.borderColor)),
+            ),
+            child: Center(
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 1040),
+                child: Wrap(
+                  alignment: WrapAlignment.spaceBetween,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  spacing: 16,
+                  runSpacing: 12,
+                  children: [
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          currentMeta.$2,
+                          style: GoogleFonts.outfit(
+                            fontSize: 20,
+                            fontWeight: FontWeight.w700,
+                            color: const Color(0xFF1A1D1B),
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          currentMeta.$3,
+                          style: TextStyle(fontSize: 12.5, color: Colors.grey.shade600),
+                        ),
+                      ],
+                    ),
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Flexible(
+                          child: ConstrainedBox(
+                            constraints: const BoxConstraints(maxWidth: 250),
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 2),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFF6F8F6),
+                                borderRadius: BorderRadius.circular(12),
+                                border: Border.all(color: AppTheme.borderColor),
+                              ),
+                              child: DropdownButtonHideUnderline(
+                                child: DropdownButton<int>(
+                                  value: _currentSection,
+                                  isExpanded: true,
+                                  icon: const Padding(
+                                    padding: EdgeInsets.only(left: 8),
+                                    child: Icon(
+                                      Icons.keyboard_arrow_down_rounded,
+                                      color: AppTheme.primaryColor,
+                                      size: 20,
+                                    ),
+                                  ),
+                                  style: GoogleFonts.outfit(
+                                    fontSize: 13.5,
+                                    fontWeight: FontWeight.w600,
+                                    color: AppTheme.primaryColor,
+                                  ),
+                                  items: _sections
+                                      .map(
+                                        (s) => DropdownMenuItem<int>(
+                                          value: s.$1,
+                                          child: Row(
+                                            children: [
+                                              Icon(s.$4, size: 17, color: AppTheme.primaryColor),
+                                              const SizedBox(width: 8),
+                                              Expanded(
+                                                child: Text(
+                                                  s.$2,
+                                                  maxLines: 1,
+                                                  overflow: TextOverflow.ellipsis,
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                      )
+                                      .toList(),
+                                  onChanged: (val) {
+                                    if (val != null) {
+                                      setState(() => _currentSection = val);
+                                    }
+                                  },
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        IconButton.outlined(
+                          onPressed: () => context.read<MasterDataProvider>().loadData(),
+                          icon: const Icon(Icons.refresh_rounded, size: 20),
+                          tooltip: 'Segarkan Data',
+                          style: IconButton.styleFrom(
+                            foregroundColor: AppTheme.primaryColor,
+                            side: const BorderSide(color: AppTheme.borderColor),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
                 ),
               ),
-              Expanded(
-                child: filteredMenus.isEmpty
-                    ? ListView(
-                        padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
+            ),
+          ),
+
+          // ── Content Area ───────────────────────────────────────────────────
+          Expanded(
+            child: Consumer<MasterDataProvider>(
+              builder: (context, provider, child) {
+                if (provider.isLoading && provider.menus.isEmpty && provider.categories.isEmpty) {
+                  return const Center(child: CircularProgressIndicator());
+                }
+
+                switch (_currentSection) {
+                  case 0:
+                    return _buildMenuTab(provider);
+                  case 1:
+                    return _buildKategoriTab(provider);
+                  case 2:
+                    return _buildBahanTab(provider);
+                  case 3:
+                    return const KelolaKaryawanView();
+                  default:
+                    return _buildMenuTab(provider);
+                }
+              },
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildMenuTab(MasterDataProvider provider) {
+    // Filter menus
+    final filteredMenus = _selectedKategoriId == 'Semua'
+        ? provider.menus
+        : provider.menus.where((m) => m.kategoriId == _selectedKategoriId).toList();
+
+    return Column(
+      children: [
+        // Filter categories
+        Container(
+          width: double.infinity,
+          color: Colors.white,
+          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+          child: SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Row(
+              children: [
+                _buildFilterChip('Semua', 'Semua'),
+                ...provider.categories.map((c) => _buildFilterChip(c.id, c.nama)),
+              ],
+            ),
+          ),
+        ),
+        Expanded(
+          child: filteredMenus.isEmpty
+              ? ListView(
+                  padding: const EdgeInsets.fromLTRB(24, 20, 24, 32),
                         children: [
                           _buildAddMenuBlock(),
                           const SizedBox(height: 48),
@@ -517,7 +690,7 @@ class _MasterDataScreenState extends State<MasterDataScreen> {
                         ],
                       )
                     : ListView.builder(
-                        padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
+                        padding: const EdgeInsets.fromLTRB(24, 20, 24, 32),
                         itemCount: filteredMenus.length + 1,
                         itemBuilder: (context, index) {
                           if (index == 0) {
@@ -703,9 +876,6 @@ class _MasterDataScreenState extends State<MasterDataScreen> {
           ),
         ),
       ],
-    );
-  },
-),
     );
   }
 
@@ -924,6 +1094,348 @@ class _MasterDataScreenState extends State<MasterDataScreen> {
           ),
         );
       },
+    );
+  }
+
+  // ── TAB 2: KATEGORI MENU (PROSES 3) ─────────────────────────────────────────
+  Widget _buildKategoriTab(MasterDataProvider provider) {
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(24, 20, 24, 32),
+      children: [
+        _buildActionBlock(
+          label: 'Tambah Kategori Menu Baru',
+          onTap: () => _showKategoriForm(context, provider),
+        ),
+        const SizedBox(height: 8),
+        if (provider.categories.isEmpty)
+          const Padding(
+            padding: EdgeInsets.all(32),
+            child: Center(child: Text('Belum ada kategori menu.')),
+          )
+        else
+          ...provider.categories.map((kat) {
+            final isKitchen = kat.areaProduksi == 'kitchen';
+            return Card(
+              margin: const EdgeInsets.only(bottom: 10),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              child: ListTile(
+                leading: CircleAvatar(
+                  backgroundColor: isKitchen ? Colors.orange.shade50 : Colors.blue.shade50,
+                  child: Icon(
+                    isKitchen ? Icons.soup_kitchen_rounded : Icons.local_cafe_rounded,
+                    color: isKitchen ? Colors.orange.shade800 : Colors.blue.shade800,
+                  ),
+                ),
+                title: Text(kat.nama, style: const TextStyle(fontWeight: FontWeight.bold)),
+                subtitle: Text(
+                  'Area Produksi KDS: ${kat.areaProduksi.toUpperCase()} • ${kat.statusAktif ? "Aktif" : "Nonaktif"}',
+                  style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+                ),
+                trailing: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Switch(
+                      value: kat.statusAktif,
+                      activeThumbColor: Colors.green,
+                      onChanged: (v) {
+                        provider.updateKategoriMenu(kat.id, {'status_aktif': v});
+                      },
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.edit_rounded, color: Colors.blue),
+                      onPressed: () => _showKategoriForm(context, provider, kat),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          }),
+      ],
+    );
+  }
+
+  void _showKategoriForm(
+    BuildContext context,
+    MasterDataProvider provider, [
+    MasterKategoriMenu? existing,
+  ]) {
+    final namaC = TextEditingController(text: existing?.nama ?? '');
+    String areaProduksi = existing?.areaProduksi ?? 'bar';
+
+    showDialog(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDialogState) => AlertDialog(
+          title: Text(existing != null ? 'Edit Kategori Menu' : 'Tambah Kategori Menu'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: namaC,
+                decoration: const InputDecoration(labelText: 'Nama Kategori Menu'),
+              ),
+              const SizedBox(height: 16),
+              DropdownButtonFormField<String>(
+                isExpanded: true,
+                decoration: const InputDecoration(labelText: 'Area Produksi (KDS)'),
+                initialValue: areaProduksi,
+                items: const [
+                  DropdownMenuItem(
+                    value: 'bar',
+                    child: Text(
+                      'BAR (Minuman / Coffee)',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                  DropdownMenuItem(
+                    value: 'kitchen',
+                    child: Text(
+                      'KITCHEN (Makanan / Dapur)',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ],
+                onChanged: (v) {
+                  if (v != null) setDialogState(() => areaProduksi = v);
+                },
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Batal')),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF1B4332),
+                foregroundColor: Colors.white,
+              ),
+              onPressed: () async {
+                final nama = namaC.text.trim();
+                if (nama.isEmpty) return;
+                bool ok;
+                if (existing != null) {
+                  ok = await provider.updateKategoriMenu(existing.id, {
+                    'nama': nama,
+                    'area_produksi': areaProduksi,
+                  });
+                } else {
+                  ok = await provider.createKategoriMenu({
+                    'nama': nama,
+                    'area_produksi': areaProduksi,
+                    'status_aktif': true,
+                  });
+                }
+                if (ctx.mounted) {
+                  Navigator.pop(ctx);
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text(ok
+                          ? 'Kategori menu berhasil disimpan'
+                          : 'Gagal menyimpan kategori menu'),
+                    ),
+                  );
+                }
+              },
+              child: const Text('Simpan'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // ── TAB 3: BAHAN BAKU (PROSES 3) ────────────────────────────────────────────
+  Widget _buildBahanTab(MasterDataProvider provider) {
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(24, 20, 24, 32),
+      children: [
+        _buildActionBlock(
+          label: 'Tambah Bahan Baku Baru',
+          onTap: () => _showBahanForm(context, provider),
+        ),
+        const SizedBox(height: 8),
+        if (provider.bahanList.isEmpty)
+          const Padding(
+            padding: EdgeInsets.all(32),
+            child: Center(child: Text('Belum ada master bahan baku.')),
+          )
+        else
+          ...provider.bahanList.map((b) {
+            return Card(
+              margin: const EdgeInsets.only(bottom: 10),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              child: ListTile(
+                leading: const CircleAvatar(
+                  backgroundColor: Color(0xFFE9F5E6),
+                  child: Icon(Icons.inventory_2_rounded, color: Color(0xFF1B4332)),
+                ),
+                title: Text(b.nama, style: const TextStyle(fontWeight: FontWeight.bold)),
+                subtitle: Text(
+                  'Satuan: ${b.satuan} • Isi/Kemasan: ${b.isiPerKemasan.toInt()} ${b.satuan} • Stok Min: ${b.stokMinimum.toInt()} ${b.satuan}\nHarga Rata-rata (HPP): ${_currencyFormat.format(b.hargaRataRata)} / ${b.satuan}',
+                  style: TextStyle(fontSize: 12, color: Colors.grey.shade600, height: 1.35),
+                ),
+                isThreeLine: true,
+                trailing: IconButton(
+                  icon: const Icon(Icons.edit_rounded, color: Colors.blue),
+                  onPressed: () => _showBahanForm(context, provider, b),
+                ),
+              ),
+            );
+          }),
+      ],
+    );
+  }
+
+  void _showBahanForm(
+    BuildContext context,
+    MasterDataProvider provider, [
+    MasterBahan? existing,
+  ]) {
+    final namaC = TextEditingController(text: existing?.nama ?? '');
+    final satuanC = TextEditingController(text: existing?.satuan ?? 'gram');
+    final isiC = TextEditingController(
+      text: existing != null ? existing.isiPerKemasan.toInt().toString() : '1000',
+    );
+    final minC = TextEditingController(
+      text: existing != null ? existing.stokMinimum.toInt().toString() : '500',
+    );
+    final hargaC = TextEditingController(
+      text: existing != null ? existing.hargaRataRata.toString() : '0',
+    );
+
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(existing != null ? 'Edit Bahan Baku' : 'Tambah Bahan Baku'),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: namaC,
+                decoration: const InputDecoration(labelText: 'Nama Bahan Baku'),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: satuanC,
+                decoration: const InputDecoration(
+                  labelText: 'Satuan Kecil (gram / ml / pcs)',
+                ),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: isiC,
+                keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                decoration: const InputDecoration(
+                  labelText: 'Isi per Kemasan Besar',
+                ),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: minC,
+                keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                decoration: const InputDecoration(
+                  labelText: 'Batas Stok Minimum (Peringatan Menipis)',
+                ),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: hargaC,
+                keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                decoration: const InputDecoration(
+                  labelText: 'Harga Rata-rata per Satuan Kecil (Rp)',
+                ),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Batal')),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF1B4332),
+              foregroundColor: Colors.white,
+            ),
+            onPressed: () async {
+              final nama = namaC.text.trim();
+              final satuan = satuanC.text.trim();
+              if (nama.isEmpty || satuan.isEmpty) return;
+              final payload = {
+                'nama': nama,
+                'satuan': satuan,
+                'isi_per_kemasan': double.tryParse(isiC.text.trim()) ?? 1.0,
+                'stok_minimum': double.tryParse(minC.text.trim()) ?? 0.0,
+                'harga_rata_rata': double.tryParse(hargaC.text.trim()) ?? 0.0,
+              };
+              final ok = existing != null
+                  ? await provider.updateBahan(existing.id, payload)
+                  : await provider.createBahan(payload);
+              if (ctx.mounted) {
+                Navigator.pop(ctx);
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text(ok
+                        ? 'Bahan baku berhasil disimpan'
+                        : 'Gagal menyimpan bahan baku'),
+                  ),
+                );
+              }
+            },
+            child: const Text('Simpan'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildActionBlock({required String label, required VoidCallback onTap}) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      decoration: BoxDecoration(
+        color: const Color(0xFF1B4332),
+        borderRadius: BorderRadius.circular(14),
+        boxShadow: [
+          BoxShadow(
+            color: const Color(0xFF1B4332).withValues(alpha: 0.2),
+            blurRadius: 8,
+            offset: const Offset(0, 3),
+          ),
+        ],
+      ),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(14),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 16),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(6),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withValues(alpha: 0.2),
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(Icons.add_rounded, color: Colors.white, size: 20),
+                ),
+                const SizedBox(width: 10),
+                Text(
+                  label,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 15,
+                    fontWeight: FontWeight.w600,
+                    letterSpacing: 0.3,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
     );
   }
 }

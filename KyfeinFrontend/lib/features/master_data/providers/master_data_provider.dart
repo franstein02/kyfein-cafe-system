@@ -39,20 +39,26 @@ class MasterBahan {
   final String id;
   final String nama;
   final String satuan;
-  final String? kategori;
+  final double isiPerKemasan;
+  final double stokMinimum;
+  final double hargaRataRata;
 
   MasterBahan({
     required this.id,
     required this.nama,
     required this.satuan,
-    this.kategori,
+    this.isiPerKemasan = 1.0,
+    this.stokMinimum = 0.0,
+    this.hargaRataRata = 0.0,
   });
 
   factory MasterBahan.fromJson(Map<String, dynamic> json) => MasterBahan(
         id: json['id'].toString(),
         nama: json['nama'] ?? '',
         satuan: json['satuan'] ?? '',
-        kategori: json['kategori'],
+        isiPerKemasan: double.tryParse(json['isi_per_kemasan']?.toString() ?? '1') ?? 1.0,
+        stokMinimum: double.tryParse(json['stok_minimum']?.toString() ?? '0') ?? 0.0,
+        hargaRataRata: double.tryParse(json['harga_rata_rata']?.toString() ?? '0') ?? 0.0,
       );
 }
 
@@ -105,12 +111,69 @@ class MasterMenu {
 class MasterKategoriMenu {
   final String id;
   final String nama;
+  final String areaProduksi; // bar | kitchen
+  final bool statusAktif;
 
-  MasterKategoriMenu({required this.id, required this.nama});
+  MasterKategoriMenu({
+    required this.id,
+    required this.nama,
+    this.areaProduksi = 'bar',
+    this.statusAktif = true,
+  });
 
   factory MasterKategoriMenu.fromJson(Map<String, dynamic> json) => MasterKategoriMenu(
         id: json['id'].toString(),
         nama: json['nama'] ?? '',
+        areaProduksi: (json['area_produksi'] ?? 'bar').toString(),
+        statusAktif: json['status_aktif'] ?? true,
+      );
+}
+
+class MasterKaryawan {
+  final String id;
+  final String nama;
+  final String email;
+  final String? nomorHp;
+  final String role;
+  final String? divisi;
+  final bool statusAktif;
+
+  MasterKaryawan({
+    required this.id,
+    required this.nama,
+    required this.email,
+    this.nomorHp,
+    required this.role,
+    this.divisi,
+    required this.statusAktif,
+  });
+
+  String get effectiveDivisi {
+    if (divisi == 'bar' || divisi == 'kitchen' || divisi == 'kasir') {
+      return divisi!;
+    }
+    return 'kasir';
+  }
+
+  String get divisiLabel {
+    switch (effectiveDivisi) {
+      case 'kitchen':
+        return 'Kitchen';
+      case 'bar':
+        return 'Bar / Barista';
+      default:
+        return 'Kasir';
+    }
+  }
+
+  factory MasterKaryawan.fromJson(Map<String, dynamic> json) => MasterKaryawan(
+        id: json['id'].toString(),
+        nama: (json['nama'] ?? '').toString(),
+        email: (json['email'] ?? '').toString(),
+        nomorHp: json['nomor_hp']?.toString(),
+        role: (json['role'] ?? 'karyawan').toString(),
+        divisi: json['divisi']?.toString(),
+        statusAktif: json['status_aktif'] ?? true,
       );
 }
 
@@ -122,12 +185,14 @@ class MasterDataProvider with ChangeNotifier {
   List<MasterMenu> _menus = [];
   List<MasterKategoriMenu> _categories = [];
   List<MasterBahan> _bahanList = [];
+  List<MasterKaryawan> _karyawanList = [];
 
   bool get isLoading => _isLoading;
   String get errorMessage => _errorMessage;
   List<MasterMenu> get menus => _menus;
   List<MasterKategoriMenu> get categories => _categories;
   List<MasterBahan> get bahanList => _bahanList;
+  List<MasterKaryawan> get karyawanList => _karyawanList;
 
   void updateAuth(AuthProvider auth) {
     _auth = auth;
@@ -137,6 +202,7 @@ class MasterDataProvider with ChangeNotifier {
       _menus = [];
       _categories = [];
       _bahanList = [];
+      _karyawanList = [];
       notifyListeners();
     }
   }
@@ -156,6 +222,7 @@ class MasterDataProvider with ChangeNotifier {
         _fetchCategories(),
         _fetchBahanList(),
         _fetchMenus(),
+        _fetchKaryawanList(),
       ]);
     } catch (e) {
       _errorMessage = e.toString();
@@ -167,7 +234,7 @@ class MasterDataProvider with ChangeNotifier {
 
   Future<void> _fetchCategories() async {
     final response = await http.get(
-      Uri.parse(ApiEndpoints.kategoriMenu),
+      Uri.parse('${ApiEndpoints.kategoriMenu}?include_nonaktif=true'),
       headers: _headers,
     );
 
@@ -209,18 +276,34 @@ class MasterDataProvider with ChangeNotifier {
     }
   }
 
+  Future<void> _fetchKaryawanList() async {
+    try {
+      final response = await http.get(
+        Uri.parse('${ApiEndpoints.karyawan}/'),
+        headers: _headers,
+      );
+
+      if (response.statusCode == 200) {
+        final List data = json.decode(response.body);
+        _karyawanList = data.map((e) => MasterKaryawan.fromJson(e)).toList();
+      }
+    } catch (e) {
+      debugPrint('Gagal memuat karyawan: $e');
+    }
+  }
+
   Future<String?> uploadImage(File imageFile) async {
     try {
       final fileExt = imageFile.path.split('.').last;
       final fileName = '${DateTime.now().millisecondsSinceEpoch}.$fileExt';
       final String filePath = 'menu/$fileName';
-      
+
       await Supabase.instance.client.storage.from('Storage').upload(
-        filePath,
-        imageFile,
-        fileOptions: const FileOptions(cacheControl: '3600', upsert: false),
-      );
-      
+            filePath,
+            imageFile,
+            fileOptions: const FileOptions(cacheControl: '3600', upsert: false),
+          );
+
       return Supabase.instance.client.storage.from('Storage').getPublicUrl(filePath);
     } catch (e) {
       debugPrint('Error uploading image: $e');
@@ -228,6 +311,7 @@ class MasterDataProvider with ChangeNotifier {
     }
   }
 
+  // --- MENU CRUD ---
   Future<bool> createMenu(Map<String, dynamic> data) async {
     _isLoading = true;
     notifyListeners();
@@ -297,6 +381,137 @@ class MasterDataProvider with ChangeNotifier {
     } finally {
       _isLoading = false;
       notifyListeners();
+    }
+  }
+
+  // --- KATEGORI MENU CRUD ---
+  Future<bool> createKategoriMenu(Map<String, dynamic> data) async {
+    try {
+      final response = await http.post(
+        Uri.parse(ApiEndpoints.kategoriMenu),
+        headers: _headers,
+        body: json.encode(data),
+      );
+      if (response.statusCode == 200 || response.statusCode == 201) {
+        await _fetchCategories();
+        notifyListeners();
+        return true;
+      }
+      return false;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  Future<bool> updateKategoriMenu(String id, Map<String, dynamic> data) async {
+    try {
+      final response = await http.put(
+        Uri.parse('${ApiEndpoints.kategoriMenu}/$id'),
+        headers: _headers,
+        body: json.encode(data),
+      );
+      if (response.statusCode == 200) {
+        await _fetchCategories();
+        notifyListeners();
+        return true;
+      }
+      return false;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  // --- BAHAN BAKU CRUD ---
+  Future<bool> createBahan(Map<String, dynamic> data) async {
+    try {
+      final response = await http.post(
+        Uri.parse(ApiEndpoints.bahan),
+        headers: _headers,
+        body: json.encode(data),
+      );
+      if (response.statusCode == 200 || response.statusCode == 201) {
+        await _fetchBahanList();
+        notifyListeners();
+        return true;
+      }
+      return false;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  Future<bool> updateBahan(String id, Map<String, dynamic> data) async {
+    try {
+      final response = await http.put(
+        Uri.parse('${ApiEndpoints.bahan}/$id'),
+        headers: _headers,
+        body: json.encode(data),
+      );
+      if (response.statusCode == 200) {
+        await _fetchBahanList();
+        notifyListeners();
+        return true;
+      }
+      return false;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  String _extractErrorMessage(http.Response response, String fallback) {
+    try {
+      final err = json.decode(response.body);
+      if (err is Map<String, dynamic> && err['detail'] != null) {
+        final detail = err['detail'];
+        if (detail is String && detail.trim().isNotEmpty) {
+          return detail;
+        }
+        if (detail is List && detail.isNotEmpty) {
+          final first = detail.first;
+          if (first is Map && first['msg'] != null) {
+            return first['msg'].toString();
+          }
+          return first.toString();
+        }
+      }
+    } catch (_) {}
+    return '$fallback (${response.statusCode})';
+  }
+
+  // --- KARYAWAN CRUD PER DIVISI (KASIR / BAR / KITCHEN) ---
+  Future<String?> createKaryawan(Map<String, dynamic> data) async {
+    try {
+      final response = await http.post(
+        Uri.parse('${ApiEndpoints.karyawan}/'),
+        headers: _headers,
+        body: json.encode(data),
+      );
+      if (response.statusCode == 200 || response.statusCode == 201) {
+        await _fetchKaryawanList();
+        notifyListeners();
+        return null;
+      }
+      return _extractErrorMessage(response, 'Gagal menambah karyawan');
+    } catch (e) {
+      return 'Gagal menghubungi server: $e';
+    }
+  }
+
+  Future<String?> updateKaryawan(String id, Map<String, dynamic> data) async {
+    try {
+      final response = await http.put(
+        Uri.parse(ApiEndpoints.karyawanById(id)),
+        headers: _headers,
+        body: json.encode(data),
+      );
+      if (response.statusCode == 200) {
+        await _fetchKaryawanList();
+        notifyListeners();
+        return null;
+      }
+      return _extractErrorMessage(response, 'Gagal mengubah data karyawan');
+    } catch (e) {
+      return 'Gagal menghubungi server: $e';
     }
   }
 }

@@ -227,3 +227,52 @@ async def test_issue7_request_off_rules(client, sample_data, test_db):
         }
     )
     assert res_dup.status_code == 409
+
+    # 4. Admin tries to schedule karyawan1 on tomorrow while RequestOff is active -> 400
+    res_sched_blocked = await client.post(
+        "/api/v1/jadwal/",
+        headers={"Authorization": f"Bearer {sample_data['token_admin']}"},
+        json={
+            "karyawan_id": "usr-karyawan1",
+            "tanggal": tomorrow.isoformat(),
+            "shift": "shift_1",
+            "area_kerja": "kasir",
+            "jam_mulai": "08:00:00",
+            "jam_selesai": "16:00:00"
+        }
+    )
+    assert res_sched_blocked.status_code == 400
+    assert "request off" in res_sched_blocked.json()["detail"].lower()
+
+    # 5. Cancel/delete RequestOff -> 200, then schedule succeeds -> 200, then RequestOff on scheduled date -> 400
+    req_off_id = res_valid.json()["id"]
+    res_del = await client.delete(
+        f"/api/v1/jadwal/request-off/{req_off_id}",
+        headers={"Authorization": f"Bearer {sample_data['token_k1']}"}
+    )
+    assert res_del.status_code == 200
+
+    res_sched_ok = await client.post(
+        "/api/v1/jadwal/",
+        headers={"Authorization": f"Bearer {sample_data['token_admin']}"},
+        json={
+            "karyawan_id": "usr-karyawan1",
+            "tanggal": tomorrow.isoformat(),
+            "shift": "shift_1",
+            "area_kerja": "kasir",
+            "jam_mulai": "08:00:00",
+            "jam_selesai": "16:00:00"
+        }
+    )
+    assert res_sched_ok.status_code == 200
+
+    res_ro_blocked = await client.post(
+        "/api/v1/jadwal/request-off",
+        headers={"Authorization": f"Bearer {sample_data['token_k1']}"},
+        json={
+            "tanggal": tomorrow.isoformat(),
+            "alasan": "Mau libur padahal sudah dijadwalkan"
+        }
+    )
+    assert res_ro_blocked.status_code == 400
+    assert "jadwal shift" in res_ro_blocked.json()["detail"].lower()

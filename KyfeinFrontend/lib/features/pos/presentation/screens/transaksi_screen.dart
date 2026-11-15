@@ -1045,6 +1045,11 @@ class _TransaksiViewState extends State<_TransaksiView> with SingleTickerProvide
 
                 // Details item list
                 ...trx.details.map((item) {
+                  final kdsColor = item.statusItem == 'selesai'
+                      ? Colors.green.shade700
+                      : item.statusItem == 'diproses'
+                          ? Colors.blue.shade700
+                          : Colors.orange.shade800;
                   return Padding(
                     padding: const EdgeInsets.symmetric(vertical: 4),
                     child: Row(
@@ -1070,13 +1075,35 @@ class _TransaksiViewState extends State<_TransaksiView> with SingleTickerProvide
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Text(
-                                item.namaMenu,
-                                style: GoogleFonts.outfit(
-                                  fontSize: 13,
-                                  fontWeight: FontWeight.w600,
-                                  color: const Color(0xFF1F1F1F),
-                                ),
+                              Row(
+                                children: [
+                                  Flexible(
+                                    child: Text(
+                                      item.namaMenu,
+                                      style: GoogleFonts.outfit(
+                                        fontSize: 13,
+                                        fontWeight: FontWeight.w600,
+                                        color: const Color(0xFF1F1F1F),
+                                      ),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 6),
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+                                    decoration: BoxDecoration(
+                                      color: kdsColor.withValues(alpha: 0.12),
+                                      borderRadius: BorderRadius.circular(4),
+                                    ),
+                                    child: Text(
+                                      'KDS: ${item.statusItem.toUpperCase()}',
+                                      style: GoogleFonts.outfit(
+                                        fontSize: 9.5,
+                                        fontWeight: FontWeight.w700,
+                                        color: kdsColor,
+                                      ),
+                                    ),
+                                  ),
+                                ],
                               ),
                               if (item.catatan != null && item.catatan!.isNotEmpty)
                                 Text(

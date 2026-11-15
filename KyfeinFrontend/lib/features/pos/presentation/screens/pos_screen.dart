@@ -10,7 +10,7 @@ import '../../../stok/presentation/widgets/opname_launcher.dart';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 const _brown = Color(0xFF1B4332);
-const _cream = Color(0xFFE9F5E6);
+const _cream = Color(0xFFF6F8F6);
 const _gold = Color(0xFFD4A373);
 const _surface = Colors.white;
 const _textDim = Color(0xFF7A7A7A);

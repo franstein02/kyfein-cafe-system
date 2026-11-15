@@ -1,20 +1,26 @@
+import uuid
 from typing import List, Union
 from decimal import Decimal
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
+from sqlalchemy import select, func
 from sqlalchemy.orm import selectinload
 
 from app.core.deps import get_db, require_roles, get_current_user
-from app.models.master_data import KategoriMenu, Menu, Bahan, MenuResep, KategoriPengeluaran
+from app.core.foto_helper import validate_and_claim_foto, remove_old_foto_if_replaced
+from app.models.foto import Foto
+from app.models.master_data import (
+    KategoriMenu, Menu, Bahan, MenuResep, KategoriPengeluaran, KonfigurasiLokasi
+)
 from app.models.stok import StokGudang, StokTitik
 from app.models.karyawan import Karyawan
 from app.schemas.master_data import (
-    KategoriMenuCreate, KategoriMenuOut,
+    KategoriMenuCreate, KategoriMenuUpdate, KategoriMenuOut,
     MenuCreate, MenuUpdate, MenuOut,
-    BahanCreate, BahanOut, BahanAdminOut, BahanStokMenipisOut,
+    BahanCreate, BahanUpdate, BahanOut, BahanAdminOut, BahanStokMenipisOut,
     MenuResepCreate, MenuResepOut, MenuResepItemCreate, MenuResepItemOut,
-    KategoriPengeluaranCreate, KategoriPengeluaranOut
+    KategoriPengeluaranCreate, KategoriPengeluaranUpdate, KategoriPengeluaranOut,
+    KonfigurasiLokasiUpdate, KonfigurasiLokasiOut
 )
 
 router = APIRouter()
@@ -47,6 +53,22 @@ async def create_kategori_menu(
 ):
     item = KategoriMenu(**data.dict())
     db.add(item)
+    await db.commit()
+    await db.refresh(item)
+    return item
+
+@router.put("/kategori-menu/{id}", response_model=KategoriMenuOut)
+async def update_kategori_menu(
+    id: str,
+    data: KategoriMenuUpdate,
+    db: AsyncSession = Depends(get_db),
+    current_user: Karyawan = Depends(require_roles(["admin"]))
+):
+    item = await db.get(KategoriMenu, id)
+    if not item:
+        raise HTTPException(status_code=404, detail="Kategori menu tidak ditemukan")
+    for field, val in data.dict(exclude_unset=True).items():
+        setattr(item, field, val)
     await db.commit()
     await db.refresh(item)
     return item
@@ -146,10 +168,6 @@ async def update_menu_resep(
             setattr(r, 'nama_bahan', r.bahan.nama)
             setattr(r, 'satuan', r.bahan.satuan)
     return reseps
-
-import uuid
-from app.core.foto_helper import validate_and_claim_foto, remove_old_foto_if_replaced
-from app.models.foto import Foto
 
 @router.post("/menu", response_model=MenuOut)
 async def create_menu(
@@ -272,8 +290,6 @@ async def delete_menu(
     item = await db.get(Menu, id)
     if not item:
         raise HTTPException(status_code=404, detail="Menu tidak ditemukan")
-    
-    # We could do hard delete, or just soft delete. Let's do hard delete for now.
     await db.delete(item)
     await db.commit()
     return {"message": "Menu berhasil dihapus"}
@@ -334,6 +350,39 @@ async def create_bahan(
 ):
     item = Bahan(**data.dict())
     db.add(item)
+    await db.flush()
+
+    # Inisialisasi StokGudang & StokTitik otomatis agar bahan baru langsung muncul di Gudang & Opname
+    db.add(StokGudang(
+        id=str(uuid.uuid4()),
+        bahan_id=item.id,
+        jumlah_kemasan_besar=Decimal('0'),
+        jumlah_satuan_kecil=Decimal('0')
+    ))
+    for titik_area in ['bar', 'kitchen']:
+        db.add(StokTitik(
+            id=str(uuid.uuid4()),
+            bahan_id=item.id,
+            titik=titik_area,
+            jumlah=Decimal('0')
+        ))
+
+    await db.commit()
+    await db.refresh(item)
+    return item
+
+@router.put("/bahan/{id}", response_model=BahanAdminOut)
+async def update_bahan(
+    id: str,
+    data: BahanUpdate,
+    db: AsyncSession = Depends(get_db),
+    current_user: Karyawan = Depends(require_roles(["admin"]))
+):
+    item = await db.get(Bahan, id)
+    if not item:
+        raise HTTPException(status_code=404, detail="Bahan tidak ditemukan")
+    for field, val in data.dict(exclude_unset=True).items():
+        setattr(item, field, val)
     await db.commit()
     await db.refresh(item)
     return item
@@ -354,29 +403,77 @@ async def create_resep(
 
 # --- KATEGORI PENGELUARAN ---
 @router.get("/kategori-pengeluaran", response_model=List[KategoriPengeluaranOut])
+@router.get("/kategori-pengeluaran/", response_model=List[KategoriPengeluaranOut], include_in_schema=False)
 async def list_kategori_pengeluaran(
+    include_nonaktif: bool = False,
     db: AsyncSession = Depends(get_db),
     current_user: Karyawan = Depends(get_current_user)
 ):
-    result = await db.execute(select(KategoriPengeluaran).where(KategoriPengeluaran.status_aktif == True))
+    stmt = select(KategoriPengeluaran)
+    if not (include_nonaktif and current_user.role in ["admin"]):
+        stmt = stmt.where(KategoriPengeluaran.status_aktif == True)
+    stmt = stmt.order_by(KategoriPengeluaran.nama.asc())
+    result = await db.execute(stmt)
     return result.scalars().all()
 
 @router.post("/kategori-pengeluaran", response_model=KategoriPengeluaranOut)
+@router.post("/kategori-pengeluaran/", response_model=KategoriPengeluaranOut, include_in_schema=False)
 async def create_kategori_pengeluaran(
     data: KategoriPengeluaranCreate,
     db: AsyncSession = Depends(get_db),
     current_user: Karyawan = Depends(require_roles(["admin"]))
 ):
-    item = KategoriPengeluaran(**data.dict())
+    nama_clean = data.nama.strip()
+    existing = await db.execute(
+        select(KategoriPengeluaran).where(
+            func.lower(KategoriPengeluaran.nama) == nama_clean.lower()
+        )
+    )
+    if existing.scalars().first():
+        raise HTTPException(
+            status_code=409,
+            detail="Kategori pengeluaran dengan nama tersebut sudah ada"
+        )
+    item = KategoriPengeluaran(nama=nama_clean, status_aktif=data.status_aktif)
     db.add(item)
     await db.commit()
     await db.refresh(item)
     return item
 
-# --- KONFIGURASI LOKASI ---
-from app.models.master_data import KonfigurasiLokasi
-from app.schemas.master_data import KonfigurasiLokasiUpdate, KonfigurasiLokasiOut
+@router.put("/kategori-pengeluaran/{id}", response_model=KategoriPengeluaranOut)
+async def update_kategori_pengeluaran(
+    id: str,
+    data: KategoriPengeluaranUpdate,
+    db: AsyncSession = Depends(get_db),
+    current_user: Karyawan = Depends(require_roles(["admin"]))
+):
+    item = await db.get(KategoriPengeluaran, id)
+    if not item:
+        raise HTTPException(status_code=404, detail="Kategori pengeluaran tidak ditemukan")
 
+    if data.nama is not None:
+        nama_clean = data.nama.strip()
+        dup = await db.execute(
+            select(KategoriPengeluaran).where(
+                func.lower(KategoriPengeluaran.nama) == nama_clean.lower(),
+                KategoriPengeluaran.id != id
+            )
+        )
+        if dup.scalars().first():
+            raise HTTPException(
+                status_code=409,
+                detail="Kategori pengeluaran dengan nama tersebut sudah ada"
+            )
+        item.nama = nama_clean
+
+    if data.status_aktif is not None:
+        item.status_aktif = data.status_aktif
+
+    await db.commit()
+    await db.refresh(item)
+    return item
+
+# --- KONFIGURASI LOKASI ---
 @router.get("/konfigurasi-lokasi", response_model=KonfigurasiLokasiOut)
 async def get_konfigurasi_lokasi(
     db: AsyncSession = Depends(get_db),

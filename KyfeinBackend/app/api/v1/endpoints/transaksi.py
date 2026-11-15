@@ -29,6 +29,8 @@ router = APIRouter()
 @router.get("/", response_model=List[TransaksiOut], include_in_schema=False)
 async def list_transaksi(
     tanggal: Optional[date] = None,
+    tanggal_mulai: Optional[date] = None,
+    tanggal_selesai: Optional[date] = None,
     status: Optional[str] = None,
     db: AsyncSession = Depends(get_db),
     current_user: Karyawan = Depends(get_current_user)
@@ -39,7 +41,8 @@ async def list_transaksi(
     query = (
         select(Transaksi)
         .options(
-            selectinload(Transaksi.details).selectinload(TransaksiDetail.menu),
+            selectinload(Transaksi.details).selectinload(TransaksiDetail.menu).selectinload(Menu.kategori),
+            selectinload(Transaksi.details).selectinload(TransaksiDetail.transaksi),
             selectinload(Transaksi.kasir)
         )
         .order_by(Transaksi.created_at.desc())
@@ -47,6 +50,10 @@ async def list_transaksi(
     if tanggal:
         start_dt = datetime.combine(tanggal, time.min)
         end_dt = datetime.combine(tanggal, time.max)
+        query = query.where(and_(Transaksi.waktu_transaksi >= start_dt, Transaksi.waktu_transaksi <= end_dt))
+    elif tanggal_mulai and tanggal_selesai:
+        start_dt = datetime.combine(tanggal_mulai, time.min)
+        end_dt = datetime.combine(tanggal_selesai, time.max)
         query = query.where(and_(Transaksi.waktu_transaksi >= start_dt, Transaksi.waktu_transaksi <= end_dt))
     if status:
         query = query.where(Transaksi.status == status)
@@ -70,8 +77,30 @@ async def create_transaksi(
 
     # 1. Cek shift aktif / testing shift
     shift = None
-    if data.jadwal_shift_id:
+    explicit_shift = bool(data.jadwal_shift_id)
+    if explicit_shift:
         shift = await db.get(JadwalShift, data.jadwal_shift_id)
+        if not shift:
+            raise HTTPException(status_code=404, detail="Jadwal shift tidak ditemukan")
+        if shift.area_kerja != "kasir":
+            raise HTTPException(
+                status_code=400,
+                detail="Hanya shift dengan area_kerja kasir yang dapat membuat transaksi"
+            )
+        active_shift = await get_shift_berjalan(db, shift.karyawan_id, now)
+        if not active_shift or active_shift.id != shift.id:
+            raise HTTPException(
+                status_code=400,
+                detail="Jadwal shift tidak sedang dalam shift berjalan"
+            )
+        absen_res = await db.execute(
+            select(Absensi).where(Absensi.jadwal_shift_id == shift.id)
+        )
+        if not absen_res.scalars().first():
+            raise HTTPException(
+                status_code=400,
+                detail="Kasir wajib melakukan absen masuk terlebih dahulu"
+            )
 
     if not shift:
         active_shift = await get_shift_berjalan(db, current_user.id, now)
@@ -153,7 +182,9 @@ async def create_transaksi(
 
         hpp_satuan = await hitung_hpp_satuan(db, item.menu_id)
 
+        detail_id = str(uuid.uuid4())
         trx_detail = TransaksiDetail(
+            id=detail_id,
             menu_id=item.menu_id,
             qty=item.qty,
             harga_satuan=menu_item.harga,
@@ -167,8 +198,9 @@ async def create_transaksi(
         kat = await db.get(KategoriMenu, menu_item.kategori_id) if menu_item.kategori_id else None
         if kat and kat.area_produksi in ["kitchen", "bar"]:
             kds_items.append({
-                "detail_id": trx_detail.id,
+                "detail_id": detail_id,
                 "menu_id": menu_item.id,
+                "kode_menu": menu_item.kode_menu,
                 "nama_menu": menu_item.nama,
                 "qty": item.qty,
                 "catatan": item.catatan,
@@ -216,22 +248,29 @@ async def create_transaksi(
     # Broadcast KDS Realtime Event
     for kds in kds_items:
         message = {
+            "event": "new_order",
+            "id": kds["detail_id"],
+            "detail_id": kds["detail_id"],
             "transaksi_id": new_trx.id,
             "nomor_transaksi": new_trx.nomor_transaksi,
-            "detail_id": kds["detail_id"],
             "menu_id": kds["menu_id"],
+            "kode_menu": kds["kode_menu"],
             "nama_menu": kds["nama_menu"],
+            "area_produksi": kds["area_produksi"],
             "qty": kds["qty"],
             "catatan": kds["catatan"],
             "status_item": "menunggu",
+            "waktu_transaksi": new_trx.waktu_transaksi.isoformat(),
             "waktu": new_trx.created_at.isoformat()
         }
         await kds_manager.broadcast_order(kds["area_produksi"], message)
+        await kds_manager.broadcast_order("all", message)
 
     res = await db.execute(
         select(Transaksi)
         .options(
-            selectinload(Transaksi.details).selectinload(TransaksiDetail.menu),
+            selectinload(Transaksi.details).selectinload(TransaksiDetail.menu).selectinload(Menu.kategori),
+            selectinload(Transaksi.details).selectinload(TransaksiDetail.transaksi),
             selectinload(Transaksi.kasir)
         )
         .where(Transaksi.id == new_trx.id)
@@ -294,7 +333,7 @@ async def cancel_transaksi(
 
 @router.get("/shift-aktif/laporan", response_model=ActiveShiftSummaryOut)
 async def get_active_shift_report(
-    jadwal_shift_id: str,
+    jadwal_shift_id: Optional[str] = None,
     db: AsyncSession = Depends(get_db),
     current_user: Karyawan = Depends(get_current_user)
 ):
@@ -303,18 +342,25 @@ async def get_active_shift_report(
     Read-only query on-demand dari tabel transaksi & detail WHERE jadwal_shift_id = shift aktif
     untuk sanity check mandiri kasir sebelum submit opname akhir shift.
     """
-    shift = await db.get(JadwalShift, jadwal_shift_id)
-    if not shift:
-        raise HTTPException(status_code=404, detail="Jadwal shift tidak ditemukan")
-
     now = now_local()
-    active_shift = await get_shift_berjalan(db, shift.karyawan_id, now)
-    
-    if not active_shift or shift.id != active_shift.id:
-        raise HTTPException(
-            status_code=400,
-            detail="Laporan shift aktif hanya untuk shift yang sedang berjalan"
-        )
+    if jadwal_shift_id:
+        shift = await db.get(JadwalShift, jadwal_shift_id)
+        if not shift:
+            raise HTTPException(status_code=404, detail="Jadwal shift tidak ditemukan")
+        active_shift = await get_shift_berjalan(db, shift.karyawan_id, now)
+        if not active_shift or shift.id != active_shift.id:
+            raise HTTPException(
+                status_code=400,
+                detail="Laporan shift aktif hanya untuk shift yang sedang berjalan"
+            )
+    else:
+        shift = await get_shift_berjalan(db, current_user.id, now)
+        if not shift:
+            raise HTTPException(
+                status_code=404,
+                detail="Tidak ada jadwal shift yang sedang berjalan"
+            )
+        jadwal_shift_id = shift.id
 
     if shift.karyawan_id != current_user.id and current_user.role == "karyawan":
         raise HTTPException(

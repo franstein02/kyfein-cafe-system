@@ -1,5 +1,5 @@
 import math
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, date, time
 from typing import List, Optional, Literal
 from decimal import Decimal
 
@@ -23,6 +23,134 @@ from app.schemas.absensi import (
 from app.services.jadwal_service import get_shift_berjalan
 
 router = APIRouter()
+
+@router.get("", response_model=List[AbsensiOut])
+@router.get("/", response_model=List[AbsensiOut])
+async def list_absensi(
+    tanggal: Optional[date] = None,
+    karyawan_id: Optional[str] = None,
+    db: AsyncSession = Depends(get_db),
+    current_user: Karyawan = Depends(get_current_user)
+):
+    query = select(Absensi).order_by(Absensi.jam_masuk.desc())
+    if current_user.role not in ["admin"]:
+        query = query.where(Absensi.karyawan_id == current_user.id)
+    elif karyawan_id:
+        query = query.where(Absensi.karyawan_id == karyawan_id)
+        
+    if tanggal:
+        start_dt = datetime.combine(tanggal, time.min)
+        end_dt = datetime.combine(tanggal, time.max)
+        query = query.where(Absensi.jam_masuk.between(start_dt, end_dt))
+        
+    result = await db.execute(query)
+    return result.scalars().all()
+
+
+@router.get("/status")
+@router.get("/status/")
+async def get_absensi_status(
+    db: AsyncSession = Depends(get_db),
+    current_user: Karyawan = Depends(get_current_user)
+):
+    """
+    Mengembalikan status absensi shift berjalan untuk karyawan yang login.
+    """
+    now = now_local()
+    active_shift = await get_shift_berjalan(db, current_user.id, now)
+    if not active_shift:
+        return {
+            "has_shift": False,
+            "shift_id": None,
+            "shift": None,
+            "area_kerja": None,
+            "jam_mulai": None,
+            "jam_selesai": None,
+            "sudah_masuk": False,
+            "sudah_pulang": False,
+            "absensi": None
+        }
+
+    absensi_res = await db.execute(
+        select(Absensi).where(
+            and_(
+                Absensi.jadwal_shift_id == active_shift.id,
+                Absensi.karyawan_id == current_user.id
+            )
+        )
+    )
+    absensi = absensi_res.scalars().first()
+
+    def _fmt(t):
+        if t is None:
+            return ""
+        if isinstance(t, (time, datetime)):
+            return t.strftime("%H:%M")
+        s = str(t).strip()
+        parts = s.split(":")
+        return f"{parts[0].zfill(2)}:{parts[1].zfill(2)}" if len(parts) >= 2 else s
+
+    jam_mulai_str = _fmt(active_shift.jam_mulai)
+    jam_selesai_str = _fmt(active_shift.jam_selesai)
+    if not jam_mulai_str:
+        jam_mulai_str = "16:00" if active_shift.shift == "shift_2" else "08:00"
+    if not jam_selesai_str:
+        jam_selesai_str = "23:00" if active_shift.shift == "shift_2" else "16:00"
+
+    sudah_masuk = absensi is not None
+    sudah_pulang = absensi is not None and absensi.jam_pulang is not None
+
+    izin_telat_res = await db.execute(
+        select(IzinTelat).where(
+            and_(
+                IzinTelat.jadwal_shift_id == active_shift.id,
+                IzinTelat.karyawan_id == current_user.id
+            )
+        ).order_by(IzinTelat.diajukan_at.desc())
+    )
+    izin_telat = izin_telat_res.scalars().first()
+
+    izin_tm_res = await db.execute(
+        select(IzinTidakMasuk).where(
+            and_(
+                IzinTidakMasuk.jadwal_shift_id == active_shift.id,
+                IzinTidakMasuk.karyawan_id == current_user.id
+            )
+        ).order_by(IzinTidakMasuk.diajukan_at.desc())
+    )
+    izin_tm = izin_tm_res.scalars().first()
+
+    return {
+        "has_shift": True,
+        "shift_id": active_shift.id,
+        "shift": active_shift.shift,
+        "area_kerja": active_shift.area_kerja,
+        "jam_mulai": jam_mulai_str,
+        "jam_selesai": jam_selesai_str,
+        "sudah_masuk": sudah_masuk,
+        "sudah_pulang": sudah_pulang,
+        "absensi": {
+            "id": absensi.id,
+            "jam_masuk": absensi.jam_masuk.isoformat() if absensi.jam_masuk else None,
+            "jam_pulang": absensi.jam_pulang.isoformat() if absensi.jam_pulang else None,
+            "menit_telat": absensi.menit_telat,
+            "status_pulang": absensi.status_pulang,
+        } if absensi else None,
+        "izin_telat": {
+            "id": izin_telat.id,
+            "alasan": izin_telat.alasan,
+            "status": izin_telat.status,
+            "diajukan_at": izin_telat.diajukan_at.isoformat() if izin_telat.diajukan_at else None,
+        } if izin_telat else None,
+        "izin_tidak_masuk": {
+            "id": izin_tm.id,
+            "alasan": izin_tm.alasan,
+            "status": izin_tm.status,
+            "foto_id": izin_tm.foto_id,
+            "diajukan_at": izin_tm.diajukan_at.isoformat() if izin_tm.diajukan_at else None,
+        } if izin_tm else None,
+    }
+
 
 def haversine_distance(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
     """Hitung jarak GPS antara dua koordinat dalam meter"""
@@ -244,12 +372,15 @@ async def create_izin_telat(
     return item
 
 @router.get("/izin-telat", response_model=List[IzinTelatOut])
+@router.get("/izin-telat/", response_model=List[IzinTelatOut])
 async def list_izin_telat(
     status: Optional[Literal['pending', 'disetujui', 'ditolak']] = None,
     db: AsyncSession = Depends(get_db),
-    current_user: Karyawan = Depends(require_roles(["admin"]))
+    current_user: Karyawan = Depends(get_current_user)
 ):
     query = select(IzinTelat)
+    if current_user.role not in ["admin"]:
+        query = query.where(IzinTelat.karyawan_id == current_user.id)
     if status:
         query = query.where(IzinTelat.status == status)
     result = await db.execute(query.order_by(IzinTelat.diajukan_at.desc()))
@@ -326,12 +457,15 @@ async def create_izin_tidak_masuk(
     return item
 
 @router.get("/izin-tidak-masuk", response_model=List[IzinTidakMasukOut])
+@router.get("/izin-tidak-masuk/", response_model=List[IzinTidakMasukOut])
 async def list_izin_tidak_masuk(
     status: Optional[Literal['pending', 'disetujui', 'ditolak']] = None,
     db: AsyncSession = Depends(get_db),
-    current_user: Karyawan = Depends(require_roles(["admin"]))
+    current_user: Karyawan = Depends(get_current_user)
 ):
     query = select(IzinTidakMasuk)
+    if current_user.role not in ["admin"]:
+        query = query.where(IzinTidakMasuk.karyawan_id == current_user.id)
     if status:
         query = query.where(IzinTidakMasuk.status == status)
     result = await db.execute(query.order_by(IzinTidakMasuk.diajukan_at.desc()))

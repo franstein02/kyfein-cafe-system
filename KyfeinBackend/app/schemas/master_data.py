@@ -12,6 +12,11 @@ class KategoriMenuBase(BaseModel):
 class KategoriMenuCreate(KategoriMenuBase):
     pass
 
+class KategoriMenuUpdate(BaseModel):
+    nama: Optional[str] = Field(None, min_length=1)
+    area_produksi: Optional[Literal['bar', 'kitchen']] = None
+    status_aktif: Optional[bool] = None
+
 class KategoriMenuOut(KategoriMenuBase):
     id: str
     created_at: datetime
@@ -73,6 +78,13 @@ class BahanBase(BaseModel):
 class BahanCreate(BahanBase):
     harga_rata_rata: Decimal = Field(Decimal('0'), ge=0)
 
+class BahanUpdate(BaseModel):
+    nama: Optional[str] = Field(None, min_length=1)
+    satuan: Optional[str] = Field(None, min_length=1)
+    isi_per_kemasan: Optional[Decimal] = Field(None, gt=0)
+    stok_minimum: Optional[Decimal] = Field(None, ge=0)
+    harga_rata_rata: Optional[Decimal] = Field(None, ge=0)
+
 class BahanOut(BahanBase):
     id: str
     created_at: datetime
@@ -112,6 +124,10 @@ class KategoriPengeluaranBase(BaseModel):
 
 class KategoriPengeluaranCreate(KategoriPengeluaranBase):
     pass
+
+class KategoriPengeluaranUpdate(BaseModel):
+    nama: Optional[str] = Field(None, min_length=1)
+    status_aktif: Optional[bool] = None
 
 class KategoriPengeluaranOut(KategoriPengeluaranBase):
     id: str
