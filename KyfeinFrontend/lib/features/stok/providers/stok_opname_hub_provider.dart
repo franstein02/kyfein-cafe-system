@@ -1,6 +1,6 @@
+import 'package:kyfein_frontend/core/network/firebase_http_adapter.dart';
 import 'dart:convert';
 import 'package:flutter/material.dart';
-import 'package:http/http.dart' as http;
 import 'package:intl/intl.dart';
 import '../../auth/providers/auth_provider.dart';
 import '../../../core/constants/api_endpoints.dart';
@@ -112,7 +112,7 @@ class StokOpnameHubProvider with ChangeNotifier {
           'tanggal': dateStr,
         },
       );
-      final resHarian = await http.get(harianUri, headers: _headers);
+      final resHarian = await FirebaseHttpAdapter.get(harianUri, headers: _headers);
 
       if (resHarian.statusCode == 200) {
         final data = json.decode(resHarian.body) as Map<String, dynamic>;
@@ -128,7 +128,7 @@ class StokOpnameHubProvider with ChangeNotifier {
           'tanggal': dateStr,
         },
       );
-      final resAudit = await http.get(auditUri, headers: _headers);
+      final resAudit = await FirebaseHttpAdapter.get(auditUri, headers: _headers);
 
       if (resAudit.statusCode == 200) {
         final data = json.decode(resAudit.body) as Map<String, dynamic>;

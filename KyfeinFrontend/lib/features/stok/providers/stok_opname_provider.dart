@@ -1,3 +1,4 @@
+import 'package:kyfein_frontend/core/network/firebase_http_adapter.dart';
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
@@ -131,7 +132,7 @@ class StokOpnameProvider with ChangeNotifier {
       OpnameKonteks k, List<OpnameItem> items, String? catatan) async {
     String shiftId = 'shift-${k.titik.apiValue}-k1';
     try {
-      final shiftRes = await http.get(
+      final shiftRes = await FirebaseHttpAdapter.get(
         Uri.parse('${ApiEndpoints.shiftAktif}?titik=${k.titik.apiValue}'),
         headers: _headers,
       );
@@ -143,7 +144,7 @@ class StokOpnameProvider with ChangeNotifier {
       }
     } catch (_) {}
 
-    final res = await http.post(
+    final res = await FirebaseHttpAdapter.post(
       Uri.parse(ApiEndpoints.opname),
       headers: _headers,
       body: json.encode({

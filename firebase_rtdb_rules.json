@@ -1,0 +1,43 @@
+{
+  "rules": {
+    ".read": true,
+    ".write": true,
+    "karyawan": {
+      ".indexOn": ["email", "status_aktif"]
+    },
+    "menu": {
+      ".indexOn": ["kode_menu", "kategori_id", "status_aktif"]
+    },
+    "jadwal_shift": {
+      ".indexOn": ["tanggal", "karyawan_id", "area_kerja"]
+    },
+    "tukar_shift": {
+      ".indexOn": ["status"]
+    },
+    "izin_telat": {
+      ".indexOn": ["status"]
+    },
+    "izin_tidak_masuk": {
+      ".indexOn": ["status"]
+    },
+    "absensi": {
+      ".indexOn": ["karyawan_id", "jadwal_shift_id", "jam_masuk"]
+    },
+    "stok_opname": {
+      ".indexOn": ["jadwal_shift_id", "titik", "tipe"]
+    },
+    "barang_masuk": {
+      ".indexOn": ["waktu"]
+    },
+    "transaksi": {
+      ".indexOn": ["nomor_transaksi", "status", "waktu_transaksi", "jadwal_shift_id"]
+    },
+    "transaksi_detail": {
+      ".indexOn": ["transaksi_id", "status_item"]
+    },
+    "pengeluaran": {
+      ".indexOn": ["kategori_id", "tipe", "bulan", "tanggal"]
+    }
+  }
+}
+

@@ -1,6 +1,6 @@
+import 'package:kyfein_frontend/core/network/firebase_http_adapter.dart';
 import 'dart:convert';
 import 'package:flutter/material.dart';
-import 'package:http/http.dart' as http;
 import 'package:intl/intl.dart';
 import '../../../core/constants/api_endpoints.dart';
 import '../../auth/providers/auth_provider.dart';
@@ -167,7 +167,7 @@ class CatatOpnameProvider with ChangeNotifier {
 
   Future<void> muatStokCarryForward(TitikStok targetTitik) async {
     try {
-      final res = await http.get(
+      final res = await FirebaseHttpAdapter.get(
         Uri.parse('${ApiEndpoints.stokTitik}?titik=${targetTitik.apiValue}'),
         headers: _headers,
       );
@@ -215,7 +215,7 @@ class CatatOpnameProvider with ChangeNotifier {
 
     try {
       // 1. Fetch Master Bahan
-      final resBahan = await http.get(Uri.parse(ApiEndpoints.bahan), headers: _headers);
+      final resBahan = await FirebaseHttpAdapter.get(Uri.parse(ApiEndpoints.bahan), headers: _headers);
       if (resBahan.statusCode == 200) {
         final List<dynamic> data = json.decode(resBahan.body);
         _allBahan = data.map((e) => Bahan.fromJson(e as Map<String, dynamic>)).toList();
@@ -229,7 +229,7 @@ class CatatOpnameProvider with ChangeNotifier {
       // 2. Fetch Opname Harian to verify if awal_shift or akhir_shift already recorded today
       final dateStr = DateFormat('yyyy-MM-dd').format(DateTime.now());
       final harianUri = Uri.parse(ApiEndpoints.opnameHarian).replace(queryParameters: {'tanggal': dateStr});
-      final resHarian = await http.get(harianUri, headers: _headers);
+      final resHarian = await FirebaseHttpAdapter.get(harianUri, headers: _headers);
 
       if (resHarian.statusCode == 200) {
         final data = json.decode(resHarian.body) as Map<String, dynamic>;
@@ -335,7 +335,7 @@ class CatatOpnameProvider with ChangeNotifier {
       // First try to resolve active shift or fallback
       String shiftId = 'shift-${titik.apiValue}-k1';
       try {
-        final shiftRes = await http.get(
+        final shiftRes = await FirebaseHttpAdapter.get(
           Uri.parse('${ApiEndpoints.shiftAktif}?titik=${titik.apiValue}'),
           headers: _headers,
         );
@@ -356,7 +356,7 @@ class CatatOpnameProvider with ChangeNotifier {
         'items': itemsPayload,
       });
 
-      final res = await http.post(
+      final res = await FirebaseHttpAdapter.post(
         Uri.parse(ApiEndpoints.opname),
         headers: _headers,
         body: postBody,

@@ -1,6 +1,6 @@
+import 'package:kyfein_frontend/core/network/firebase_http_adapter.dart';
 import 'dart:convert';
 import 'package:flutter/material.dart';
-import 'package:http/http.dart' as http;
 import 'package:intl/intl.dart';
 import '../../../../core/constants/api_endpoints.dart';
 import '../../auth/providers/auth_provider.dart';
@@ -290,7 +290,7 @@ class TransaksiProvider with ChangeNotifier {
 
   Future<void> _loadRecipes() async {
     try {
-      final resp = await http.get(
+      final resp = await FirebaseHttpAdapter.get(
         Uri.parse(ApiEndpoints.menu),
         headers: auth.authHeaders,
       ).timeout(const Duration(seconds: 10));
@@ -323,7 +323,7 @@ class TransaksiProvider with ChangeNotifier {
         url += '?tanggal=$dateStr';
       }
 
-      final resp = await http.get(
+      final resp = await FirebaseHttpAdapter.get(
         Uri.parse(url),
         headers: auth.authHeaders,
       ).timeout(const Duration(seconds: 12));
@@ -344,7 +344,7 @@ class TransaksiProvider with ChangeNotifier {
 
   Future<bool> batalkanTransaksi(String transaksiId) async {
     try {
-      final resp = await http.post(
+      final resp = await FirebaseHttpAdapter.post(
         Uri.parse(ApiEndpoints.voidTransaksi(transaksiId)),
         headers: auth.authHeaders,
       ).timeout(const Duration(seconds: 10));

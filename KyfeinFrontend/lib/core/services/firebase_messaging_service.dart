@@ -1,10 +1,10 @@
 import 'package:flutter/foundation.dart'; // Ditambahkan untuk pengecekan kIsWeb
 import 'package:firebase_messaging/firebase_messaging.dart';
-import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'dart:developer' as developer;
 import 'package:shared_preferences/shared_preferences.dart';
 import '../constants/api_endpoints.dart';
+import '../network/firebase_http_adapter.dart';
 import '../../features/notifications/providers/notification_provider.dart';
 
 @pragma('vm:entry-point')
@@ -69,7 +69,7 @@ class FirebaseMessagingService {
         debugPrint('🔥 [FCM REGISTRATION TOKEN]:');
         debugPrint(fcmToken);
         debugPrint('================================================================');
-        final response = await http.post(
+        final response = await FirebaseHttpAdapter.post(
           Uri.parse(ApiEndpoints.fcmToken),
           headers: {
             'Content-Type': 'application/json',

@@ -1,6 +1,6 @@
+import 'package:kyfein_frontend/core/network/firebase_http_adapter.dart';
 import 'dart:convert';
 import 'package:flutter/material.dart';
-import 'package:http/http.dart' as http;
 import '../../../core/constants/api_endpoints.dart';
 import '../../auth/providers/auth_provider.dart';
 
@@ -229,7 +229,7 @@ class PosProvider with ChangeNotifier {
   Future<void> _loadKategori() async {
     if (_auth == null) return;
     try {
-      final resp = await http.get(
+      final resp = await FirebaseHttpAdapter.get(
         Uri.parse(ApiEndpoints.kategoriMenu),
         headers: _auth!.authHeaders,
       ).timeout(const Duration(seconds: 8));
@@ -249,7 +249,7 @@ class PosProvider with ChangeNotifier {
     _isLoadingMenu = true;
     notifyListeners();
     try {
-      final resp = await http.get(
+      final resp = await FirebaseHttpAdapter.get(
         Uri.parse(ApiEndpoints.menu),
         headers: _auth!.authHeaders,
       ).timeout(const Duration(seconds: 8));
@@ -271,7 +271,7 @@ class PosProvider with ChangeNotifier {
     _isLoadingRiwayat = true;
     notifyListeners();
     try {
-      final resp = await http.get(
+      final resp = await FirebaseHttpAdapter.get(
         Uri.parse(ApiEndpoints.transaksi),
         headers: _auth!.authHeaders,
       ).timeout(const Duration(seconds: 8));
@@ -389,7 +389,7 @@ class PosProvider with ChangeNotifier {
         'details': details,
       };
 
-      final resp = await http.post(
+      final resp = await FirebaseHttpAdapter.post(
         Uri.parse(ApiEndpoints.transaksi),
         headers: _auth!.authHeaders,
         body: jsonEncode(body),
@@ -425,7 +425,7 @@ class PosProvider with ChangeNotifier {
   Future<bool> batalkanTransaksi(String id) async {
     if (_auth == null || _shiftDitutup) return false;
     try {
-      final resp = await http.patch(
+      final resp = await FirebaseHttpAdapter.patch(
         Uri.parse(ApiEndpoints.voidTransaksi(id)),
         headers: _auth!.authHeaders,
       ).timeout(const Duration(seconds: 8));

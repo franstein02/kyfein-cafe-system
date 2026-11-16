@@ -1,13 +1,11 @@
+import 'package:kyfein_frontend/core/network/firebase_http_adapter.dart';
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
-import 'package:http/http.dart' as http;
-import 'package:http_parser/http_parser.dart';
 import 'package:image_picker/image_picker.dart';
 
 import '../../../../core/constants/api_endpoints.dart';
 import '../../../../core/network/api_client.dart';
-import '../../../../core/services/storage_service.dart';
 
 class KasirAbsensiScreen extends StatefulWidget {
   const KasirAbsensiScreen({super.key});
@@ -18,7 +16,6 @@ class KasirAbsensiScreen extends StatefulWidget {
 
 class _KasirAbsensiScreenState extends State<KasirAbsensiScreen> {
   final ApiClient _api = ApiClient();
-  final StorageService _storage = StorageService();
   final ImagePicker _picker = ImagePicker();
 
   static const Color _primary = Color(0xFF1B4332);
@@ -171,23 +168,14 @@ class _KasirAbsensiScreenState extends State<KasirAbsensiScreen> {
         await _picker.pickImage(source: ImageSource.camera, imageQuality: 70);
     if (file == null) throw 'Foto belum dipilih';
     final bytes = await file.readAsBytes();
-    final nama = file.name.toLowerCase();
-    final tipe = nama.endsWith('.png')
-        ? MediaType('image', 'png')
-        : MediaType('image', 'jpeg');
-
-    final token = await _storage.getToken();
-    final req = http.MultipartRequest('POST', Uri.parse('$_base/foto'));
-    req.headers['Accept'] = 'application/json';
-    if (token != null) req.headers['Authorization'] = 'Bearer $token';
-    req.fields['jenis'] = jenis;
-    req.files.add(http.MultipartFile.fromBytes(
-      'file',
-      bytes,
-      filename: file.name.isNotEmpty ? file.name : 'foto.jpg',
-      contentType: tipe,
-    ));
-    final res = await http.Response.fromStream(await req.send());
+    final res = await FirebaseHttpAdapter.post(
+      Uri.parse('$_base/foto'),
+      body: {
+        'jenis': jenis,
+        'path': 'rtdb/${file.name.isNotEmpty ? file.name : 'foto.jpg'}',
+        'size_bytes': bytes.length,
+      },
+    );
 
     if (res.statusCode != 200 && res.statusCode != 201) {
       throw 'Unggah foto gagal: ${_pesanError(res.body, res.statusCode)}';

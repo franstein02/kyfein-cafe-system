@@ -1,6 +1,6 @@
+import 'package:kyfein_frontend/core/network/firebase_http_adapter.dart';
 import 'dart:convert';
 import 'package:flutter/material.dart';
-import 'package:http/http.dart' as http;
 import '../../../core/constants/api_endpoints.dart';
 import '../../auth/providers/auth_provider.dart';
 import 'stok_models.dart';
@@ -72,7 +72,7 @@ class StokTitikProvider with ChangeNotifier {
     }
 
     final uri = Uri.parse('${ApiEndpoints.stokTitik}?titik=${titik.apiValue}');
-    final res = await http.get(uri, headers: _headers);
+    final res = await FirebaseHttpAdapter.get(uri, headers: _headers);
     if (res.statusCode != 200) {
       throw Exception('Gagal memuat stok titik: ${res.statusCode}');
     }

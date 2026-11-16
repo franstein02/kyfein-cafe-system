@@ -1,25 +1,28 @@
 import 'dart:convert';
-import 'package:http/http.dart' as http;
+import 'package:kyfein_frontend/core/constants/api_endpoints.dart';
+import 'package:kyfein_frontend/core/network/firebase_http_adapter.dart';
 
 class AttendanceService {
-  // Sesuaikan URL base backend FastAPI kamu
-  final String baseUrl = "http://127.0.0.1:8000/api/v1";
-
-  // 1. Kasir melakukan absen masuk GPS
+  // 1. Kasir melakukan absen masuk GPS ke Firebase RTDB
   Future<bool> clockIn(int userId, double lat, double lng) async {
-    final response = await http.post(
-      Uri.parse('$baseUrl/absensi/kasir/clock-in'),
-      headers: {"Content-Type": "application/json"},
-      body: jsonEncode({"user_id": userId, "lat": lat, "lng": lng}),
+    final response = await FirebaseHttpAdapter.post(
+      Uri.parse(ApiEndpoints.absenMasuk),
+      headers: {'Content-Type': 'application/json'},
+      body: jsonEncode({'user_id': userId, 'lat': lat, 'lng': lng}),
     );
-    return response.statusCode == 200;
+    return response.statusCode == 200 || response.statusCode == 201;
   }
 
-  // 2. Admin mengambil daftar approval/pengajuan kasir
+  // 2. Admin mengambil daftar approval/pengajuan kasir dari Firebase RTDB
   Future<List<dynamic>> getApprovals() async {
-    final response = await http.get(Uri.parse('$baseUrl/absensi/admin/approvals'));
+    final response = await FirebaseHttpAdapter.get(
+      Uri.parse('${ApiConfig.baseUrl}/absensi/admin/approvals'),
+    );
     if (response.statusCode == 200) {
-      return jsonDecode(response.body)['data'];
+      final decoded = jsonDecode(response.body);
+      if (decoded is List) return decoded;
+      if (decoded is Map && decoded['data'] is List) return decoded['data'];
+      return [];
     }
     throw Exception('Gagal memuat data approval');
   }

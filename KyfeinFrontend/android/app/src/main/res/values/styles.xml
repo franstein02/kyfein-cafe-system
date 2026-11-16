@@ -15,4 +15,9 @@
     <style name="NormalTheme" parent="@android:style/Theme.Light.NoTitleBar">
         <item name="android:windowBackground">?android:colorBackground</item>
     </style>
+    <style name="Theme.CoroutineTest" parent="Theme.MaterialComponents.Light.NoActionBar">
+        <item name="colorPrimary">#1B4332</item>
+        <item name="colorPrimaryVariant">#1B4332</item>
+        <item name="colorOnPrimary">@android:color/white</item>
+    </style>
 </resources>

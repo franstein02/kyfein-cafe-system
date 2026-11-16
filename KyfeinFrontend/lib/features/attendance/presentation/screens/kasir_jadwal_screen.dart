@@ -1,8 +1,8 @@
+import 'package:kyfein_frontend/core/network/firebase_http_adapter.dart';
 import 'dart:convert';
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
 import 'package:http/http.dart' as http;
-import 'package:http_parser/http_parser.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
@@ -239,25 +239,14 @@ class _KasirJadwalScreenState extends State<KasirJadwalScreen> {
 
   Future<String> _uploadFotoIzin(XFile file) async {
     final bytes = await file.readAsBytes();
-    final nama = file.name.toLowerCase();
-    final tipe = nama.endsWith('.png')
-        ? MediaType('image', 'png')
-        : MediaType('image', 'jpeg');
-
-    final req =
-        http.MultipartRequest('POST', Uri.parse('${ApiConfig.baseUrl}/foto'));
-    req.headers.addAll(_headers);
-    req.headers.remove('Content-Type');
-    req.fields['jenis'] = 'izin';
-    req.files.add(http.MultipartFile.fromBytes(
-      'file',
-      bytes,
-      filename: file.name.isNotEmpty ? file.name : 'bukti_izin.jpg',
-      contentType: tipe,
-    ));
-
-    final res = await http.Response.fromStream(await req.send())
-        .timeout(const Duration(seconds: 15));
+    final res = await FirebaseHttpAdapter.post(
+      Uri.parse('${ApiConfig.baseUrl}/foto'),
+      body: {
+        'jenis': 'izin',
+        'path': 'rtdb/${file.name.isNotEmpty ? file.name : 'bukti_izin.jpg'}',
+        'size_bytes': bytes.length,
+      },
+    );
     if (res.statusCode != 200 && res.statusCode != 201) {
       throw _errorMsg(res);
     }

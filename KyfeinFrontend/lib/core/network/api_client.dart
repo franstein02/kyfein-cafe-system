@@ -1,42 +1,19 @@
-import 'dart:convert';
 import 'package:http/http.dart' as http;
-import '../services/storage_service.dart';
+import 'firebase_http_adapter.dart';
 
 class ApiClient {
-  final StorageService _storage = StorageService();
+  Future<http.Response> get(String url) =>
+      FirebaseHttpAdapter.get(Uri.parse(url));
 
-  Future<Map<String, String>> _getHeaders() async {
-    final token = await _storage.getToken();
-    final headers = <String, String>{
-      'Content-Type': 'application/json',
-      'Accept': 'application/json',
-    };
-    if (token != null) {
-      headers['Authorization'] = 'Bearer $token';
-    }
-    return headers;
-  }
+  Future<http.Response> post(String url, {Map<String, dynamic>? body}) =>
+      FirebaseHttpAdapter.post(Uri.parse(url), body: body);
 
-  Future<http.Response> get(String url) async {
-    final headers = await _getHeaders();
-    return await http.get(Uri.parse(url), headers: headers);
-  }
+  Future<http.Response> put(String url, {Map<String, dynamic>? body}) =>
+      FirebaseHttpAdapter.put(Uri.parse(url), body: body);
 
-  Future<http.Response> post(String url, {Map<String, dynamic>? body}) async {
-    final headers = await _getHeaders();
-    return await http.post(
-      Uri.parse(url),
-      headers: headers,
-      body: body != null ? jsonEncode(body) : null,
-    );
-  }
+  Future<http.Response> patch(String url, {Map<String, dynamic>? body}) =>
+      FirebaseHttpAdapter.patch(Uri.parse(url), body: body);
 
-  Future<http.Response> put(String url, {Map<String, dynamic>? body}) async {
-    final headers = await _getHeaders();
-    return await http.put(
-      Uri.parse(url),
-      headers: headers,
-      body: body != null ? jsonEncode(body) : null,
-    );
-  }
+  Future<http.Response> delete(String url) =>
+      FirebaseHttpAdapter.delete(Uri.parse(url));
 }

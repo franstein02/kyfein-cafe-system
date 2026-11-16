@@ -1,10 +1,9 @@
-import 'dart:convert';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
-import 'package:http/http.dart' as http;
 import 'package:google_sign_in/google_sign_in.dart';
-import '../../../core/constants/api_endpoints.dart';
 import '../../../core/services/firebase_messaging_service.dart';
+import '../../../core/services/rtdb_service.dart';
 
 class AuthProvider with ChangeNotifier {
   final _storage = const FlutterSecureStorage();
@@ -15,7 +14,7 @@ class AuthProvider with ChangeNotifier {
   String? _nama;
   String? _karyawanId;
   String? _fotoProfile;
-  bool _isLoading = true; // Start true so splash shows while checking storage
+  bool _isLoading = true;
 
   String? get token => _token;
   String? get role => _role;
@@ -39,12 +38,14 @@ class AuthProvider with ChangeNotifier {
         if (_token != null) 'Authorization': 'Bearer $_token',
       };
 
-  Future<void> _saveAuthSession(Map<String, dynamic> data, {String? tokenOverride}) async {
-    _token = tokenOverride ?? data['access_token']?.toString();
+  Future<void> _saveAuthSession(Map<String, dynamic> data,
+      {String? tokenOverride}) async {
+    _karyawanId =
+        (data['karyawan_id'] ?? data['user_id'] ?? data['id'])?.toString();
+    _token = tokenOverride ?? data['access_token']?.toString() ?? _karyawanId;
     _role = data['role']?.toString();
     _divisi = data['divisi']?.toString();
     _nama = data['nama']?.toString();
-    _karyawanId = (data['karyawan_id'] ?? data['user_id'] ?? data['id'])?.toString();
     _fotoProfile = (data['foto_profile'] ?? data['foto_profile_id'])?.toString();
 
     if (_token != null) {
@@ -79,23 +80,19 @@ class AuthProvider with ChangeNotifier {
     _karyawanId = await _storage.read(key: 'karyawan_id');
     _fotoProfile = await _storage.read(key: 'foto_profile');
 
-    if (_token != null) {
+    if (_karyawanId != null) {
       try {
-        final meResp = await http
-            .get(Uri.parse(ApiEndpoints.me), headers: authHeaders)
-            .timeout(const Duration(seconds: 5));
-        if (meResp.statusCode == 200) {
-          final meData = jsonDecode(meResp.body) as Map<String, dynamic>;
-          await _saveAuthSession(meData, tokenOverride: _token);
-        } else if (meResp.statusCode == 401 || meResp.statusCode == 403) {
-          await logout();
-          _isLoading = false;
-          notifyListeners();
-          return;
+        final user = await RtdbService.getById('karyawan', _karyawanId!);
+        if (user != null) {
+          if (user['status_aktif'] == false) {
+            await logout();
+            _isLoading = false;
+            notifyListeners();
+            return;
+          }
+          await _saveAuthSession(user, tokenOverride: _token);
         }
-      } catch (_) {
-        // Pertahankan sesi tersimpan bila server sementara tidak terjangkau.
-      }
+      } catch (_) {}
       if (_token != null) {
         FirebaseMessagingService.sendTokenToBackend(_token!);
       }
@@ -106,44 +103,72 @@ class AuthProvider with ChangeNotifier {
   }
 
   Future<void> login(String email, String password) async {
+    final normalizedEmail = email.trim().toLowerCase();
+
+    // 1. Coba autentikasi via Firebase Auth bila akun terdaftar di Firebase Auth
+    bool firebaseAuthOk = false;
     try {
-      final response = await http
-          .post(
-            Uri.parse(ApiEndpoints.login),
-            headers: {'Content-Type': 'application/json'},
-            body: jsonEncode({'email': email, 'password': password}),
-          )
-          .timeout(const Duration(seconds: 8));
-
-      if (response.statusCode == 200) {
-        final data = jsonDecode(response.body) as Map<String, dynamic>;
-        await _saveAuthSession(data);
-
-        if (_token != null) {
-          FirebaseMessagingService.sendTokenToBackend(_token!);
-        }
-
-        notifyListeners();
-      } else if (response.statusCode == 403) {
-        throw Exception('Akun tidak aktif, hubungi admin');
-      } else {
-        throw Exception('Email atau password salah');
-      }
-    } catch (e) {
-      if (e is Exception && e.toString().contains('Exception:')) rethrow;
-      throw Exception('Tidak bisa terhubung ke server, cek koneksi WiFi cafe');
+      await FirebaseAuth.instance.signInWithEmailAndPassword(
+        email: normalizedEmail,
+        password: password,
+      );
+      firebaseAuthOk = true;
+    } catch (_) {
+      // Lanjut cek langsung ke RTDB node karyawan (mendukung seed JSON)
     }
+
+    // 2. Baca profil karyawan dari Firebase Realtime Database
+    final list = await RtdbService.getList('karyawan');
+    final matched = list.where((k) =>
+        (k['email'] ?? '').toString().trim().toLowerCase() == normalizedEmail);
+
+    if (matched.isEmpty) {
+      if (firebaseAuthOk) {
+        final fbUser = FirebaseAuth.instance.currentUser!;
+        final id = fbUser.uid;
+        final newUser = {
+          'id': id,
+          'role': list.isEmpty ? 'admin' : 'karyawan',
+          'nama': fbUser.displayName ?? normalizedEmail.split('@').first,
+          'email': normalizedEmail,
+          'nomor_hp': '',
+          'divisi': 'kasir',
+          'status_aktif': true,
+          'created_at': RtdbService.nowIso(),
+          'updated_at': RtdbService.nowIso(),
+        };
+        await RtdbService.setRecord('karyawan', id, newUser);
+        await _saveAuthSession(newUser);
+        notifyListeners();
+        return;
+      }
+      throw Exception('Email atau password salah');
+    }
+
+    final user = matched.first;
+    if (user['status_aktif'] == false) {
+      throw Exception('Akun tidak aktif, hubungi admin');
+    }
+
+    if (!firebaseAuthOk && (user['password'] ?? '').toString() != password) {
+      throw Exception('Email atau password salah');
+    }
+
+    await _saveAuthSession(user);
+    if (_token != null) {
+      FirebaseMessagingService.sendTokenToBackend(_token!);
+    }
+    notifyListeners();
   }
 
   Future<void> loginWithGoogle() async {
     try {
       try {
         await GoogleSignIn.instance.initialize();
-      } catch (_) {
-        // Already initialized or ignoring error
-      }
-      final GoogleSignInAccount googleUser = await GoogleSignIn.instance.authenticate();
+      } catch (_) {}
 
+      final GoogleSignInAccount googleUser =
+          await GoogleSignIn.instance.authenticate();
       final GoogleSignInAuthentication googleAuth = googleUser.authentication;
       final idToken = googleAuth.idToken;
 
@@ -151,31 +176,45 @@ class AuthProvider with ChangeNotifier {
         throw Exception('Gagal mendapatkan token Google');
       }
 
-      final response = await http
-          .post(
-            Uri.parse(ApiEndpoints.googleLogin),
-            headers: {'Content-Type': 'application/json'},
-            body: jsonEncode({'id_token': idToken}),
-          )
-          .timeout(const Duration(seconds: 15));
+      // Sign in ke Firebase Authentication memakai Google credential
+      final cred = GoogleAuthProvider.credential(idToken: idToken);
+      final userCred = await FirebaseAuth.instance.signInWithCredential(cred);
+      final fbUser = userCred.user;
+      final email = (fbUser?.email ?? googleUser.email).trim().toLowerCase();
 
-      if (response.statusCode == 200) {
-        final data = jsonDecode(response.body) as Map<String, dynamic>;
-        await _saveAuthSession(data);
+      // Cocokkan dengan node `karyawan` di Firebase Realtime Database
+      final list = await RtdbService.getList('karyawan');
+      final matched = list.where(
+          (k) => (k['email'] ?? '').toString().trim().toLowerCase() == email);
 
-        if (_token != null) {
-          FirebaseMessagingService.sendTokenToBackend(_token!);
+      Map<String, dynamic> userRecord;
+      if (matched.isNotEmpty) {
+        userRecord = matched.first;
+        if (userRecord['status_aktif'] == false) {
+          await GoogleSignIn.instance.signOut();
+          throw Exception('Akun tidak aktif, hubungi admin');
         }
-
-        notifyListeners();
-      } else if (response.statusCode == 403) {
-        await GoogleSignIn.instance.signOut();
-        throw Exception('Akun tidak aktif, hubungi admin');
       } else {
-        await GoogleSignIn.instance.signOut();
-        final body = jsonDecode(response.body);
-        throw Exception(body['detail'] ?? 'Gagal login menggunakan Google');
+        final id = fbUser?.uid ?? RtdbService.newId('karyawan');
+        userRecord = {
+          'id': id,
+          'role': list.isEmpty ? 'admin' : 'karyawan',
+          'nama': fbUser?.displayName ?? googleUser.displayName ?? email,
+          'email': email,
+          'nomor_hp': '',
+          'divisi': 'kasir',
+          'status_aktif': true,
+          'created_at': RtdbService.nowIso(),
+          'updated_at': RtdbService.nowIso(),
+        };
+        await RtdbService.setRecord('karyawan', id, userRecord);
       }
+
+      await _saveAuthSession(userRecord);
+      if (_token != null) {
+        FirebaseMessagingService.sendTokenToBackend(_token!);
+      }
+      notifyListeners();
     } catch (e) {
       if (e is Exception && e.toString().contains('Exception:')) rethrow;
       throw Exception('Gagal login dengan Google: $e');
@@ -189,6 +228,9 @@ class AuthProvider with ChangeNotifier {
     _nama = null;
     _karyawanId = null;
     _fotoProfile = null;
+    try {
+      await FirebaseAuth.instance.signOut();
+    } catch (_) {}
     await _storage.deleteAll();
     notifyListeners();
   }

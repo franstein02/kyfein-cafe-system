@@ -1,6 +1,6 @@
+import 'package:kyfein_frontend/core/network/firebase_http_adapter.dart';
 import 'dart:convert';
 import 'package:flutter/material.dart';
-import 'package:http/http.dart' as http;
 import '../../../core/constants/api_endpoints.dart';
 import '../../auth/providers/auth_provider.dart';
 import 'stok_models.dart';
@@ -154,7 +154,7 @@ class StokGudangProvider with ChangeNotifier {
       }
 
       final uri = Uri.parse(ApiEndpoints.updateStokGudang(bahanId));
-      final res = await http.put(
+      final res = await FirebaseHttpAdapter.put(
         uri,
         headers: _headers,
         body: json.encode({
@@ -197,12 +197,12 @@ class StokGudangProvider with ChangeNotifier {
   //   static const barangKeluar = '$baseUrl/stok/barang-keluar';
   //
   // _fetchStokGudang (real):
-  //   final res = await http.get(Uri.parse(ApiEndpoints.stokGudang), headers: _headers);
+  //   final res = await FirebaseHttpAdapter.get(Uri.parse(ApiEndpoints.stokGudang), headers: _headers);
   //   if (res.statusCode != 200) throw Exception('Gagal memuat stok gudang');
   //   return (json.decode(res.body) as List).map((e) => StokGudang.fromJson(e)).toList();
   //
   // _postBarangMasuk (real):
-  //   final res = await http.post(Uri.parse(ApiEndpoints.barangMasuk),
+  //   final res = await FirebaseHttpAdapter.post(Uri.parse(ApiEndpoints.barangMasuk),
   //     headers: _headers,
   //     body: json.encode({
   //       'keterangan': keterangan,
@@ -211,7 +211,7 @@ class StokGudangProvider with ChangeNotifier {
   //   return res.statusCode == 200 || res.statusCode == 201;
   //
   // _postBarangKeluar (real): karyawan_id sebaiknya diambil backend dari token.
-  //   final res = await http.post(Uri.parse(ApiEndpoints.barangKeluar),
+  //   final res = await FirebaseHttpAdapter.post(Uri.parse(ApiEndpoints.barangKeluar),
   //     headers: _headers,
   //     body: json.encode({
   //       'titik_tujuan': titik.apiValue,
@@ -249,7 +249,7 @@ class StokGudangProvider with ChangeNotifier {
       await Future.delayed(const Duration(milliseconds: 500));
       return List.of(_mockData);
     }
-    final res = await http.get(Uri.parse(ApiEndpoints.stokGudang), headers: _headers);
+    final res = await FirebaseHttpAdapter.get(Uri.parse(ApiEndpoints.stokGudang), headers: _headers);
     if (res.statusCode != 200) {
       throw Exception('Gagal memuat stok gudang: ${res.statusCode}');
     }
@@ -262,7 +262,7 @@ class StokGudangProvider with ChangeNotifier {
       await Future.delayed(const Duration(milliseconds: 700));
       return true;
     }
-    final res = await http.post(
+    final res = await FirebaseHttpAdapter.post(
       Uri.parse(ApiEndpoints.barangMasuk),
       headers: _headers,
       body: json.encode({
@@ -278,7 +278,7 @@ class StokGudangProvider with ChangeNotifier {
       await Future.delayed(const Duration(milliseconds: 700));
       return true;
     }
-    final res = await http.post(
+    final res = await FirebaseHttpAdapter.post(
       Uri.parse(ApiEndpoints.barangKeluar),
       headers: _headers,
       body: json.encode({

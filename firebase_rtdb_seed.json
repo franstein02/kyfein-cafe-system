@@ -1,0 +1,337 @@
+{
+  "foto": {
+    "foto-seed-001": {
+      "id": "foto-seed-001",
+      "jenis": "profil",
+      "path": "uploads/profil/admin.jpg",
+      "uploader_id": "karyawan-admin-001",
+      "dipakai": true,
+      "created_at": "2026-11-15T08:00:00Z"
+    }
+  },
+  "karyawan": {
+    "karyawan-admin-001": {
+      "id": "karyawan-admin-001",
+      "role": "admin",
+      "nama": "Admin Kyfein",
+      "email": "admin@kyfein.com",
+      "nomor_hp": "081234567890",
+      "password": "hashed_password_placeholder",
+      "foto_profile_id": "foto-seed-001",
+      "status_aktif": true,
+      "created_at": "2026-11-15T08:00:00Z",
+      "updated_at": "2026-11-15T08:00:00Z"
+    }
+  },
+  "konfigurasi_lokasi": {
+    "lokasi-utama": {
+      "id": "lokasi-utama",
+      "latitude": -7.8166,
+      "longitude": 112.0114,
+      "radius_meter": 50,
+      "updated_by": "karyawan-admin-001",
+      "updated_at": "2026-11-15T08:00:00Z"
+    }
+  },
+  "kategori_menu": {
+    "kat-makanan": {
+      "id": "kat-makanan",
+      "nama": "Makanan",
+      "area_produksi": "kitchen",
+      "status_aktif": true,
+      "created_at": "2026-11-15T08:00:00Z"
+    },
+    "kat-minuman": {
+      "id": "kat-minuman",
+      "nama": "Minuman",
+      "area_produksi": "bar",
+      "status_aktif": true,
+      "created_at": "2026-11-15T08:00:00Z"
+    }
+  },
+  "menu": {
+    "menu-sample-001": {
+      "id": "menu-sample-001",
+      "nama": "Kopi Susu Kyfein",
+      "kode_menu": "MNU-001",
+      "harga": 18000,
+      "kategori_id": "kat-minuman",
+      "foto_id": null,
+      "status_aktif": true,
+      "dibuat_oleh": "karyawan-admin-001",
+      "diubah_oleh": "karyawan-admin-001",
+      "created_at": "2026-11-15T08:00:00Z",
+      "updated_at": "2026-11-15T08:00:00Z"
+    }
+  },
+  "bahan": {
+    "bahan-sample-001": {
+      "id": "bahan-sample-001",
+      "nama": "Biji Kopi Arabika",
+      "satuan": "gram",
+      "isi_per_kemasan": 1000,
+      "stok_minimum": 500,
+      "harga_rata_rata": 150,
+      "created_at": "2026-11-15T08:00:00Z",
+      "updated_at": "2026-11-15T08:00:00Z"
+    }
+  },
+  "menu_resep": {
+    "resep-sample-001": {
+      "id": "resep-sample-001",
+      "menu_id": "menu-sample-001",
+      "bahan_id": "bahan-sample-001",
+      "jumlah_terpakai": 18
+    }
+  },
+  "shift_template": {
+    "shift_1": {
+      "id": "shift-template-1",
+      "shift": "shift_1",
+      "jam_mulai": "08:00:00",
+      "jam_selesai": "16:00:00",
+      "updated_at": "2026-11-15T08:00:00Z"
+    },
+    "shift_2": {
+      "id": "shift-template-2",
+      "shift": "shift_2",
+      "jam_mulai": "16:00:00",
+      "jam_selesai": "23:00:00",
+      "updated_at": "2026-11-15T08:00:00Z"
+    }
+  },
+  "jadwal_shift": {
+    "jadwal-sample-001": {
+      "id": "jadwal-sample-001",
+      "karyawan_id": "karyawan-admin-001",
+      "tanggal": "2026-11-15",
+      "shift": "shift_1",
+      "area_kerja": "kasir",
+      "shift_template_id": "shift-template-1",
+      "jam_mulai": "08:00:00",
+      "jam_selesai": "16:00:00",
+      "dibuat_oleh": "karyawan-admin-001",
+      "created_at": "2026-11-15T08:00:00Z",
+      "updated_at": "2026-11-15T08:00:00Z"
+    }
+  },
+  "tukar_shift": {
+    "_template": {
+      "id": "",
+      "shift_a_id": "",
+      "shift_b_id": "",
+      "karyawan_pengaju_id": "",
+      "karyawan_target_id": "",
+      "status": "pending",
+      "alasan": "",
+      "diajukan_at": "",
+      "diproses_oleh": null,
+      "diproses_at": null
+    }
+  },
+  "request_off": {
+    "_template": {
+      "id": "",
+      "karyawan_id": "",
+      "tanggal": "",
+      "alasan": "",
+      "diajukan_at": ""
+    }
+  },
+  "izin_telat": {
+    "_template": {
+      "id": "",
+      "karyawan_id": "",
+      "jadwal_shift_id": "",
+      "alasan": "",
+      "foto_id": null,
+      "status": "pending",
+      "diajukan_at": "",
+      "diproses_oleh": null,
+      "diproses_at": null
+    }
+  },
+  "izin_tidak_masuk": {
+    "_template": {
+      "id": "",
+      "karyawan_id": "",
+      "jadwal_shift_id": "",
+      "alasan": "",
+      "foto_id": "",
+      "status": "pending",
+      "diajukan_at": "",
+      "diproses_oleh": null,
+      "diproses_at": null
+    }
+  },
+  "absensi": {
+    "_template": {
+      "id": "",
+      "karyawan_id": "",
+      "jadwal_shift_id": "",
+      "jam_masuk": "",
+      "jam_pulang": null,
+      "lat_masuk": 0.0,
+      "lng_masuk": 0.0,
+      "lat_pulang": null,
+      "lng_pulang": null,
+      "foto_masuk_id": "",
+      "foto_pulang_id": null,
+      "menit_telat": 0,
+      "izin_telat_id": null,
+      "status_pulang": null,
+      "created_at": ""
+    }
+  },
+  "stok_gudang": {
+    "stok-gudang-001": {
+      "id": "stok-gudang-001",
+      "bahan_id": "bahan-sample-001",
+      "jumlah_kemasan_besar": 5,
+      "jumlah_satuan_kecil": 5000,
+      "updated_at": "2026-11-15T08:00:00Z"
+    }
+  },
+  "stok_titik": {
+    "stok-titik-001": {
+      "id": "stok-titik-001",
+      "bahan_id": "bahan-sample-001",
+      "titik": "bar",
+      "jumlah": 1000,
+      "updated_at": "2026-11-15T08:00:00Z"
+    }
+  },
+  "barang_masuk": {
+    "_template": {
+      "id": "",
+      "karyawan_id": "",
+      "keterangan": "",
+      "waktu": "",
+      "created_at": ""
+    }
+  },
+  "barang_masuk_detail": {
+    "_template": {
+      "id": "",
+      "barang_masuk_id": "",
+      "bahan_id": "",
+      "jumlah_kemasan_besar": 0,
+      "jumlah_satuan_kecil": 0,
+      "harga_total": 0
+    }
+  },
+  "barang_keluar": {
+    "_template": {
+      "id": "",
+      "titik_tujuan": "bar",
+      "karyawan_id": "",
+      "waktu": "",
+      "created_at": ""
+    }
+  },
+  "barang_keluar_detail": {
+    "_template": {
+      "id": "",
+      "barang_keluar_id": "",
+      "bahan_id": "",
+      "jumlah": 0
+    }
+  },
+  "stok_opname": {
+    "_template": {
+      "id": "",
+      "jadwal_shift_id": "",
+      "titik": "bar",
+      "tipe": "awal_shift",
+      "metode": "hitung_manual",
+      "karyawan_id": "",
+      "susulan": false,
+      "diinput_oleh": null,
+      "waktu_opname": "",
+      "catatan": "",
+      "created_at": ""
+    }
+  },
+  "stok_opname_detail": {
+    "_template": {
+      "id": "",
+      "stok_opname_id": "",
+      "bahan_id": "",
+      "jumlah": 0
+    }
+  },
+  "mutasi_stok": {
+    "_template": {
+      "id": "",
+      "bahan_id": "",
+      "titik": "bar",
+      "jadwal_shift_id": null,
+      "tipe": "selisih_handover",
+      "jumlah_selisih": 0,
+      "keterangan": "",
+      "created_at": ""
+    }
+  },
+  "transaksi": {
+    "trx-sample-001": {
+      "id": "trx-sample-001",
+      "jadwal_shift_id": "jadwal-sample-001",
+      "kasir_id": "karyawan-admin-001",
+      "nomor_transaksi": "TRX-20261115-0001",
+      "metode_bayar": "cash",
+      "total_harga": 18000,
+      "uang_diterima": 20000,
+      "kembalian": 2000,
+      "foto_bukti_qris_id": null,
+      "status": "selesai",
+      "waktu_transaksi": "2026-11-15T09:00:00Z",
+      "created_at": "2026-11-15T09:00:00Z"
+    }
+  },
+  "transaksi_detail": {
+    "trx-detail-001": {
+      "id": "trx-detail-001",
+      "transaksi_id": "trx-sample-001",
+      "menu_id": "menu-sample-001",
+      "qty": 1,
+      "harga_satuan": 18000,
+      "hpp_satuan": 5000,
+      "catatan": "",
+      "subtotal": 18000,
+      "status_item": "selesai"
+    }
+  },
+  "kategori_pengeluaran": {
+    "kat-pengeluaran-001": {
+      "id": "kat-pengeluaran-001",
+      "nama": "Listrik & Air",
+      "status_aktif": true,
+      "created_at": "2026-11-15T08:00:00Z"
+    }
+  },
+  "pengeluaran": {
+    "_template": {
+      "id": "",
+      "kategori_id": "",
+      "tipe": "mendadak",
+      "nominal": 0,
+      "bulan": null,
+      "tanggal": "2026-11-15",
+      "keterangan": "",
+      "dicatat_oleh": "",
+      "created_at": ""
+    }
+  },
+  "audit_log_konfigurasi": {
+    "_template": {
+      "id": "",
+      "tabel": "konfigurasi_lokasi",
+      "row_id": "",
+      "data_lama": {},
+      "data_baru": {},
+      "diubah_oleh": "",
+      "diubah_at": ""
+    }
+  }
+}
+

@@ -1,3 +1,4 @@
+import 'package:kyfein_frontend/core/network/firebase_http_adapter.dart';
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -178,7 +179,7 @@ class _AdminAbsensiScreenState extends State<AdminAbsensiScreen> {
 
     setState(() => _savingLocation = true);
     try {
-      final res = await http.put(
+      final res = await FirebaseHttpAdapter.put(
         Uri.parse(ApiEndpoints.konfigurasiLokasi),
         headers: {
           ..._headers,

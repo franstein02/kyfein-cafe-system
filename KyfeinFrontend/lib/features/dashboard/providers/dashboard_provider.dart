@@ -1,3 +1,4 @@
+import 'package:kyfein_frontend/core/network/firebase_http_adapter.dart';
 import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/material.dart';
@@ -502,7 +503,7 @@ class DashboardProvider with ChangeNotifier {
   Future<void> refresh() => loadDashboard();
 
   Future<void> _loadShiftAktif() async {
-    final resp = await http.get(
+    final resp = await FirebaseHttpAdapter.get(
       Uri.parse(ApiEndpoints.shiftAktif),
       headers: _auth!.authHeaders,
     ).timeout(const Duration(seconds: 8));
@@ -516,7 +517,7 @@ class DashboardProvider with ChangeNotifier {
 
   Future<void> _loadLaporanShift() async {
     try {
-      final resp = await http.get(
+      final resp = await FirebaseHttpAdapter.get(
         Uri.parse(ApiEndpoints.laporanShiftAktif),
         headers: _auth!.authHeaders,
       ).timeout(const Duration(seconds: 8));
@@ -610,7 +611,7 @@ class DashboardProvider with ChangeNotifier {
 
   Future<void> _loadAdminSummary() async {
     try {
-      final resp = await http.get(
+      final resp = await FirebaseHttpAdapter.get(
         Uri.parse(ApiEndpoints.profitHarian),
         headers: _auth!.authHeaders,
       ).timeout(const Duration(seconds: 8));
@@ -628,7 +629,7 @@ class DashboardProvider with ChangeNotifier {
 
   Future<void> _loadStokMenipis() async {
     try {
-      final resp = await http.get(
+      final resp = await FirebaseHttpAdapter.get(
         Uri.parse(ApiEndpoints.stokMenipis),
         headers: _auth!.authHeaders,
       ).timeout(const Duration(seconds: 8));
@@ -645,7 +646,7 @@ class DashboardProvider with ChangeNotifier {
       final h = _auth!.authHeaders;
       const t = Duration(seconds: 8);
       final res = await Future.wait([
-        http.get(Uri.parse('${ApiEndpoints.karyawan}/'), headers: h).timeout(t),
+        FirebaseHttpAdapter.get(Uri.parse('${ApiEndpoints.karyawan}/'), headers: h).timeout(t),
         http
             .get(Uri.parse('${ApiEndpoints.tukarShift}?status=pending'),
                 headers: h)
@@ -658,7 +659,7 @@ class DashboardProvider with ChangeNotifier {
             .get(Uri.parse('${ApiEndpoints.izinTidakMasuk}?status=pending'),
                 headers: h)
             .timeout(t),
-        http.get(Uri.parse(ApiEndpoints.requestOff), headers: h).timeout(t),
+        FirebaseHttpAdapter.get(Uri.parse(ApiEndpoints.requestOff), headers: h).timeout(t),
       ]);
 
       // Peta id karyawan -> nama

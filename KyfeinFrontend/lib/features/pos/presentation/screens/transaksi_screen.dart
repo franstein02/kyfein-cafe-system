@@ -1,7 +1,9 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
+import '../../../../core/services/coroutine_test_channel.dart';
 import '../../../auth/providers/auth_provider.dart';
 import '../../providers/transaksi_provider.dart';
 
@@ -223,6 +225,24 @@ class _TransaksiViewState extends State<_TransaksiView> with SingleTickerProvide
             ],
           ),
         ),
+        const SizedBox(width: 8),
+        ElevatedButton.icon(
+          onPressed: () => _runCoroutineStressTest(provider),
+          icon: const Icon(Icons.bolt_rounded, size: 18),
+          label: Text(
+            isDesktop ? 'Stress Test 100 Transaksi' : 'Test 100x',
+            style: GoogleFonts.outfit(fontWeight: FontWeight.w600, fontSize: 13),
+          ),
+          style: ElevatedButton.styleFrom(
+            backgroundColor: const Color(0xFF1B4332),
+            foregroundColor: Colors.white,
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
+          ),
+        ),
+        const SizedBox(width: 8),
         IconButton.filledTonal(
           onPressed: provider.isLoading ? null : provider.loadTransaksi,
           icon: provider.isLoading
@@ -240,6 +260,170 @@ class _TransaksiViewState extends State<_TransaksiView> with SingleTickerProvide
         ),
       ],
     );
+  }
+
+  Future<void> _runCoroutineStressTest(TransaksiProvider provider) async {
+    if (!CoroutineTestChannel.isSupported) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Stress test Kotlin Coroutine hanya berjalan di Android.'),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      return;
+    }
+
+    int sqliteCount = 0;
+    int firebaseCount = 0;
+    int total = 100;
+    bool cancelling = false;
+    StreamSubscription<Map<String, dynamic>>? sub;
+
+    await showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogCtx) {
+        return StatefulBuilder(
+          builder: (ctx, setDialogState) {
+            if (sub == null) {
+              sub = CoroutineTestChannel.progressStream.listen((data) {
+                final s = (data['sqlite'] as num?)?.toInt() ?? sqliteCount;
+                final f = (data['firebase'] as num?)?.toInt() ?? firebaseCount;
+                final t = (data['total'] as num?)?.toInt() ?? 100;
+                final done = data['done'] == true;
+                final cancelled = data['cancelled'] == true;
+
+                if (ctx.mounted) {
+                  setDialogState(() {
+                    sqliteCount = s;
+                    firebaseCount = f;
+                    total = t;
+                  });
+                }
+
+                if (done) {
+                  sub?.cancel();
+                  if (dialogCtx.mounted) Navigator.of(dialogCtx).pop();
+                  if (mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text(
+                          cancelled
+                              ? 'Dibatalkan ($f/$t Firebase, $s/$t SQLite tersimpan)'
+                              : 'Stress test selesai: $f/$t transaksi tersimpan di Firebase & $s/$t di SQLite',
+                        ),
+                        backgroundColor:
+                            cancelled ? Colors.orange.shade800 : const Color(0xFF1B4332),
+                        behavior: SnackBarBehavior.floating,
+                      ),
+                    );
+                    provider.loadTransaksi();
+                  }
+                }
+              });
+              CoroutineTestChannel.startStressTest();
+            }
+
+            return AlertDialog(
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(18),
+              ),
+              title: Row(
+                children: [
+                  const SizedBox(
+                    width: 22,
+                    height: 22,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2.5,
+                      color: Color(0xFF1B4332),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      'Stress Test 100 Transaksi',
+                      style: GoogleFonts.outfit(
+                        fontWeight: FontWeight.w700,
+                        fontSize: 17,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Menjalankan Kotlin Coroutine (Dispatchers.IO + Mutex) ke Firebase RTDB & SQLite lokal...',
+                    style: GoogleFonts.outfit(
+                      fontSize: 13,
+                      color: Colors.grey.shade700,
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text('Firebase RTDB',
+                          style: GoogleFonts.outfit(fontWeight: FontWeight.w600)),
+                      Text('$firebaseCount / $total',
+                          style: GoogleFonts.outfit(fontWeight: FontWeight.w700)),
+                    ],
+                  ),
+                  const SizedBox(height: 6),
+                  LinearProgressIndicator(
+                    value: total > 0 ? firebaseCount / total : 0,
+                    minHeight: 8,
+                    borderRadius: BorderRadius.circular(6),
+                    color: const Color(0xFF1B4332),
+                    backgroundColor: Colors.grey.shade200,
+                  ),
+                  const SizedBox(height: 14),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text('SQLite Lokal',
+                          style: GoogleFonts.outfit(fontWeight: FontWeight.w600)),
+                      Text('$sqliteCount / $total',
+                          style: GoogleFonts.outfit(fontWeight: FontWeight.w700)),
+                    ],
+                  ),
+                  const SizedBox(height: 6),
+                  LinearProgressIndicator(
+                    value: total > 0 ? sqliteCount / total : 0,
+                    minHeight: 8,
+                    borderRadius: BorderRadius.circular(6),
+                    color: const Color(0xFF5C3D2E),
+                    backgroundColor: Colors.grey.shade200,
+                  ),
+                ],
+              ),
+              actions: [
+                TextButton.icon(
+                  onPressed: cancelling
+                      ? null
+                      : () async {
+                          setDialogState(() => cancelling = true);
+                          await CoroutineTestChannel.cancelStressTest();
+                        },
+                  icon: const Icon(Icons.cancel_outlined, color: Colors.red),
+                  label: Text(
+                    cancelling ? 'Membatalkan...' : 'Cancel',
+                    style: GoogleFonts.outfit(
+                      color: Colors.red,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+
+    await sub?.cancel();
   }
 
   // ── Date Filters ────────────────────────────────────────────────────────────

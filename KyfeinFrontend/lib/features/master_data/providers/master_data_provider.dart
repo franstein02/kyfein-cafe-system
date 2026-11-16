@@ -1,3 +1,4 @@
+import 'package:kyfein_frontend/core/network/firebase_http_adapter.dart';
 import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/material.dart';
@@ -233,7 +234,7 @@ class MasterDataProvider with ChangeNotifier {
   }
 
   Future<void> _fetchCategories() async {
-    final response = await http.get(
+    final response = await FirebaseHttpAdapter.get(
       Uri.parse('${ApiEndpoints.kategoriMenu}?include_nonaktif=true'),
       headers: _headers,
     );
@@ -248,7 +249,7 @@ class MasterDataProvider with ChangeNotifier {
 
   Future<void> _fetchBahanList() async {
     try {
-      final response = await http.get(
+      final response = await FirebaseHttpAdapter.get(
         Uri.parse(ApiEndpoints.bahan),
         headers: _headers,
       );
@@ -263,7 +264,7 @@ class MasterDataProvider with ChangeNotifier {
   }
 
   Future<void> _fetchMenus() async {
-    final response = await http.get(
+    final response = await FirebaseHttpAdapter.get(
       Uri.parse('${ApiEndpoints.menu}?include_nonaktif=true'),
       headers: _headers,
     );
@@ -278,7 +279,7 @@ class MasterDataProvider with ChangeNotifier {
 
   Future<void> _fetchKaryawanList() async {
     try {
-      final response = await http.get(
+      final response = await FirebaseHttpAdapter.get(
         Uri.parse('${ApiEndpoints.karyawan}/'),
         headers: _headers,
       );
@@ -316,7 +317,7 @@ class MasterDataProvider with ChangeNotifier {
     _isLoading = true;
     notifyListeners();
     try {
-      final response = await http.post(
+      final response = await FirebaseHttpAdapter.post(
         Uri.parse(ApiEndpoints.menu),
         headers: _headers,
         body: json.encode(data),
@@ -339,7 +340,7 @@ class MasterDataProvider with ChangeNotifier {
     _isLoading = true;
     notifyListeners();
     try {
-      final response = await http.put(
+      final response = await FirebaseHttpAdapter.put(
         Uri.parse('${ApiEndpoints.menu}/$id'),
         headers: _headers,
         body: json.encode(data),
@@ -366,7 +367,7 @@ class MasterDataProvider with ChangeNotifier {
     _isLoading = true;
     notifyListeners();
     try {
-      final response = await http.delete(
+      final response = await FirebaseHttpAdapter.delete(
         Uri.parse('${ApiEndpoints.menu}/$id'),
         headers: _headers,
       );
@@ -387,7 +388,7 @@ class MasterDataProvider with ChangeNotifier {
   // --- KATEGORI MENU CRUD ---
   Future<bool> createKategoriMenu(Map<String, dynamic> data) async {
     try {
-      final response = await http.post(
+      final response = await FirebaseHttpAdapter.post(
         Uri.parse(ApiEndpoints.kategoriMenu),
         headers: _headers,
         body: json.encode(data),
@@ -405,7 +406,7 @@ class MasterDataProvider with ChangeNotifier {
 
   Future<bool> updateKategoriMenu(String id, Map<String, dynamic> data) async {
     try {
-      final response = await http.put(
+      final response = await FirebaseHttpAdapter.put(
         Uri.parse('${ApiEndpoints.kategoriMenu}/$id'),
         headers: _headers,
         body: json.encode(data),
@@ -424,7 +425,7 @@ class MasterDataProvider with ChangeNotifier {
   // --- BAHAN BAKU CRUD ---
   Future<bool> createBahan(Map<String, dynamic> data) async {
     try {
-      final response = await http.post(
+      final response = await FirebaseHttpAdapter.post(
         Uri.parse(ApiEndpoints.bahan),
         headers: _headers,
         body: json.encode(data),
@@ -442,7 +443,7 @@ class MasterDataProvider with ChangeNotifier {
 
   Future<bool> updateBahan(String id, Map<String, dynamic> data) async {
     try {
-      final response = await http.put(
+      final response = await FirebaseHttpAdapter.put(
         Uri.parse('${ApiEndpoints.bahan}/$id'),
         headers: _headers,
         body: json.encode(data),
@@ -481,7 +482,7 @@ class MasterDataProvider with ChangeNotifier {
   // --- KARYAWAN CRUD PER DIVISI (KASIR / BAR / KITCHEN) ---
   Future<String?> createKaryawan(Map<String, dynamic> data) async {
     try {
-      final response = await http.post(
+      final response = await FirebaseHttpAdapter.post(
         Uri.parse('${ApiEndpoints.karyawan}/'),
         headers: _headers,
         body: json.encode(data),
@@ -499,7 +500,7 @@ class MasterDataProvider with ChangeNotifier {
 
   Future<String?> updateKaryawan(String id, Map<String, dynamic> data) async {
     try {
-      final response = await http.put(
+      final response = await FirebaseHttpAdapter.put(
         Uri.parse(ApiEndpoints.karyawanById(id)),
         headers: _headers,
         body: json.encode(data),

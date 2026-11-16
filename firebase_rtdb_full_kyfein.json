@@ -1,0 +1,619 @@
+{
+  "audit_log_konfigurasi": {
+    "bccaa62c-d733-11f1-a447-00155d73ed6a": {
+      "id": "bccaa62c-d733-11f1-a447-00155d73ed6a",
+      "tabel": "konfigurasi_lokasi",
+      "row_id": "e1f4906b-681c-4047-ae61-c9ee9870c4b6",
+      "data_lama": "{\"latitude\": -7.82841199, \"longitude\": 111.99807238, \"updated_by\": \"6eb0abd6-c196-11f1-84bd-00155dbd31c3\", \"radius_meter\": 100}",
+      "data_baru": "{\"latitude\": -7.80217280, \"longitude\": 111.97978130, \"updated_by\": \"6eb0abd6-c196-11f1-84bd-00155dbd31c3\", \"radius_meter\": 100}",
+      "diubah_oleh": "6eb0abd6-c196-11f1-84bd-00155dbd31c3",
+      "diubah_at": "2026-11-03T10:07:43"
+    },
+    "f0711ade-dd82-11f1-a2af-0a0027000007": {
+      "id": "f0711ade-dd82-11f1-a2af-0a0027000007",
+      "tabel": "konfigurasi_lokasi",
+      "row_id": "e1f4906b-681c-4047-ae61-c9ee9870c4b6",
+      "data_lama": "{\"latitude\": -7.83346790, \"longitude\": 112.00327970, \"updated_by\": \"6eb0abd6-c196-11f1-84bd-00155dbd31c3\", \"radius_meter\": 100}",
+      "data_baru": "{\"latitude\": -7.80216230, \"longitude\": 111.98002120, \"updated_by\": \"6eb0abd6-c196-11f1-84bd-00155dbd31c3\", \"radius_meter\": 100}",
+      "diubah_oleh": "6eb0abd6-c196-11f1-84bd-00155dbd31c3",
+      "diubah_at": "2026-11-11T10:49:47"
+    },
+    "fbeb98c2-dd30-11f1-9def-0a0027000007": {
+      "id": "fbeb98c2-dd30-11f1-9def-0a0027000007",
+      "tabel": "konfigurasi_lokasi",
+      "row_id": "e1f4906b-681c-4047-ae61-c9ee9870c4b6",
+      "data_lama": "{\"latitude\": -7.80217280, \"longitude\": 111.97978130, \"updated_by\": \"6eb0abd6-c196-11f1-84bd-00155dbd31c3\", \"radius_meter\": 100}",
+      "data_baru": "{\"latitude\": -7.83346790, \"longitude\": 112.00327970, \"updated_by\": \"6eb0abd6-c196-11f1-84bd-00155dbd31c3\", \"radius_meter\": 100}",
+      "diubah_oleh": "6eb0abd6-c196-11f1-84bd-00155dbd31c3",
+      "diubah_at": "2026-11-11T01:03:07"
+    }
+  },
+  "karyawan": {
+    "08905660-3b65-485a-819a-ba1c5748db73": {
+      "id": "08905660-3b65-485a-819a-ba1c5748db73",
+      "role": "karyawan",
+      "divisi": "kitchen",
+      "nama": "Dila",
+      "email": "fransciescos@gmail.com",
+      "nomor_hp": null,
+      "password": "$2b$12$hwdQy3oACwE3IgOV9AaCq.R.vPi.H84tV7tOv45ZLq6wxq3EEpXrS",
+      "foto_profile_id": null,
+      "status_aktif": 1,
+      "created_at": "2026-11-14T12:23:23",
+      "updated_at": "2026-11-14T12:29:48",
+      "fcm_token": "dE_CQH7WQwWepfCtGyRkYM:APA91bE2TZ-NnURHMJ0RFQenZVp1O-ssPBw1OHa1-7-RPm22R8XTQsrMHdC-fNjc9KH4lt4S5c8-g6ZpHZTik7SqFqLlObYp9mqJXEYYahAlTvr9p5MdqC4"
+    },
+    "6eb0abd6-c196-11f1-84bd-00155dbd31c3": {
+      "id": "6eb0abd6-c196-11f1-84bd-00155dbd31c3",
+      "role": "admin",
+      "divisi": null,
+      "nama": "Frans",
+      "email": "fransciesco.steinlie@gmail.com",
+      "nomor_hp": "081234567890",
+      "password": "$2b$12$KMpAOJ.J./y/TNO8HwBSMeP5Sr33AN/tGwL/J9/m.iE4WwTFmmmba",
+      "foto_profile_id": null,
+      "status_aktif": 1,
+      "created_at": "2026-10-06T21:58:47",
+      "updated_at": "2026-11-13T21:36:04",
+      "fcm_token": "dE_CQH7WQwWepfCtGyRkYM:APA91bE2TZ-NnURHMJ0RFQenZVp1O-ssPBw1OHa1-7-RPm22R8XTQsrMHdC-fNjc9KH4lt4S5c8-g6ZpHZTik7SqFqLlObYp9mqJXEYYahAlTvr9p5MdqC4"
+    }
+  },
+  "kategori_menu": {
+    "6e665de2-c196-11f1-84bd-00155dbd31c3": {
+      "id": "6e665de2-c196-11f1-84bd-00155dbd31c3",
+      "nama": "Makanan",
+      "area_produksi": "kitchen",
+      "status_aktif": 1,
+      "created_at": "2026-10-06T21:58:46"
+    },
+    "6e666590-c196-11f1-84bd-00155dbd31c3": {
+      "id": "6e666590-c196-11f1-84bd-00155dbd31c3",
+      "nama": "Minuman",
+      "area_produksi": "bar",
+      "status_aktif": 1,
+      "created_at": "2026-10-06T21:58:46"
+    }
+  },
+  "konfigurasi_lokasi": {
+    "e1f4906b-681c-4047-ae61-c9ee9870c4b6": {
+      "id": "e1f4906b-681c-4047-ae61-c9ee9870c4b6",
+      "latitude": -7.8021623,
+      "longitude": 111.9800212,
+      "radius_meter": 100,
+      "updated_by": "6eb0abd6-c196-11f1-84bd-00155dbd31c3",
+      "updated_at": "2026-11-11T10:49:47"
+    }
+  },
+  "menu": {
+    "42c1e110-4fd6-45ba-ae09-7df1cb9e8b6b": {
+      "id": "42c1e110-4fd6-45ba-ae09-7df1cb9e8b6b",
+      "nama": "Coffee Latte",
+      "kode_menu": "MNM01",
+      "harga": 15000.0,
+      "kategori_id": "6e666590-c196-11f1-84bd-00155dbd31c3",
+      "foto_id": null,
+      "status_aktif": 1,
+      "dibuat_oleh": "6eb0abd6-c196-11f1-84bd-00155dbd31c3",
+      "diubah_oleh": "6eb0abd6-c196-11f1-84bd-00155dbd31c3",
+      "created_at": "2026-10-09T14:25:35",
+      "updated_at": "2026-10-10T02:54:09"
+    },
+    "6888df9d-9cbf-4ca7-8eab-fcdb8dc601e2": {
+      "id": "6888df9d-9cbf-4ca7-8eab-fcdb8dc601e2",
+      "nama": "Nasi Goreng",
+      "kode_menu": "MKN01",
+      "harga": 25000.0,
+      "kategori_id": "6e665de2-c196-11f1-84bd-00155dbd31c3",
+      "foto_id": null,
+      "status_aktif": 1,
+      "dibuat_oleh": "6eb0abd6-c196-11f1-84bd-00155dbd31c3",
+      "diubah_oleh": "6eb0abd6-c196-11f1-84bd-00155dbd31c3",
+      "created_at": "2026-10-09T14:28:33",
+      "updated_at": "2026-10-10T01:29:00"
+    },
+    "6b471e3e-e570-4240-87b3-63ab987aac59": {
+      "id": "6b471e3e-e570-4240-87b3-63ab987aac59",
+      "nama": "Kopi Susu Gula Aren",
+      "kode_menu": "MNM02",
+      "harga": 18000.0,
+      "kategori_id": "6e666590-c196-11f1-84bd-00155dbd31c3",
+      "foto_id": null,
+      "status_aktif": 1,
+      "dibuat_oleh": "6eb0abd6-c196-11f1-84bd-00155dbd31c3",
+      "diubah_oleh": null,
+      "created_at": "2026-10-09T14:40:17",
+      "updated_at": "2026-10-09T14:40:17"
+    },
+    "e26e1a8d-1025-4f70-aca7-2b7a3c7075da": {
+      "id": "e26e1a8d-1025-4f70-aca7-2b7a3c7075da",
+      "nama": "Nasi Kebuli",
+      "kode_menu": "MKN02",
+      "harga": 25000.0,
+      "kategori_id": "6e665de2-c196-11f1-84bd-00155dbd31c3",
+      "foto_id": null,
+      "status_aktif": 1,
+      "dibuat_oleh": "6eb0abd6-c196-11f1-84bd-00155dbd31c3",
+      "diubah_oleh": null,
+      "created_at": "2026-10-10T01:38:31",
+      "updated_at": "2026-10-10T01:38:31"
+    }
+  },
+  "shift_template": {
+    "shift_1": {
+      "id": "40fe952a-1341-4ee0-a949-59e415595fc6",
+      "shift": "shift_1",
+      "jam_mulai": "08:00:00",
+      "jam_selesai": "16:00:00",
+      "updated_at": "2026-11-14T11:56:40"
+    },
+    "shift_2": {
+      "id": "73207394-b662-4903-b003-5e72cd529e57",
+      "shift": "shift_2",
+      "jam_mulai": "16:00:00",
+      "jam_selesai": "23:00:00",
+      "updated_at": "2026-11-14T11:56:40"
+    }
+  },
+  "bahan": {
+    "bahan-kopi": {
+      "id": "bahan-kopi",
+      "nama": "Biji Kopi Arabika",
+      "satuan": "gram",
+      "isi_per_kemasan": 1000.0,
+      "stok_minimum": 500.0,
+      "harga_rata_rata": 180.0,
+      "created_at": "2026-11-15T13:27:16Z",
+      "updated_at": "2026-11-15T13:27:16Z"
+    },
+    "bahan-susu": {
+      "id": "bahan-susu",
+      "nama": "Susu UHT Full Cream",
+      "satuan": "ml",
+      "isi_per_kemasan": 1000.0,
+      "stok_minimum": 2000.0,
+      "harga_rata_rata": 20.0,
+      "created_at": "2026-11-15T13:27:16Z",
+      "updated_at": "2026-11-15T13:27:16Z"
+    },
+    "bahan-aren": {
+      "id": "bahan-aren",
+      "nama": "Gula Aren Cair",
+      "satuan": "ml",
+      "isi_per_kemasan": 1000.0,
+      "stok_minimum": 500.0,
+      "harga_rata_rata": 35.0,
+      "created_at": "2026-11-15T13:27:16Z",
+      "updated_at": "2026-11-15T13:27:16Z"
+    },
+    "bahan-beras": {
+      "id": "bahan-beras",
+      "nama": "Beras Premium",
+      "satuan": "gram",
+      "isi_per_kemasan": 5000.0,
+      "stok_minimum": 2000.0,
+      "harga_rata_rata": 16.0,
+      "created_at": "2026-11-15T13:27:16Z",
+      "updated_at": "2026-11-15T13:27:16Z"
+    },
+    "bahan-ayam": {
+      "id": "bahan-ayam",
+      "nama": "Daging Ayam Fillet",
+      "satuan": "gram",
+      "isi_per_kemasan": 1000.0,
+      "stok_minimum": 1000.0,
+      "harga_rata_rata": 55.0,
+      "created_at": "2026-11-15T13:27:16Z",
+      "updated_at": "2026-11-15T13:27:16Z"
+    },
+    "bahan-bumbu": {
+      "id": "bahan-bumbu",
+      "nama": "Bumbu Rempah & Kebuli",
+      "satuan": "gram",
+      "isi_per_kemasan": 500.0,
+      "stok_minimum": 300.0,
+      "harga_rata_rata": 60.0,
+      "created_at": "2026-11-15T13:27:16Z",
+      "updated_at": "2026-11-15T13:27:16Z"
+    }
+  },
+  "menu_resep": {
+    "resep-1": {
+      "id": "resep-1",
+      "menu_id": "42c1e110-4fd6-45ba-ae09-7df1cb9e8b6b",
+      "bahan_id": "bahan-kopi",
+      "jumlah_terpakai": 18.0
+    },
+    "resep-2": {
+      "id": "resep-2",
+      "menu_id": "42c1e110-4fd6-45ba-ae09-7df1cb9e8b6b",
+      "bahan_id": "bahan-susu",
+      "jumlah_terpakai": 150.0
+    },
+    "resep-3": {
+      "id": "resep-3",
+      "menu_id": "6b471e3e-e570-4240-87b3-63ab987aac59",
+      "bahan_id": "bahan-kopi",
+      "jumlah_terpakai": 18.0
+    },
+    "resep-4": {
+      "id": "resep-4",
+      "menu_id": "6b471e3e-e570-4240-87b3-63ab987aac59",
+      "bahan_id": "bahan-susu",
+      "jumlah_terpakai": 140.0
+    },
+    "resep-5": {
+      "id": "resep-5",
+      "menu_id": "6b471e3e-e570-4240-87b3-63ab987aac59",
+      "bahan_id": "bahan-aren",
+      "jumlah_terpakai": 25.0
+    },
+    "resep-6": {
+      "id": "resep-6",
+      "menu_id": "6888df9d-9cbf-4ca7-8eab-fcdb8dc601e2",
+      "bahan_id": "bahan-beras",
+      "jumlah_terpakai": 200.0
+    },
+    "resep-7": {
+      "id": "resep-7",
+      "menu_id": "6888df9d-9cbf-4ca7-8eab-fcdb8dc601e2",
+      "bahan_id": "bahan-ayam",
+      "jumlah_terpakai": 80.0
+    },
+    "resep-8": {
+      "id": "resep-8",
+      "menu_id": "e26e1a8d-1025-4f70-aca7-2b7a3c7075da",
+      "bahan_id": "bahan-beras",
+      "jumlah_terpakai": 220.0
+    },
+    "resep-9": {
+      "id": "resep-9",
+      "menu_id": "e26e1a8d-1025-4f70-aca7-2b7a3c7075da",
+      "bahan_id": "bahan-ayam",
+      "jumlah_terpakai": 100.0
+    },
+    "resep-10": {
+      "id": "resep-10",
+      "menu_id": "e26e1a8d-1025-4f70-aca7-2b7a3c7075da",
+      "bahan_id": "bahan-bumbu",
+      "jumlah_terpakai": 30.0
+    }
+  },
+  "stok_gudang": {
+    "sg-kopi": {
+      "id": "sg-kopi",
+      "bahan_id": "bahan-kopi",
+      "jumlah_kemasan_besar": 10,
+      "jumlah_satuan_kecil": 10000.0,
+      "updated_at": "2026-11-15T13:27:16Z"
+    },
+    "sg-susu": {
+      "id": "sg-susu",
+      "bahan_id": "bahan-susu",
+      "jumlah_kemasan_besar": 12,
+      "jumlah_satuan_kecil": 12000.0,
+      "updated_at": "2026-11-15T13:27:16Z"
+    },
+    "sg-aren": {
+      "id": "sg-aren",
+      "bahan_id": "bahan-aren",
+      "jumlah_kemasan_besar": 5,
+      "jumlah_satuan_kecil": 5000.0,
+      "updated_at": "2026-11-15T13:27:16Z"
+    },
+    "sg-beras": {
+      "id": "sg-beras",
+      "bahan_id": "bahan-beras",
+      "jumlah_kemasan_besar": 4,
+      "jumlah_satuan_kecil": 20000.0,
+      "updated_at": "2026-11-15T13:27:16Z"
+    },
+    "sg-ayam": {
+      "id": "sg-ayam",
+      "bahan_id": "bahan-ayam",
+      "jumlah_kemasan_besar": 8,
+      "jumlah_satuan_kecil": 8000.0,
+      "updated_at": "2026-11-15T13:27:16Z"
+    },
+    "sg-bumbu": {
+      "id": "sg-bumbu",
+      "bahan_id": "bahan-bumbu",
+      "jumlah_kemasan_besar": 4,
+      "jumlah_satuan_kecil": 2000.0,
+      "updated_at": "2026-11-15T13:27:16Z"
+    }
+  },
+  "stok_titik": {
+    "st-bar-kopi": {
+      "id": "st-bar-kopi",
+      "bahan_id": "bahan-kopi",
+      "titik": "bar",
+      "jumlah": 2000.0,
+      "updated_at": "2026-11-15T13:27:16Z"
+    },
+    "st-bar-susu": {
+      "id": "st-bar-susu",
+      "bahan_id": "bahan-susu",
+      "titik": "bar",
+      "jumlah": 4000.0,
+      "updated_at": "2026-11-15T13:27:16Z"
+    },
+    "st-bar-aren": {
+      "id": "st-bar-aren",
+      "bahan_id": "bahan-aren",
+      "titik": "bar",
+      "jumlah": 1500.0,
+      "updated_at": "2026-11-15T13:27:16Z"
+    },
+    "st-kit-beras": {
+      "id": "st-kit-beras",
+      "bahan_id": "bahan-beras",
+      "titik": "kitchen",
+      "jumlah": 5000.0,
+      "updated_at": "2026-11-15T13:27:16Z"
+    },
+    "st-kit-ayam": {
+      "id": "st-kit-ayam",
+      "bahan_id": "bahan-ayam",
+      "titik": "kitchen",
+      "jumlah": 2500.0,
+      "updated_at": "2026-11-15T13:27:16Z"
+    },
+    "st-kit-bumbu": {
+      "id": "st-kit-bumbu",
+      "bahan_id": "bahan-bumbu",
+      "titik": "kitchen",
+      "jumlah": 800.0,
+      "updated_at": "2026-11-15T13:27:16Z"
+    }
+  },
+  "barang_masuk": {
+    "bm-001": {
+      "id": "bm-001",
+      "karyawan_id": "6eb0abd6-c196-11f1-84bd-00155dbd31c3",
+      "keterangan": "Stok awal gudang Kyfein",
+      "waktu": "2026-11-15T13:27:16Z",
+      "created_at": "2026-11-15T13:27:16Z"
+    }
+  },
+  "barang_masuk_detail": {
+    "bmd-001": {
+      "id": "bmd-001",
+      "barang_masuk_id": "bm-001",
+      "bahan_id": "bahan-kopi",
+      "jumlah_kemasan_besar": 10,
+      "jumlah_satuan_kecil": 10000.0,
+      "harga_total": 1800000.0
+    }
+  },
+  "barang_keluar": {
+    "bk-001": {
+      "id": "bk-001",
+      "titik_tujuan": "bar",
+      "karyawan_id": "6eb0abd6-c196-11f1-84bd-00155dbd31c3",
+      "waktu": "2026-11-15T13:27:16Z",
+      "created_at": "2026-11-15T13:27:16Z"
+    }
+  },
+  "barang_keluar_detail": {
+    "bkd-001": {
+      "id": "bkd-001",
+      "barang_keluar_id": "bk-001",
+      "bahan_id": "bahan-kopi",
+      "jumlah": 2000.0
+    }
+  },
+  "foto": {
+    "foto-001": {
+      "id": "foto-001",
+      "jenis": "absensi",
+      "path": "rtdb/absensi_awal.jpg",
+      "uploader_id": "08905660-3b65-485a-819a-ba1c5748db73",
+      "dipakai": true,
+      "created_at": "2026-11-15T13:27:16Z"
+    }
+  },
+  "jadwal_shift": {
+    "jadwal-frans-today": {
+      "id": "jadwal-frans-today",
+      "karyawan_id": "6eb0abd6-c196-11f1-84bd-00155dbd31c3",
+      "tanggal": "2026-11-15",
+      "shift": "shift_1",
+      "area_kerja": "kasir",
+      "shift_template_id": "40fe952a-1341-4ee0-a949-59e415595fc6",
+      "jam_mulai": "08:00:00",
+      "jam_selesai": "16:00:00",
+      "dibuat_oleh": "6eb0abd6-c196-11f1-84bd-00155dbd31c3",
+      "created_at": "2026-11-15T13:27:16Z",
+      "updated_at": "2026-11-15T13:27:16Z"
+    },
+    "jadwal-dila-today": {
+      "id": "jadwal-dila-today",
+      "karyawan_id": "08905660-3b65-485a-819a-ba1c5748db73",
+      "tanggal": "2026-11-15",
+      "shift": "shift_1",
+      "area_kerja": "kitchen",
+      "shift_template_id": "40fe952a-1341-4ee0-a949-59e415595fc6",
+      "jam_mulai": "08:00:00",
+      "jam_selesai": "16:00:00",
+      "dibuat_oleh": "6eb0abd6-c196-11f1-84bd-00155dbd31c3",
+      "created_at": "2026-11-15T13:27:16Z",
+      "updated_at": "2026-11-15T13:27:16Z"
+    }
+  },
+  "absensi": {
+    "abs-001": {
+      "id": "abs-001",
+      "karyawan_id": "08905660-3b65-485a-819a-ba1c5748db73",
+      "jadwal_shift_id": "jadwal-dila-today",
+      "jam_masuk": "2026-11-15T13:27:16Z",
+      "jam_pulang": null,
+      "lat_masuk": -7.8021623,
+      "lng_masuk": 111.9800212,
+      "lat_pulang": null,
+      "lng_pulang": null,
+      "foto_masuk_id": "foto-001",
+      "foto_pulang_id": null,
+      "menit_telat": 0,
+      "izin_telat_id": null,
+      "status_pulang": null,
+      "created_at": "2026-11-15T13:27:16Z"
+    }
+  },
+  "izin_telat": {
+    "izt-001": {
+      "id": "izt-001",
+      "karyawan_id": "08905660-3b65-485a-819a-ba1c5748db73",
+      "jadwal_shift_id": "jadwal-dila-today",
+      "alasan": "Ban bocor di jalan",
+      "foto_id": null,
+      "status": "disetujui",
+      "diajukan_at": "2026-11-15T13:27:16Z",
+      "diproses_oleh": "6eb0abd6-c196-11f1-84bd-00155dbd31c3",
+      "diproses_at": "2026-11-15T13:27:16Z"
+    }
+  },
+  "izin_tidak_masuk": {
+    "iztm-001": {
+      "id": "iztm-001",
+      "karyawan_id": "08905660-3b65-485a-819a-ba1c5748db73",
+      "jadwal_shift_id": "jadwal-dila-today",
+      "alasan": "Contoh arsip izin",
+      "foto_id": "foto-001",
+      "status": "ditolak",
+      "diajukan_at": "2026-11-15T13:27:16Z",
+      "diproses_oleh": "6eb0abd6-c196-11f1-84bd-00155dbd31c3",
+      "diproses_at": "2026-11-15T13:27:16Z"
+    }
+  },
+  "tukar_shift": {
+    "tukar-001": {
+      "id": "tukar-001",
+      "shift_a_id": "jadwal-dila-today",
+      "shift_b_id": "jadwal-frans-today",
+      "karyawan_pengaju_id": "08905660-3b65-485a-819a-ba1c5748db73",
+      "karyawan_target_id": "6eb0abd6-c196-11f1-84bd-00155dbd31c3",
+      "status": "pending",
+      "alasan": "Keperluan keluarga",
+      "diajukan_at": "2026-11-15T13:27:16Z",
+      "diproses_oleh": null,
+      "diproses_at": null
+    }
+  },
+  "request_off": {
+    "roff-001": {
+      "id": "roff-001",
+      "karyawan_id": "08905660-3b65-485a-819a-ba1c5748db73",
+      "tanggal": "2026-11-15",
+      "alasan": "Contoh pengajuan libur",
+      "diajukan_at": "2026-11-15T13:27:16Z"
+    }
+  },
+  "stok_opname": {
+    "op-001": {
+      "id": "op-001",
+      "jadwal_shift_id": "jadwal-frans-today",
+      "titik": "bar",
+      "tipe": "awal_shift",
+      "metode": "hitung_manual",
+      "karyawan_id": "6eb0abd6-c196-11f1-84bd-00155dbd31c3",
+      "susulan": false,
+      "diinput_oleh": "6eb0abd6-c196-11f1-84bd-00155dbd31c3",
+      "waktu_opname": "2026-11-15T13:27:16Z",
+      "catatan": "Opname awal shift bar",
+      "created_at": "2026-11-15T13:27:16Z"
+    }
+  },
+  "stok_opname_detail": {
+    "opd-001": {
+      "id": "opd-001",
+      "stok_opname_id": "op-001",
+      "bahan_id": "bahan-kopi",
+      "jumlah": 2000.0
+    }
+  },
+  "mutasi_stok": {
+    "mut-001": {
+      "id": "mut-001",
+      "bahan_id": "bahan-kopi",
+      "titik": "bar",
+      "jadwal_shift_id": "jadwal-frans-today",
+      "tipe": "selisih_handover",
+      "jumlah_selisih": 0.0,
+      "keterangan": "Sesuai fisik",
+      "created_at": "2026-11-15T13:27:16Z"
+    }
+  },
+  "transaksi": {
+    "trx-seed-001": {
+      "id": "trx-seed-001",
+      "jadwal_shift_id": "jadwal-frans-today",
+      "kasir_id": "6eb0abd6-c196-11f1-84bd-00155dbd31c3",
+      "nomor_transaksi": "TRX-SEED-001",
+      "metode_bayar": "cash",
+      "total_harga": 43000.0,
+      "uang_diterima": 50000.0,
+      "kembalian": 7000.0,
+      "foto_bukti_qris_id": null,
+      "status": "selesai",
+      "waktu_transaksi": "2026-11-15T13:27:16Z",
+      "created_at": "2026-11-15T13:27:16Z"
+    }
+  },
+  "transaksi_detail": {
+    "trxd-seed-001": {
+      "id": "trxd-seed-001",
+      "transaksi_id": "trx-seed-001",
+      "menu_id": "6b471e3e-e570-4240-87b3-63ab987aac59",
+      "qty": 1,
+      "harga_satuan": 18000.0,
+      "hpp_satuan": 6915.0,
+      "catatan": "Less ice",
+      "subtotal": 18000.0,
+      "status_item": "menunggu"
+    },
+    "trxd-seed-002": {
+      "id": "trxd-seed-002",
+      "transaksi_id": "trx-seed-001",
+      "menu_id": "6888df9d-9cbf-4ca7-8eab-fcdb8dc601e2",
+      "qty": 1,
+      "harga_satuan": 25000.0,
+      "hpp_satuan": 7600.0,
+      "catatan": "Pedas sedang",
+      "subtotal": 25000.0,
+      "status_item": "menunggu"
+    }
+  },
+  "kategori_pengeluaran": {
+    "katpeng-listrik": {
+      "id": "katpeng-listrik",
+      "nama": "Listrik & Air",
+      "status_aktif": true,
+      "created_at": "2026-11-15T13:27:16Z"
+    },
+    "katpeng-bahan": {
+      "id": "katpeng-bahan",
+      "nama": "Belanja Bahan Baku",
+      "status_aktif": true,
+      "created_at": "2026-11-15T13:27:16Z"
+    },
+    "katpeng-ops": {
+      "id": "katpeng-ops",
+      "nama": "Operasional Harian",
+      "status_aktif": true,
+      "created_at": "2026-11-15T13:27:16Z"
+    }
+  },
+  "pengeluaran": {
+    "peng-001": {
+      "id": "peng-001",
+      "kategori_id": "katpeng-ops",
+      "tipe": "mendadak",
+      "nominal": 25000.0,
+      "bulan": null,
+      "tanggal": "2026-11-15",
+      "keterangan": "Es batu kristal",
+      "dicatat_oleh": "6eb0abd6-c196-11f1-84bd-00155dbd31c3",
+      "created_at": "2026-11-15T13:27:16Z"
+    }
+  }
+}

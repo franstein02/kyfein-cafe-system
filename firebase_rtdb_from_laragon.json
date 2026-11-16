@@ -1,0 +1,157 @@
+{
+  "audit_log_konfigurasi": {
+    "bccaa62c-d733-11f1-a447-00155d73ed6a": {
+      "id": "bccaa62c-d733-11f1-a447-00155d73ed6a",
+      "tabel": "konfigurasi_lokasi",
+      "row_id": "e1f4906b-681c-4047-ae61-c9ee9870c4b6",
+      "data_lama": "{\"latitude\": -7.82841199, \"longitude\": 111.99807238, \"updated_by\": \"6eb0abd6-c196-11f1-84bd-00155dbd31c3\", \"radius_meter\": 100}",
+      "data_baru": "{\"latitude\": -7.80217280, \"longitude\": 111.97978130, \"updated_by\": \"6eb0abd6-c196-11f1-84bd-00155dbd31c3\", \"radius_meter\": 100}",
+      "diubah_oleh": "6eb0abd6-c196-11f1-84bd-00155dbd31c3",
+      "diubah_at": "2026-11-03T10:07:43"
+    },
+    "f0711ade-dd82-11f1-a2af-0a0027000007": {
+      "id": "f0711ade-dd82-11f1-a2af-0a0027000007",
+      "tabel": "konfigurasi_lokasi",
+      "row_id": "e1f4906b-681c-4047-ae61-c9ee9870c4b6",
+      "data_lama": "{\"latitude\": -7.83346790, \"longitude\": 112.00327970, \"updated_by\": \"6eb0abd6-c196-11f1-84bd-00155dbd31c3\", \"radius_meter\": 100}",
+      "data_baru": "{\"latitude\": -7.80216230, \"longitude\": 111.98002120, \"updated_by\": \"6eb0abd6-c196-11f1-84bd-00155dbd31c3\", \"radius_meter\": 100}",
+      "diubah_oleh": "6eb0abd6-c196-11f1-84bd-00155dbd31c3",
+      "diubah_at": "2026-11-11T10:49:47"
+    },
+    "fbeb98c2-dd30-11f1-9def-0a0027000007": {
+      "id": "fbeb98c2-dd30-11f1-9def-0a0027000007",
+      "tabel": "konfigurasi_lokasi",
+      "row_id": "e1f4906b-681c-4047-ae61-c9ee9870c4b6",
+      "data_lama": "{\"latitude\": -7.80217280, \"longitude\": 111.97978130, \"updated_by\": \"6eb0abd6-c196-11f1-84bd-00155dbd31c3\", \"radius_meter\": 100}",
+      "data_baru": "{\"latitude\": -7.83346790, \"longitude\": 112.00327970, \"updated_by\": \"6eb0abd6-c196-11f1-84bd-00155dbd31c3\", \"radius_meter\": 100}",
+      "diubah_oleh": "6eb0abd6-c196-11f1-84bd-00155dbd31c3",
+      "diubah_at": "2026-11-11T01:03:07"
+    }
+  },
+  "karyawan": {
+    "08905660-3b65-485a-819a-ba1c5748db73": {
+      "id": "08905660-3b65-485a-819a-ba1c5748db73",
+      "role": "karyawan",
+      "divisi": "kitchen",
+      "nama": "Dila",
+      "email": "fransciescos@gmail.com",
+      "nomor_hp": null,
+      "password": "$2b$12$hwdQy3oACwE3IgOV9AaCq.R.vPi.H84tV7tOv45ZLq6wxq3EEpXrS",
+      "foto_profile_id": null,
+      "status_aktif": 1,
+      "created_at": "2026-11-14T12:23:23",
+      "updated_at": "2026-11-14T12:29:48",
+      "fcm_token": "dE_CQH7WQwWepfCtGyRkYM:APA91bE2TZ-NnURHMJ0RFQenZVp1O-ssPBw1OHa1-7-RPm22R8XTQsrMHdC-fNjc9KH4lt4S5c8-g6ZpHZTik7SqFqLlObYp9mqJXEYYahAlTvr9p5MdqC4"
+    },
+    "6eb0abd6-c196-11f1-84bd-00155dbd31c3": {
+      "id": "6eb0abd6-c196-11f1-84bd-00155dbd31c3",
+      "role": "admin",
+      "divisi": null,
+      "nama": "Frans",
+      "email": "fransciesco.steinlie@gmail.com",
+      "nomor_hp": "081234567890",
+      "password": "$2b$12$KMpAOJ.J./y/TNO8HwBSMeP5Sr33AN/tGwL/J9/m.iE4WwTFmmmba",
+      "foto_profile_id": null,
+      "status_aktif": 1,
+      "created_at": "2026-10-06T21:58:47",
+      "updated_at": "2026-11-13T21:36:04",
+      "fcm_token": "dE_CQH7WQwWepfCtGyRkYM:APA91bE2TZ-NnURHMJ0RFQenZVp1O-ssPBw1OHa1-7-RPm22R8XTQsrMHdC-fNjc9KH4lt4S5c8-g6ZpHZTik7SqFqLlObYp9mqJXEYYahAlTvr9p5MdqC4"
+    }
+  },
+  "kategori_menu": {
+    "6e665de2-c196-11f1-84bd-00155dbd31c3": {
+      "id": "6e665de2-c196-11f1-84bd-00155dbd31c3",
+      "nama": "Makanan",
+      "area_produksi": "kitchen",
+      "status_aktif": 1,
+      "created_at": "2026-10-06T21:58:46"
+    },
+    "6e666590-c196-11f1-84bd-00155dbd31c3": {
+      "id": "6e666590-c196-11f1-84bd-00155dbd31c3",
+      "nama": "Minuman",
+      "area_produksi": "bar",
+      "status_aktif": 1,
+      "created_at": "2026-10-06T21:58:46"
+    }
+  },
+  "konfigurasi_lokasi": {
+    "e1f4906b-681c-4047-ae61-c9ee9870c4b6": {
+      "id": "e1f4906b-681c-4047-ae61-c9ee9870c4b6",
+      "latitude": -7.8021623,
+      "longitude": 111.9800212,
+      "radius_meter": 100,
+      "updated_by": "6eb0abd6-c196-11f1-84bd-00155dbd31c3",
+      "updated_at": "2026-11-11T10:49:47"
+    }
+  },
+  "menu": {
+    "42c1e110-4fd6-45ba-ae09-7df1cb9e8b6b": {
+      "id": "42c1e110-4fd6-45ba-ae09-7df1cb9e8b6b",
+      "nama": "Coffee Latte",
+      "kode_menu": "MNM01",
+      "harga": 15000.0,
+      "kategori_id": "6e666590-c196-11f1-84bd-00155dbd31c3",
+      "foto_id": null,
+      "status_aktif": 1,
+      "dibuat_oleh": "6eb0abd6-c196-11f1-84bd-00155dbd31c3",
+      "diubah_oleh": "6eb0abd6-c196-11f1-84bd-00155dbd31c3",
+      "created_at": "2026-10-09T14:25:35",
+      "updated_at": "2026-10-10T02:54:09"
+    },
+    "6888df9d-9cbf-4ca7-8eab-fcdb8dc601e2": {
+      "id": "6888df9d-9cbf-4ca7-8eab-fcdb8dc601e2",
+      "nama": "Nasi Goreng",
+      "kode_menu": "MKN01",
+      "harga": 25000.0,
+      "kategori_id": "6e665de2-c196-11f1-84bd-00155dbd31c3",
+      "foto_id": null,
+      "status_aktif": 1,
+      "dibuat_oleh": "6eb0abd6-c196-11f1-84bd-00155dbd31c3",
+      "diubah_oleh": "6eb0abd6-c196-11f1-84bd-00155dbd31c3",
+      "created_at": "2026-10-09T14:28:33",
+      "updated_at": "2026-10-10T01:29:00"
+    },
+    "6b471e3e-e570-4240-87b3-63ab987aac59": {
+      "id": "6b471e3e-e570-4240-87b3-63ab987aac59",
+      "nama": "Kopi Susu Gula Aren",
+      "kode_menu": "MNM02",
+      "harga": 18000.0,
+      "kategori_id": "6e666590-c196-11f1-84bd-00155dbd31c3",
+      "foto_id": null,
+      "status_aktif": 1,
+      "dibuat_oleh": "6eb0abd6-c196-11f1-84bd-00155dbd31c3",
+      "diubah_oleh": null,
+      "created_at": "2026-10-09T14:40:17",
+      "updated_at": "2026-10-09T14:40:17"
+    },
+    "e26e1a8d-1025-4f70-aca7-2b7a3c7075da": {
+      "id": "e26e1a8d-1025-4f70-aca7-2b7a3c7075da",
+      "nama": "Nasi Kebuli",
+      "kode_menu": "MKN02",
+      "harga": 25000.0,
+      "kategori_id": "6e665de2-c196-11f1-84bd-00155dbd31c3",
+      "foto_id": null,
+      "status_aktif": 1,
+      "dibuat_oleh": "6eb0abd6-c196-11f1-84bd-00155dbd31c3",
+      "diubah_oleh": null,
+      "created_at": "2026-10-10T01:38:31",
+      "updated_at": "2026-10-10T01:38:31"
+    }
+  },
+  "shift_template": {
+    "shift_1": {
+      "id": "40fe952a-1341-4ee0-a949-59e415595fc6",
+      "shift": "shift_1",
+      "jam_mulai": "08:00:00",
+      "jam_selesai": "16:00:00",
+      "updated_at": "2026-11-14T11:56:40"
+    },
+    "shift_2": {
+      "id": "73207394-b662-4903-b003-5e72cd529e57",
+      "shift": "shift_2",
+      "jam_mulai": "16:00:00",
+      "jam_selesai": "23:00:00",
+      "updated_at": "2026-11-14T11:56:40"
+    }
+  }
+}

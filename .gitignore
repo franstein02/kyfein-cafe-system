@@ -89,3 +89,7 @@ node_modules/
 *firebase-adminsdk.json
 *google-services.json
 firebase.json
+
+# Android Build Outputs
+*.apk
+*.aab

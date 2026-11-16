@@ -57,6 +57,7 @@ class DefaultFirebaseOptions {
     appId: '1:454453816719:android:a517ee0c7bf849ba92affa',
     messagingSenderId: '454453816719',
     projectId: 'pml07-df81c',
+    databaseURL: 'https://pml07-df81c-default-rtdb.asia-southeast1.firebasedatabase.app',
     storageBucket: 'pml07-df81c.firebasestorage.app',
   );
 }

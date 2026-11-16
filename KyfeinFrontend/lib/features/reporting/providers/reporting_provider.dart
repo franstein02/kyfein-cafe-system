@@ -1,3 +1,4 @@
+import 'package:kyfein_frontend/core/network/firebase_http_adapter.dart';
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
@@ -297,8 +298,8 @@ class ReportingProvider with ChangeNotifier {
       final breakdownUri = Uri.parse(ApiEndpoints.pengeluaranBreakdown).replace(queryParameters: queryParams);
 
       final responses = await Future.wait([
-        http.get(profitUri, headers: _headers).timeout(const Duration(seconds: 10)),
-        http.get(breakdownUri, headers: _headers).timeout(const Duration(seconds: 10)),
+        FirebaseHttpAdapter.get(profitUri, headers: _headers).timeout(const Duration(seconds: 10)),
+        FirebaseHttpAdapter.get(breakdownUri, headers: _headers).timeout(const Duration(seconds: 10)),
       ]);
 
       if (responses[0].statusCode == 200) {
@@ -330,7 +331,7 @@ class ReportingProvider with ChangeNotifier {
       final uri = Uri.parse(ApiEndpoints.pengeluaran).replace(
         queryParameters: queryParams.isEmpty ? null : queryParams,
       );
-      final resp = await http.get(uri, headers: _headers).timeout(const Duration(seconds: 10));
+      final resp = await FirebaseHttpAdapter.get(uri, headers: _headers).timeout(const Duration(seconds: 10));
       if (resp.statusCode == 200) {
         final list = jsonDecode(resp.body) as List;
         _pengeluaranList = list
@@ -368,7 +369,7 @@ class ReportingProvider with ChangeNotifier {
         body['keterangan'] = keterangan.trim();
       }
 
-      final resp = await http.post(
+      final resp = await FirebaseHttpAdapter.post(
         Uri.parse(ApiEndpoints.pengeluaran),
         headers: _headers,
         body: jsonEncode(body),
@@ -408,7 +409,7 @@ class ReportingProvider with ChangeNotifier {
       if (tanggal != null) body['tanggal'] = tanggal;
       if (keterangan != null) body['keterangan'] = keterangan;
 
-      final resp = await http.put(
+      final resp = await FirebaseHttpAdapter.put(
         Uri.parse('${ApiEndpoints.pengeluaran}/$id'),
         headers: _headers,
         body: jsonEncode(body),
@@ -432,7 +433,7 @@ class ReportingProvider with ChangeNotifier {
       return const ActionResult(success: false, message: 'Sesi telah berakhir');
     }
     try {
-      final resp = await http.delete(
+      final resp = await FirebaseHttpAdapter.delete(
         Uri.parse('${ApiEndpoints.pengeluaran}/$id'),
         headers: _headers,
       );
@@ -456,7 +457,7 @@ class ReportingProvider with ChangeNotifier {
       final uri = Uri.parse(ApiEndpoints.kategoriPengeluaran).replace(
         queryParameters: {'include_nonaktif': includeNonaktif.toString()},
       );
-      final resp = await http.get(uri, headers: _headers).timeout(const Duration(seconds: 10));
+      final resp = await FirebaseHttpAdapter.get(uri, headers: _headers).timeout(const Duration(seconds: 10));
       if (resp.statusCode == 200) {
         final list = jsonDecode(resp.body) as List;
         _kategoriList = list
@@ -472,7 +473,7 @@ class ReportingProvider with ChangeNotifier {
       return const ActionResult(success: false, message: 'Sesi telah berakhir');
     }
     try {
-      final resp = await http.post(
+      final resp = await FirebaseHttpAdapter.post(
         Uri.parse(ApiEndpoints.kategoriPengeluaran),
         headers: _headers,
         body: jsonEncode({'nama': nama.trim(), 'status_aktif': true}),
@@ -504,7 +505,7 @@ class ReportingProvider with ChangeNotifier {
       if (nama != null) body['nama'] = nama.trim();
       if (statusAktif != null) body['status_aktif'] = statusAktif;
 
-      final resp = await http.put(
+      final resp = await FirebaseHttpAdapter.put(
         Uri.parse('${ApiEndpoints.kategoriPengeluaran}/$id'),
         headers: _headers,
         body: jsonEncode(body),

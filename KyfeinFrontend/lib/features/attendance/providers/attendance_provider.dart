@@ -1,8 +1,8 @@
+import 'package:kyfein_frontend/core/network/firebase_http_adapter.dart';
 import 'dart:convert';
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
-import 'package:http_parser/http_parser.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
 
@@ -70,26 +70,13 @@ class AttendanceProvider with ChangeNotifier {
   // ── Upload & Ambil Foto ────────────────────────────────────────────────────
   Future<String> uploadFoto(XFile file, {String jenis = 'izin'}) async {
     final bytes = await file.readAsBytes();
-    final nama = file.name.toLowerCase();
-    final tipe = nama.endsWith('.png')
-        ? MediaType('image', 'png')
-        : MediaType('image', 'jpeg');
-
-    final req =
-        http.MultipartRequest('POST', Uri.parse('${ApiConfig.baseUrl}/foto'));
-    req.headers['Accept'] = 'application/json';
-    final authHeader = headers['Authorization'];
-    if (authHeader != null) req.headers['Authorization'] = authHeader;
-    req.fields['jenis'] = jenis;
-    req.files.add(http.MultipartFile.fromBytes(
-      'file',
-      bytes,
-      filename: file.name.isNotEmpty ? file.name : 'foto.jpg',
-      contentType: tipe,
-    ));
-
-    final res = await http.Response.fromStream(
-      await req.send().timeout(const Duration(seconds: 15)),
+    final res = await FirebaseHttpAdapter.post(
+      Uri.parse('${ApiConfig.baseUrl}/foto'),
+      body: {
+        'jenis': jenis,
+        'path': 'rtdb/${file.name.isNotEmpty ? file.name : 'foto.jpg'}',
+        'size_bytes': bytes.length,
+      },
     );
     if (res.statusCode != 200 && res.statusCode != 201) {
       throw extractErrorMessage(res);
@@ -120,16 +107,16 @@ class AttendanceProvider with ChangeNotifier {
     notifyListeners();
     try {
       final res = await Future.wait([
-        http.get(Uri.parse('${ApiEndpoints.karyawan}/'), headers: headers),
-        http.get(Uri.parse('${ApiEndpoints.jadwal}/'), headers: headers),
-        http.get(Uri.parse(ApiEndpoints.requestOff), headers: headers),
-        http.get(Uri.parse('${ApiEndpoints.tukarShift}?status=pending'),
+        FirebaseHttpAdapter.get(Uri.parse('${ApiEndpoints.karyawan}/'), headers: headers),
+        FirebaseHttpAdapter.get(Uri.parse('${ApiEndpoints.jadwal}/'), headers: headers),
+        FirebaseHttpAdapter.get(Uri.parse(ApiEndpoints.requestOff), headers: headers),
+        FirebaseHttpAdapter.get(Uri.parse('${ApiEndpoints.tukarShift}?status=pending'),
             headers: headers),
-        http.get(Uri.parse('${ApiEndpoints.izinTelat}?status=pending'),
+        FirebaseHttpAdapter.get(Uri.parse('${ApiEndpoints.izinTelat}?status=pending'),
             headers: headers),
-        http.get(Uri.parse('${ApiEndpoints.izinTidakMasuk}?status=pending'),
+        FirebaseHttpAdapter.get(Uri.parse('${ApiEndpoints.izinTidakMasuk}?status=pending'),
             headers: headers),
-        http.get(Uri.parse(ApiEndpoints.shiftTemplate), headers: headers),
+        FirebaseHttpAdapter.get(Uri.parse(ApiEndpoints.shiftTemplate), headers: headers),
       ]).timeout(const Duration(seconds: 10));
 
       final today = DateFormat('yyyy-MM-dd').format(DateTime.now());
@@ -222,11 +209,11 @@ class AttendanceProvider with ChangeNotifier {
     notifyListeners();
     try {
       final res = await Future.wait([
-        http.get(Uri.parse('${ApiEndpoints.jadwal}/'), headers: headers),
-        http.get(Uri.parse(ApiEndpoints.requestOff), headers: headers),
-        http.get(Uri.parse(ApiEndpoints.tukarShift), headers: headers),
-        http.get(Uri.parse(ApiEndpoints.izinTelat), headers: headers),
-        http.get(Uri.parse(ApiEndpoints.izinTidakMasuk), headers: headers),
+        FirebaseHttpAdapter.get(Uri.parse('${ApiEndpoints.jadwal}/'), headers: headers),
+        FirebaseHttpAdapter.get(Uri.parse(ApiEndpoints.requestOff), headers: headers),
+        FirebaseHttpAdapter.get(Uri.parse(ApiEndpoints.tukarShift), headers: headers),
+        FirebaseHttpAdapter.get(Uri.parse(ApiEndpoints.izinTelat), headers: headers),
+        FirebaseHttpAdapter.get(Uri.parse(ApiEndpoints.izinTidakMasuk), headers: headers),
       ]).timeout(const Duration(seconds: 10));
 
       if (res[0].statusCode == 200) {
@@ -325,15 +312,15 @@ class AttendanceProvider with ChangeNotifier {
     notifyListeners();
     try {
       final responses = await Future.wait([
-        http.get(Uri.parse(ApiEndpoints.konfigurasiLokasi), headers: headers),
-        http.get(Uri.parse('${ApiEndpoints.absensi}?tanggal=$dateStr'),
+        FirebaseHttpAdapter.get(Uri.parse(ApiEndpoints.konfigurasiLokasi), headers: headers),
+        FirebaseHttpAdapter.get(Uri.parse('${ApiEndpoints.absensi}?tanggal=$dateStr'),
             headers: headers),
-        http.get(Uri.parse('${ApiEndpoints.karyawan}/'), headers: headers),
-        http.get(Uri.parse('${ApiEndpoints.jadwal}/?tanggal=$dateStr'),
+        FirebaseHttpAdapter.get(Uri.parse('${ApiEndpoints.karyawan}/'), headers: headers),
+        FirebaseHttpAdapter.get(Uri.parse('${ApiEndpoints.jadwal}/?tanggal=$dateStr'),
             headers: headers),
-        http.get(Uri.parse(ApiEndpoints.izinTelat), headers: headers),
-        http.get(Uri.parse(ApiEndpoints.izinTidakMasuk), headers: headers),
-        http.get(Uri.parse(ApiEndpoints.tukarShift), headers: headers),
+        FirebaseHttpAdapter.get(Uri.parse(ApiEndpoints.izinTelat), headers: headers),
+        FirebaseHttpAdapter.get(Uri.parse(ApiEndpoints.izinTidakMasuk), headers: headers),
+        FirebaseHttpAdapter.get(Uri.parse(ApiEndpoints.tukarShift), headers: headers),
       ]).timeout(const Duration(seconds: 10));
 
       if (responses[0].statusCode == 200) {
