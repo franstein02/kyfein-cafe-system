@@ -190,6 +190,12 @@ async def test_a3_approval_already_processed_returns_409(client, sample_data, te
     )
     assert res_itm.status_code == 409
 
+    # Pending queries must NOT include already-processed records
+    admin_headers = {"Authorization": f"Bearer {sample_data['token_admin']}"}
+    assert (await client.get("/api/v1/absensi/izin-telat?status=pending", headers=admin_headers)).json() == []
+    assert (await client.get("/api/v1/absensi/izin-tidak-masuk?status=pending", headers=admin_headers)).json() == []
+    assert (await client.get("/api/v1/jadwal/tukar-shift?status=pending", headers=admin_headers)).json() == []
+
 
 # ==========================================
 # A4 TESTS (ABSENSI)
@@ -278,6 +284,15 @@ async def test_a4_absen_pulang_gps_radius_validation(client, sample_data, test_d
 async def test_a6_opname_duplicate_bahan_aggregated(client, sample_data, test_db, mock_time_at):
     """jumlahkan items yang bahan_id-nya sama sebelum menyimpan dan membandingkan"""
     mock_time_at("10:00")
+    test_db.add(Absensi(
+        id="abs-a6-dup-k1",
+        karyawan_id="usr-karyawan1",
+        jadwal_shift_id="shift-bar-k1",
+        lat_masuk=Decimal("-6.20000000"),
+        lng_masuk=Decimal("106.80000000"),
+        foto_masuk_id="foto-k1"
+    ))
+    await test_db.commit()
     # 1. Submit awal_shift opname with duplicate items
     res = await client.post(
         "/api/v1/stok/opname",
@@ -303,13 +318,22 @@ async def test_a6_opname_duplicate_bahan_aggregated(client, sample_data, test_db
 
 
 @pytest.mark.asyncio
-async def test_a6_opname_metode_server_determined_and_awal_required(client, sample_data, mock_time_at):
+async def test_a6_opname_metode_server_determined_and_awal_required(client, sample_data, test_db, mock_time_at):
     """
     metode ditentukan server, field metode dari client diabaikan.
     awal_shift harus ada sebelum akhir_shift di shift yang sama.
     shift area_kerja kasir ditolak.
     """
     mock_time_at("10:00")
+    test_db.add(Absensi(
+        id="abs-a6-metode-k1",
+        karyawan_id="usr-karyawan1",
+        jadwal_shift_id="shift-bar-k1",
+        lat_masuk=Decimal("-6.20000000"),
+        lng_masuk=Decimal("106.80000000"),
+        foto_masuk_id="foto-k1"
+    ))
+    await test_db.commit()
     # 1. akhir_shift without prior awal_shift -> 400
     res_akhir = await client.post(
         "/api/v1/stok/opname",

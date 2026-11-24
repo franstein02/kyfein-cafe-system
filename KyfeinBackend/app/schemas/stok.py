@@ -88,8 +88,53 @@ class BarangMasukOut(BaseModel):
     class Config:
         from_attributes = True
 
+
+class BarangMasukRekapDetailOut(BaseModel):
+    id: str
+    bahan_id: str
+    nama_bahan: str
+    satuan: str
+    area: str = 'semua'
+    isi_per_kemasan: Decimal = Decimal('1')
+    jumlah_kemasan_besar: int = 0
+    jumlah_satuan_kecil: Decimal = Decimal('0')
+    total_satuan_kecil: Decimal = Decimal('0')
+    harga_total: Decimal = Decimal('0')
+    harga_per_satuan_kecil: Decimal = Decimal('0')
+    harga_per_kemasan: Optional[Decimal] = None
+    harga_rata_rata_saat_ini: Decimal = Decimal('0')
+    selisih_vs_avg: Optional[Decimal] = None
+
+
+class BarangMasukRekapItemOut(BaseModel):
+    id: str
+    waktu: datetime
+    karyawan_id: str
+    nama_karyawan: str
+    catatan: Optional[str] = None
+    jumlah_item: int = 0
+    total_nilai: Decimal = Decimal('0')
+    details: List[BarangMasukRekapDetailOut] = []
+
+
+class BarangMasukRekapResponse(BaseModel):
+    total_transaksi: int = 0
+    total_item_masuk: int = 0
+    total_nilai_pembelian: Decimal = Decimal('0')
+    items: List[BarangMasukRekapItemOut] = []
+
 # View Schemas
-from app.schemas.master_data import BahanOut
+from app.schemas.master_data import BahanOut, BahanAdminOut
+
+class StokGudangBomItemOut(BaseModel):
+    menu_id: str
+    kode_menu: str
+    nama_menu: str
+    area_produksi: Optional[str] = None
+    jumlah_terpakai: Decimal
+    biaya_per_porsi: Decimal = Decimal('0')
+    estimasi_porsi: Optional[int] = None
+
 
 class StokGudangOut(BaseModel):
     id: str
@@ -102,6 +147,14 @@ class StokGudangOut(BaseModel):
 
     class Config:
         from_attributes = True
+
+
+class StokGudangAdminOut(StokGudangOut):
+    bahan: Optional[BahanAdminOut] = None
+    harga_rata_rata: Decimal = Decimal('0')
+    harga_rata_rata_per_kemasan: Optional[Decimal] = None
+    nilai_persediaan: Decimal = Decimal('0')
+    bom_pemakaian: List[StokGudangBomItemOut] = []
 
 class StokGudangUpdate(BaseModel):
     jumlah_kemasan_besar: Optional[int] = None
@@ -148,6 +201,37 @@ class OpnameTertundaOut(BaseModel):
         from_attributes = True
 
 # --- OPNAME HARIAN & AUDIT SCHEMAS ---
+class ShiftOpnameSnapshotOut(BaseModel):
+    shift_key: str
+    shift_label: str
+    jadwal_shift_id: Optional[str] = None
+    karyawan_nama: Optional[str] = None
+    stok_awal: Optional[Decimal] = None
+    transfer_masuk: Decimal = Decimal('0')
+    pemakaian_bom: Decimal = Decimal('0')
+    ekspektasi_stok: Optional[Decimal] = None
+    stok_akhir: Optional[Decimal] = None
+    pemakaian_aktual: Optional[Decimal] = None
+    selisih_vs_bom: Optional[Decimal] = None
+    status_audit: str = 'belum_lengkap'  # 'sesuai', 'lebih_boros', 'lebih_hemat', 'belum_lengkap'
+    diagnosa: str = ''
+
+
+class ShiftComparisonItemOut(BaseModel):
+    bahan_id: str
+    nama_bahan: str
+    satuan: str
+    titik: str
+    shift_1: Optional[ShiftOpnameSnapshotOut] = None
+    shift_2: Optional[ShiftOpnameSnapshotOut] = None
+    selisih_akhir_s1_vs_awal_s2: Optional[Decimal] = None
+    selisih_stok_akhir_s1_vs_s2: Optional[Decimal] = None
+    selisih_pemakaian_s1_vs_s2: Optional[Decimal] = None
+    selisih_varians_s1_vs_s2: Optional[Decimal] = None
+    status_handover: str = 'belum_lengkap'  # 'sesuai', 'kurang', 'lebih', 'belum_lengkap'
+    catatan_perbandingan: str = ''
+
+
 class OpnameHarianItemOut(BaseModel):
     bahan_id: str
     nama_bahan: str
@@ -155,13 +239,19 @@ class OpnameHarianItemOut(BaseModel):
     titik: str
     stok_awal: Optional[Decimal] = None
     transfer_masuk: Decimal = Decimal('0')
+    pemakaian_bom: Decimal = Decimal('0')
+    ekspektasi_stok: Optional[Decimal] = None
     stok_akhir: Optional[Decimal] = None
     selisih: Optional[Decimal] = None
+    selisih_vs_bom: Optional[Decimal] = None
+    diagnosa: Optional[str] = None
     status: str  # 'lengkap', 'hanya_awal', 'hanya_akhir', 'belum_opname'
 
 class OpnameHarianSesiOut(BaseModel):
     id: str
     jadwal_shift_id: str
+    shift_key: Optional[str] = None
+    shift_label: Optional[str] = None
     titik: str
     tipe: str
     metode: str
@@ -175,6 +265,7 @@ class OpnameHarianResponse(BaseModel):
     titik: Optional[str] = None
     items: List[OpnameHarianItemOut] = []
     sesi: List[OpnameHarianSesiOut] = []
+    perbandingan_shift: List[ShiftComparisonItemOut] = []
 
 class BOMItemDetailOut(BaseModel):
     menu_id: str
@@ -193,9 +284,13 @@ class OpnameAuditItemOut(BaseModel):
     stok_akhir: Optional[Decimal] = None
     pemakaian_fisik: Optional[Decimal] = None
     pemakaian_bom: Decimal = Decimal('0')
+    ekspektasi_stok: Optional[Decimal] = None
+    selisih_stok_akhir_vs_ekspektasi: Optional[Decimal] = None
     varians: Optional[Decimal] = None
     persentase_selisih: Optional[Decimal] = None
     status_audit: str  # 'sesuai', 'lebih_boros', 'lebih_hemat', 'belum_lengkap'
+    diagnosa: str = ''
+    penjelasan_diagnosa: str = ''
     detail_menu: List[BOMItemDetailOut] = []
 
 class OpnameAuditSummaryOut(BaseModel):
@@ -205,9 +300,14 @@ class OpnameAuditSummaryOut(BaseModel):
     bahan_sesuai: int = 0
     bahan_selisih: int = 0
     bahan_belum_lengkap: int = 0
+    bahan_indikasi_tumpah: int = 0
+    bahan_surplus: int = 0
+    total_shift_dibandingkan: int = 0
+    handover_selisih_count: int = 0
 
 class OpnameAuditResponse(BaseModel):
     tanggal: str
     titik: Optional[str] = None
     summary: OpnameAuditSummaryOut
     items: List[OpnameAuditItemOut] = []
+    perbandingan_shift: List[ShiftComparisonItemOut] = []

@@ -4,10 +4,13 @@ import 'package:geolocator/geolocator.dart';
 import 'package:http/http.dart' as http;
 import 'package:http_parser/http_parser.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:provider/provider.dart';
 
 import '../../../../core/constants/api_endpoints.dart';
 import '../../../../core/network/api_client.dart';
 import '../../../../core/services/storage_service.dart';
+import '../../../../core/widgets/page_refresh_scope.dart';
+import '../../../dashboard/providers/dashboard_provider.dart';
 
 class KasirAbsensiScreen extends StatefulWidget {
   const KasirAbsensiScreen({super.key});
@@ -218,6 +221,11 @@ class _KasirAbsensiScreenState extends State<KasirAbsensiScreen> {
       if (res.statusCode == 200 || res.statusCode == 201) {
         _snack('Absen masuk berhasil');
         await _muatStatusAbsensi();
+        if (mounted) {
+          try {
+            await context.read<DashboardProvider>().refresh();
+          } catch (_) {}
+        }
       } else {
         _snack(_pesanError(res.body, res.statusCode));
       }
@@ -243,6 +251,11 @@ class _KasirAbsensiScreenState extends State<KasirAbsensiScreen> {
       if (res.statusCode == 200 || res.statusCode == 201) {
         _snack('Absen pulang berhasil');
         await _muatStatusAbsensi();
+        if (mounted) {
+          try {
+            await context.read<DashboardProvider>().refresh();
+          } catch (_) {}
+        }
       } else {
         _snack(_pesanError(res.body, res.statusCode));
       }
@@ -460,63 +473,21 @@ class _KasirAbsensiScreenState extends State<KasirAbsensiScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: const Color(0xFFF6F8F6),
-      body: Column(
-        children: [
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
-            decoration: const BoxDecoration(
-              color: Colors.white,
-              border: Border(bottom: BorderSide(color: Color(0xFFE5EBE7))),
-            ),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text(
-                      'Absensi Masuk & Pulang',
-                      style: TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.w700,
-                        color: Color(0xFF2D312E),
-                      ),
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      'Presensi kehadiran sesuai jadwal shift menggunakan titik lokasi GPS & foto selfie',
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: Colors.grey.shade600,
-                      ),
-                    ),
-                  ],
-                ),
-                IconButton(
-                  onPressed: _fetching || _loading ? null : _muatStatusAbsensi,
-                  tooltip: 'Segarkan Status',
-                  style: IconButton.styleFrom(
-                    backgroundColor: const Color(0xFFF6F8F6),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(10),
-                      side: const BorderSide(color: Color(0xFFE5EBE7)),
-                    ),
-                  ),
-                  icon: const Icon(Icons.refresh_rounded, size: 18, color: _primary),
-                ),
-              ],
-            ),
-          ),
-          Expanded(
-            child: RefreshIndicator(
-              onRefresh: _muatStatusAbsensi,
-              color: _primary,
-              child: SingleChildScrollView(
-                physics: const AlwaysScrollableScrollPhysics(),
-                padding: const EdgeInsets.all(24),
+    return PageRefreshRegistrar(
+      onRefresh: _muatStatusAbsensi,
+      child: Scaffold(
+        backgroundColor: const Color(0xFFF6F8F6),
+        appBar: buildStandaloneAppBar(
+          context,
+          title: 'Absensi Masuk & Pulang',
+          onRefresh: _muatStatusAbsensi,
+        ),
+        body: RefreshIndicator(
+          onRefresh: _muatStatusAbsensi,
+          color: _primary,
+          child: SingleChildScrollView(
+            physics: const AlwaysScrollableScrollPhysics(),
+            padding: const EdgeInsets.all(20),
                 child: Align(
                   alignment: Alignment.topLeft,
                   child: ConstrainedBox(
@@ -560,8 +531,6 @@ class _KasirAbsensiScreenState extends State<KasirAbsensiScreen> {
                 ),
               ),
             ),
-          ),
-        ],
       ),
     );
   }
@@ -624,42 +593,52 @@ class _KasirAbsensiScreenState extends State<KasirAbsensiScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(
-                'Shift Hari Ini',
-                style: TextStyle(
-                  color: Colors.grey.shade600,
-                  fontSize: 13,
-                  fontWeight: FontWeight.w600,
+          SizedBox(
+            width: double.infinity,
+            child: Wrap(
+              spacing: 8,
+              runSpacing: 6,
+              alignment: WrapAlignment.spaceBetween,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              children: [
+                Text(
+                  'Shift Hari Ini',
+                  style: TextStyle(
+                    color: Colors.grey.shade600,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                  ),
                 ),
-              ),
-              Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                decoration: BoxDecoration(
-                  color: badgeBg,
-                  borderRadius: BorderRadius.circular(20),
-                  border: Border.all(color: badgeText.withValues(alpha: 0.3)),
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(badgeIcon, size: 14, color: badgeText),
-                    const SizedBox(width: 4),
-                    Text(
-                      badgeLabel,
-                      style: TextStyle(
-                        color: badgeText,
-                        fontSize: 12,
-                        fontWeight: FontWeight.bold,
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: badgeBg,
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(color: badgeText.withValues(alpha: 0.3)),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(badgeIcon, size: 14, color: badgeText),
+                      const SizedBox(width: 4),
+                      Flexible(
+                        child: Text(
+                          badgeLabel,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            color: badgeText,
+                            fontSize: 12,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
           const SizedBox(height: 12),
           Text(
@@ -751,6 +730,8 @@ class _KasirAbsensiScreenState extends State<KasirAbsensiScreen> {
             ),
             label: Text(
               _sudahMasuk ? 'SUDAH MASUK' : 'ABSEN MASUK',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
               style:
                   const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
             ),
@@ -780,6 +761,8 @@ class _KasirAbsensiScreenState extends State<KasirAbsensiScreen> {
             ),
             label: Text(
               _sudahPulang ? 'SUDAH PULANG' : 'ABSEN PULANG',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
               style:
                   const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
             ),
@@ -806,6 +789,8 @@ class _KasirAbsensiScreenState extends State<KasirAbsensiScreen> {
             icon: const Icon(Icons.alarm_off_rounded, size: 17),
             label: const Text(
               'Izin Terlambat',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
               style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
             ),
             onPressed:
@@ -826,6 +811,8 @@ class _KasirAbsensiScreenState extends State<KasirAbsensiScreen> {
             icon: const Icon(Icons.sick_rounded, size: 17),
             label: const Text(
               'Izin Tidak Masuk',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
               style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
             ),
             onPressed:
@@ -947,12 +934,18 @@ class _KasirAbsensiScreenState extends State<KasirAbsensiScreen> {
             ],
           ),
         ),
-        Text(
-          subtitle,
-          style: TextStyle(
-            fontSize: 12,
-            fontWeight: FontWeight.w600,
-            color: color,
+        const SizedBox(width: 8),
+        Flexible(
+          child: Text(
+            subtitle,
+            textAlign: TextAlign.right,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+              color: color,
+            ),
           ),
         ),
       ],

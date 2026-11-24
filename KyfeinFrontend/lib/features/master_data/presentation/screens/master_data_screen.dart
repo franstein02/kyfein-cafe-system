@@ -1,12 +1,12 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 import 'package:image_picker/image_picker.dart';
 import '../../providers/master_data_provider.dart';
 import 'package:intl/intl.dart';
 import '../../../../core/constants/api_endpoints.dart';
 import '../../../../core/theme/app_theme.dart';
+import '../../../../core/widgets/page_refresh_scope.dart';
 import '../widgets/kelola_karyawan_view.dart';
 
 class MasterDataScreen extends StatefulWidget {
@@ -34,15 +34,10 @@ class _ResepInputItem {
 
 class _MasterDataScreenState extends State<MasterDataScreen> {
   final _currencyFormat = NumberFormat.currency(locale: 'id_ID', symbol: 'Rp ', decimalDigits: 0);
+  final _numberFormat = NumberFormat('#,##0.###', 'id_ID');
   String _selectedKategoriId = 'Semua';
+  String _selectedBahanArea = 'semua_tab'; // semua_tab | bar | kitchen
   late int _currentSection;
-
-  static const List<(int, String, String, IconData)> _sections = [
-    (0, 'Menu & Resep POS', 'Kelola daftar menu, harga jual, resep BOM, dan ketersediaan POS', Icons.restaurant_menu_rounded),
-    (1, 'Kategori Menu', 'Kelola kategori menu dan routing area produksi KDS (Bar / Kitchen)', Icons.category_outlined),
-    (2, 'Master Bahan Baku', 'Kelola bahan baku, satuan, kemasan, batas minimum, dan HPP rata-rata', Icons.inventory_2_outlined),
-    (3, 'Kelola Karyawan', 'Buat, edit, dan atur divisi kerja (Kasir, Bar, Kitchen) serta status akun', Icons.badge_outlined),
-  ];
 
   @override
   void initState() {
@@ -192,7 +187,13 @@ class _MasterDataScreenState extends State<MasterDataScreen> {
                             image: selectedImage != null
                                 ? DecorationImage(image: FileImage(selectedImage!), fit: BoxFit.cover)
                                 : (currentFotoUrl != null && currentFotoUrl!.isNotEmpty
-                                    ? DecorationImage(image: NetworkImage(currentFotoUrl!.startsWith('http') ? currentFotoUrl! : '${ApiConfig.baseUrl}/foto/$currentFotoUrl'), fit: BoxFit.cover)
+                                    ? DecorationImage(
+                                        image: NetworkImage(
+                                          (currentFotoUrl == menu?.fotoId ? menu?.resolvedFotoUrl : null) ??
+                                              (currentFotoUrl!.startsWith('http') ? currentFotoUrl! : '${ApiConfig.baseUrl}/foto/$currentFotoUrl'),
+                                        ),
+                                        fit: BoxFit.cover,
+                                      )
                                     : null),
                           ),
                           child: Stack(
@@ -493,153 +494,35 @@ class _MasterDataScreenState extends State<MasterDataScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final currentMeta = _sections[_currentSection];
+    return PageRefreshRegistrar(
+      onRefresh: () => context.read<MasterDataProvider>().loadData(),
+      child: Scaffold(
+        backgroundColor: AppTheme.backgroundColor,
+        appBar: buildStandaloneAppBar(
+          context,
+          title: 'Master Data',
+          onRefresh: () => context.read<MasterDataProvider>().loadData(),
+        ),
+        body: Consumer<MasterDataProvider>(
+          builder: (context, provider, child) {
+            if (provider.isLoading && provider.menus.isEmpty && provider.categories.isEmpty) {
+              return const Center(child: CircularProgressIndicator());
+            }
 
-    return Scaffold(
-      backgroundColor: AppTheme.backgroundColor,
-      body: Column(
-        children: [
-          // ── Minimalist Top Header with Dropdown Selector ───────────────────
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.fromLTRB(24, 18, 24, 18),
-            decoration: const BoxDecoration(
-              color: Colors.white,
-              border: Border(bottom: BorderSide(color: AppTheme.borderColor)),
-            ),
-            child: Center(
-              child: ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 1040),
-                child: Wrap(
-                  alignment: WrapAlignment.spaceBetween,
-                  crossAxisAlignment: WrapCrossAlignment.center,
-                  spacing: 16,
-                  runSpacing: 12,
-                  children: [
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Text(
-                          currentMeta.$2,
-                          style: GoogleFonts.outfit(
-                            fontSize: 20,
-                            fontWeight: FontWeight.w700,
-                            color: const Color(0xFF1A1D1B),
-                          ),
-                        ),
-                        const SizedBox(height: 2),
-                        Text(
-                          currentMeta.$3,
-                          style: TextStyle(fontSize: 12.5, color: Colors.grey.shade600),
-                        ),
-                      ],
-                    ),
-                    Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Flexible(
-                          child: ConstrainedBox(
-                            constraints: const BoxConstraints(maxWidth: 250),
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 2),
-                              decoration: BoxDecoration(
-                                color: const Color(0xFFF6F8F6),
-                                borderRadius: BorderRadius.circular(12),
-                                border: Border.all(color: AppTheme.borderColor),
-                              ),
-                              child: DropdownButtonHideUnderline(
-                                child: DropdownButton<int>(
-                                  value: _currentSection,
-                                  isExpanded: true,
-                                  icon: const Padding(
-                                    padding: EdgeInsets.only(left: 8),
-                                    child: Icon(
-                                      Icons.keyboard_arrow_down_rounded,
-                                      color: AppTheme.primaryColor,
-                                      size: 20,
-                                    ),
-                                  ),
-                                  style: GoogleFonts.outfit(
-                                    fontSize: 13.5,
-                                    fontWeight: FontWeight.w600,
-                                    color: AppTheme.primaryColor,
-                                  ),
-                                  items: _sections
-                                      .map(
-                                        (s) => DropdownMenuItem<int>(
-                                          value: s.$1,
-                                          child: Row(
-                                            children: [
-                                              Icon(s.$4, size: 17, color: AppTheme.primaryColor),
-                                              const SizedBox(width: 8),
-                                              Expanded(
-                                                child: Text(
-                                                  s.$2,
-                                                  maxLines: 1,
-                                                  overflow: TextOverflow.ellipsis,
-                                                ),
-                                              ),
-                                            ],
-                                          ),
-                                        ),
-                                      )
-                                      .toList(),
-                                  onChanged: (val) {
-                                    if (val != null) {
-                                      setState(() => _currentSection = val);
-                                    }
-                                  },
-                                ),
-                              ),
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 10),
-                        IconButton.outlined(
-                          onPressed: () => context.read<MasterDataProvider>().loadData(),
-                          icon: const Icon(Icons.refresh_rounded, size: 20),
-                          tooltip: 'Segarkan Data',
-                          style: IconButton.styleFrom(
-                            foregroundColor: AppTheme.primaryColor,
-                            side: const BorderSide(color: AppTheme.borderColor),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ),
-
-          // ── Content Area ───────────────────────────────────────────────────
-          Expanded(
-            child: Consumer<MasterDataProvider>(
-              builder: (context, provider, child) {
-                if (provider.isLoading && provider.menus.isEmpty && provider.categories.isEmpty) {
-                  return const Center(child: CircularProgressIndicator());
-                }
-
-                switch (_currentSection) {
-                  case 0:
-                    return _buildMenuTab(provider);
-                  case 1:
-                    return _buildKategoriTab(provider);
-                  case 2:
-                    return _buildBahanTab(provider);
-                  case 3:
-                    return const KelolaKaryawanView();
-                  default:
-                    return _buildMenuTab(provider);
-                }
-              },
-            ),
-          ),
-        ],
+            switch (_currentSection) {
+              case 0:
+                return _buildMenuTab(provider);
+              case 1:
+                return _buildKategoriTab(provider);
+              case 2:
+                return _buildBahanTab(provider);
+              case 3:
+                return const KelolaKaryawanView();
+              default:
+                return _buildMenuTab(provider);
+            }
+          },
+        ),
       ),
     );
   }
@@ -716,14 +599,14 @@ class _MasterDataScreenState extends State<MasterDataScreen> {
                             decoration: BoxDecoration(
                               color: Colors.grey.shade200,
                               borderRadius: BorderRadius.circular(8),
-                              image: (menu.fotoId != null && menu.fotoId!.isNotEmpty)
+                              image: (menu.resolvedFotoUrl != null)
                                 ? DecorationImage(
-                                    image: NetworkImage(menu.fotoId!.startsWith('http') ? menu.fotoId! : '${ApiConfig.baseUrl}/foto/${menu.fotoId}'), 
+                                    image: NetworkImage(menu.resolvedFotoUrl!), 
                                     fit: BoxFit.cover
                                   )
                                 : null,
                             ),
-                            child: (menu.fotoId == null || menu.fotoId!.isEmpty) 
+                            child: (menu.resolvedFotoUrl == null) 
                                 ? Icon(Icons.image_rounded, color: Colors.grey.shade400)
                                 : null,
                           ),
@@ -759,14 +642,18 @@ class _MasterDataScreenState extends State<MasterDataScreen> {
                                           color: menu.resep.isNotEmpty ? const Color(0xFF1B4332) : Colors.amber.shade800,
                                         ),
                                         const SizedBox(width: 4),
-                                        Text(
-                                          menu.resep.isNotEmpty
-                                              ? '${menu.resep.length} Bahan Resep (BOM)'
-                                              : 'Belum Ada Resep (BOM)',
-                                          style: TextStyle(
-                                            fontSize: 11,
-                                            fontWeight: FontWeight.w600,
-                                            color: menu.resep.isNotEmpty ? const Color(0xFF1B4332) : Colors.amber.shade900,
+                                        Flexible(
+                                          child: Text(
+                                            menu.resep.isNotEmpty
+                                                ? '${menu.resep.length} Bahan Resep (BOM)'
+                                                : 'Belum Ada Resep (BOM)',
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
+                                            style: TextStyle(
+                                              fontSize: 11,
+                                              fontWeight: FontWeight.w600,
+                                              color: menu.resep.isNotEmpty ? const Color(0xFF1B4332) : Colors.amber.shade900,
+                                            ),
                                           ),
                                         ),
                                         const SizedBox(width: 4),
@@ -912,13 +799,17 @@ class _MasterDataScreenState extends State<MasterDataScreen> {
                   child: const Icon(Icons.add_rounded, color: Colors.white, size: 20),
                 ),
                 const SizedBox(width: 10),
-                const Text(
-                  'Tambah Menu Baru',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 15,
-                    fontWeight: FontWeight.w600,
-                    letterSpacing: 0.3,
+                const Flexible(
+                  child: Text(
+                    'Tambah Menu Baru',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 15,
+                      fontWeight: FontWeight.w600,
+                      letterSpacing: 0.3,
+                    ),
                   ),
                 ),
               ],
@@ -1247,6 +1138,12 @@ class _MasterDataScreenState extends State<MasterDataScreen> {
 
   // ── TAB 3: BAHAN BAKU (PROSES 3) ────────────────────────────────────────────
   Widget _buildBahanTab(MasterDataProvider provider) {
+    final filteredBahan = provider.bahanList.where((b) {
+      if (_selectedBahanArea == 'bar') return b.area == 'bar' || b.area == 'semua';
+      if (_selectedBahanArea == 'kitchen') return b.area == 'kitchen' || b.area == 'semua';
+      return true;
+    }).toList();
+
     return ListView(
       padding: const EdgeInsets.fromLTRB(24, 20, 24, 32),
       children: [
@@ -1255,30 +1152,95 @@ class _MasterDataScreenState extends State<MasterDataScreen> {
           onTap: () => _showBahanForm(context, provider),
         ),
         const SizedBox(height: 8),
-        if (provider.bahanList.isEmpty)
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: [
+            ChoiceChip(
+              label: Text('Semua (${provider.bahanList.length})'),
+              selected: _selectedBahanArea == 'semua_tab',
+              onSelected: (_) => setState(() => _selectedBahanArea = 'semua_tab'),
+            ),
+            ChoiceChip(
+              label: const Text('Bar (Minuman)'),
+              selected: _selectedBahanArea == 'bar',
+              onSelected: (_) => setState(() => _selectedBahanArea = 'bar'),
+            ),
+            ChoiceChip(
+              label: const Text('Kitchen (Dapur)'),
+              selected: _selectedBahanArea == 'kitchen',
+              onSelected: (_) => setState(() => _selectedBahanArea = 'kitchen'),
+            ),
+          ],
+        ),
+        const SizedBox(height: 12),
+        if (filteredBahan.isEmpty)
           const Padding(
             padding: EdgeInsets.all(32),
-            child: Center(child: Text('Belum ada master bahan baku.')),
+            child: Center(child: Text('Belum ada master bahan baku untuk area ini.')),
           )
         else
-          ...provider.bahanList.map((b) {
+          ...filteredBahan.map((b) {
+            final detailLines = <String>[
+              'Area: ${b.areaLabel}',
+              'Satuan: ${b.satuan}',
+              if (b.punyaKemasan)
+                'Isi/Kemasan: ${_numberFormat.format(b.isiPerKemasan)} ${b.satuan}',
+              b.punyaKemasan
+                  ? 'Stok Min: ${_numberFormat.format(b.stokMinimum)} kemasan (${_numberFormat.format(b.batasMinimumSatuanKecil)} ${b.satuan})'
+                  : 'Stok Min: ${_numberFormat.format(b.stokMinimum)} ${b.satuan}',
+              'Harga Rata-rata (HPP): ${_currencyFormat.format(b.hargaRataRata)} / ${b.satuan}',
+            ];
+
             return Card(
               margin: const EdgeInsets.only(bottom: 10),
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-              child: ListTile(
-                leading: const CircleAvatar(
-                  backgroundColor: Color(0xFFE9F5E6),
-                  child: Icon(Icons.inventory_2_rounded, color: Color(0xFF1B4332)),
-                ),
-                title: Text(b.nama, style: const TextStyle(fontWeight: FontWeight.bold)),
-                subtitle: Text(
-                  'Satuan: ${b.satuan} • Isi/Kemasan: ${b.isiPerKemasan.toInt()} ${b.satuan} • Stok Min: ${b.stokMinimum.toInt()} ${b.satuan}\nHarga Rata-rata (HPP): ${_currencyFormat.format(b.hargaRataRata)} / ${b.satuan}',
-                  style: TextStyle(fontSize: 12, color: Colors.grey.shade600, height: 1.35),
-                ),
-                isThreeLine: true,
-                trailing: IconButton(
-                  icon: const Icon(Icons.edit_rounded, color: Colors.blue),
-                  onPressed: () => _showBahanForm(context, provider, b),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Padding(
+                      padding: EdgeInsets.only(top: 2),
+                      child: CircleAvatar(
+                        backgroundColor: Color(0xFFE9F5E6),
+                        child: Icon(Icons.inventory_2_rounded, color: Color(0xFF1B4332)),
+                      ),
+                    ),
+                    const SizedBox(width: 14),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            b.nama,
+                            style: const TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 15,
+                            ),
+                          ),
+                          const SizedBox(height: 6),
+                          ...detailLines.map(
+                            (line) => Padding(
+                              padding: const EdgeInsets.only(bottom: 2),
+                              child: Text(
+                                line,
+                                style: TextStyle(
+                                  fontSize: 12.5,
+                                  color: Colors.grey.shade700,
+                                  height: 1.35,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.edit_rounded, color: Colors.blue),
+                      onPressed: () => _showBahanForm(context, provider, b),
+                    ),
+                  ],
                 ),
               ),
             );
@@ -1298,93 +1260,112 @@ class _MasterDataScreenState extends State<MasterDataScreen> {
       text: existing != null ? existing.isiPerKemasan.toInt().toString() : '1000',
     );
     final minC = TextEditingController(
-      text: existing != null ? existing.stokMinimum.toInt().toString() : '500',
+      text: existing != null ? existing.stokMinimum.toInt().toString() : '10',
     );
     final hargaC = TextEditingController(
       text: existing != null ? existing.hargaRataRata.toString() : '0',
     );
+    String selectedArea = existing?.area ?? 'bar';
 
     showDialog(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text(existing != null ? 'Edit Bahan Baku' : 'Tambah Bahan Baku'),
-        content: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(
-                controller: namaC,
-                decoration: const InputDecoration(labelText: 'Nama Bahan Baku'),
-              ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: satuanC,
-                decoration: const InputDecoration(
-                  labelText: 'Satuan Kecil (gram / ml / pcs)',
+      builder: (ctx) => StatefulBuilder(
+        builder: (dialogCtx, setDialogState) => AlertDialog(
+          title: Text(existing != null ? 'Edit Bahan Baku' : 'Tambah Bahan Baku'),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextField(
+                  controller: namaC,
+                  decoration: const InputDecoration(labelText: 'Nama Bahan Baku'),
                 ),
-              ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: isiC,
-                keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                decoration: const InputDecoration(
-                  labelText: 'Isi per Kemasan Besar',
+                const SizedBox(height: 12),
+                DropdownButtonFormField<String>(
+                  initialValue: selectedArea,
+                  isExpanded: true,
+                  decoration: const InputDecoration(labelText: 'Area Penggunaan Stok'),
+                  items: const [
+                    DropdownMenuItem(value: 'bar', child: Text('Bar (Minuman)')),
+                    DropdownMenuItem(value: 'kitchen', child: Text('Kitchen (Dapur)')),
+                    DropdownMenuItem(value: 'semua', child: Text('Bar & Kitchen (Umum)')),
+                  ],
+                  onChanged: (val) {
+                    if (val != null) setDialogState(() => selectedArea = val);
+                  },
                 ),
-              ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: minC,
-                keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                decoration: const InputDecoration(
-                  labelText: 'Batas Stok Minimum (Peringatan Menipis)',
-                ),
-              ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: hargaC,
-                keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                decoration: const InputDecoration(
-                  labelText: 'Harga Rata-rata per Satuan Kecil (Rp)',
-                ),
-              ),
-            ],
-          ),
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Batal')),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFF1B4332),
-              foregroundColor: Colors.white,
-            ),
-            onPressed: () async {
-              final nama = namaC.text.trim();
-              final satuan = satuanC.text.trim();
-              if (nama.isEmpty || satuan.isEmpty) return;
-              final payload = {
-                'nama': nama,
-                'satuan': satuan,
-                'isi_per_kemasan': double.tryParse(isiC.text.trim()) ?? 1.0,
-                'stok_minimum': double.tryParse(minC.text.trim()) ?? 0.0,
-                'harga_rata_rata': double.tryParse(hargaC.text.trim()) ?? 0.0,
-              };
-              final ok = existing != null
-                  ? await provider.updateBahan(existing.id, payload)
-                  : await provider.createBahan(payload);
-              if (ctx.mounted) {
-                Navigator.pop(ctx);
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    content: Text(ok
-                        ? 'Bahan baku berhasil disimpan'
-                        : 'Gagal menyimpan bahan baku'),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: satuanC,
+                  decoration: const InputDecoration(
+                    labelText: 'Satuan Kecil (gram / ml / pcs)',
                   ),
-                );
-              }
-            },
-            child: const Text('Simpan'),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: isiC,
+                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                  decoration: const InputDecoration(
+                    labelText: 'Isi per Kemasan Besar',
+                  ),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: minC,
+                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                  decoration: const InputDecoration(
+                    labelText: 'Batas Stok Minimum (Kemasan Besar)',
+                    helperText: 'Dalam jumlah kemasan/pcs besar (mis. 50 kemasan)',
+                  ),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: hargaC,
+                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                  decoration: const InputDecoration(
+                    labelText: 'Harga Rata-rata per Satuan Kecil (Rp)',
+                  ),
+                ),
+              ],
+            ),
           ),
-        ],
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Batal')),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF1B4332),
+                foregroundColor: Colors.white,
+              ),
+              onPressed: () async {
+                final nama = namaC.text.trim();
+                final satuan = satuanC.text.trim();
+                if (nama.isEmpty || satuan.isEmpty) return;
+                final payload = {
+                  'nama': nama,
+                  'satuan': satuan,
+                  'area': selectedArea,
+                  'isi_per_kemasan': double.tryParse(isiC.text.trim()) ?? 1.0,
+                  'stok_minimum': double.tryParse(minC.text.trim()) ?? 0.0,
+                  'harga_rata_rata': double.tryParse(hargaC.text.trim()) ?? 0.0,
+                };
+                final ok = existing != null
+                    ? await provider.updateBahan(existing.id, payload)
+                    : await provider.createBahan(payload);
+                if (ctx.mounted) {
+                  Navigator.pop(ctx);
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text(ok
+                          ? 'Bahan baku berhasil disimpan'
+                          : 'Gagal menyimpan bahan baku'),
+                    ),
+                  );
+                }
+              },
+              child: const Text('Simpan'),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -1422,13 +1403,17 @@ class _MasterDataScreenState extends State<MasterDataScreen> {
                   child: const Icon(Icons.add_rounded, color: Colors.white, size: 20),
                 ),
                 const SizedBox(width: 10),
-                Text(
-                  label,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 15,
-                    fontWeight: FontWeight.w600,
-                    letterSpacing: 0.3,
+                Flexible(
+                  child: Text(
+                    label,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 15,
+                      fontWeight: FontWeight.w600,
+                      letterSpacing: 0.3,
+                    ),
                   ),
                 ),
               ],

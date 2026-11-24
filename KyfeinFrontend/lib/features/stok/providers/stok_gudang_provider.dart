@@ -5,6 +5,41 @@ import '../../../core/constants/api_endpoints.dart';
 import '../../auth/providers/auth_provider.dart';
 import 'stok_models.dart';
 
+/// Shared helper untuk mengambil Rekap Barang Masuk & Harga dari GET /stok/barang-masuk.
+Future<BarangMasukRekapResponse?> fetchBarangMasukRekap({
+  required Map<String, String> headers,
+  String? tanggalMulai,
+  String? tanggalSelesai,
+  String? area,
+  String? bahanId,
+}) async {
+  final qp = <String, String>{};
+  if (tanggalMulai != null && tanggalMulai.isNotEmpty) {
+    qp['tanggal_mulai'] = tanggalMulai;
+  }
+  if (tanggalSelesai != null && tanggalSelesai.isNotEmpty) {
+    qp['tanggal_selesai'] = tanggalSelesai;
+  }
+  if (area != null && area.isNotEmpty && area != 'semua') {
+    qp['area'] = area;
+  }
+  if (bahanId != null && bahanId.isNotEmpty) {
+    qp['bahan_id'] = bahanId;
+  }
+  final uri = Uri.parse(ApiEndpoints.barangMasuk).replace(
+    queryParameters: qp.isEmpty ? null : qp,
+  );
+  final res =
+      await http.get(uri, headers: headers).timeout(const Duration(seconds: 10));
+  if (res.statusCode == 200) {
+    final decoded = json.decode(res.body);
+    if (decoded is Map<String, dynamic>) {
+      return BarangMasukRekapResponse.fromJson(decoded);
+    }
+  }
+  return null;
+}
+
 /// Provider Stok Gudang (terhubung langsung ke API backend).
 class StokGudangProvider with ChangeNotifier {
   static const bool useMock = false;
@@ -13,17 +48,28 @@ class StokGudangProvider with ChangeNotifier {
   StokGudangProvider({AuthProvider? auth}) : _auth = auth;
 
   List<StokGudang> _semua = [];
+  BarangMasukRekapResponse? _rekapMasuk;
   bool _isLoading = false;
+  bool _isLoadingRekap = false;
   bool _isSubmitting = false;
   String _errorMessage = '';
   String _query = '';
+  String _areaFilter = 'semua'; // 'semua' | 'bar' | 'kitchen'
   bool _hanyaMenipis = false;
 
   bool get isLoading => _isLoading;
+  bool get isLoadingRekap => _isLoadingRekap;
   bool get isSubmitting => _isSubmitting;
   String get errorMessage => _errorMessage;
+  String get areaFilter => _areaFilter;
   bool get hanyaMenipis => _hanyaMenipis;
+  BarangMasukRekapResponse? get rekapMasuk => _rekapMasuk;
   int get jumlahMenipis => _semua.where((s) => s.menipis).length;
+  bool get hasPricingData => _semua.any((s) => s.hasPricing);
+  double get totalNilaiGudang => items.fold(
+      0.0, (sum, s) => sum + (s.hasPricing ? s.effectiveNilaiPersediaan : 0.0));
+  int get jumlahBahanDenganBom =>
+      items.where((s) => s.bomPemakaian.isNotEmpty).length;
 
   /// Daftar bahan untuk dropdown form (diambil dari baris stok_gudang, 1 baris per bahan).
   List<Bahan> get daftarBahan => _semua.map((s) => s.bahan).toList();
@@ -43,8 +89,11 @@ class StokGudangProvider with ChangeNotifier {
   List<StokGudang> get items {
     return _semua.where((s) {
       final cocokNama = s.bahan.nama.toLowerCase().contains(_query.toLowerCase());
+      final cocokArea = _areaFilter == 'semua' ||
+          s.bahan.area == _areaFilter ||
+          s.bahan.area == 'semua';
       final cocokFilter = !_hanyaMenipis || s.menipis;
-      return cocokNama && cocokFilter;
+      return cocokNama && cocokArea && cocokFilter;
     }).toList();
   }
 
@@ -62,8 +111,46 @@ class StokGudangProvider with ChangeNotifier {
     }
   }
 
+  Future<void> loadRekapMasuk({
+    String? tanggalMulai,
+    String? tanggalSelesai,
+    String? area,
+  }) async {
+    _isLoadingRekap = true;
+    notifyListeners();
+    try {
+      if (useMock) {
+        await Future.delayed(const Duration(milliseconds: 250));
+        _rekapMasuk = const BarangMasukRekapResponse(
+          totalTransaksi: 0,
+          totalItemMasuk: 0,
+          totalNilaiPembelian: 0,
+          items: [],
+        );
+      } else {
+        _rekapMasuk = await fetchBarangMasukRekap(
+          headers: _headers,
+          tanggalMulai: tanggalMulai,
+          tanggalSelesai: tanggalSelesai,
+          area: area,
+        );
+      }
+    } catch (_) {
+      // Keep previous data or empty state cleanly
+    } finally {
+      _isLoadingRekap = false;
+      notifyListeners();
+    }
+  }
+
   void setQuery(String value) {
     _query = value;
+    notifyListeners();
+  }
+
+  void setAreaFilter(String area) {
+    if (_areaFilter == area) return;
+    _areaFilter = area;
     notifyListeners();
   }
 

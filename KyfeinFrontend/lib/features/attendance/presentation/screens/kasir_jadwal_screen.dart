@@ -7,6 +7,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 import 'package:kyfein_frontend/core/constants/api_endpoints.dart';
+import 'package:kyfein_frontend/core/widgets/page_refresh_scope.dart';
 import 'package:kyfein_frontend/features/attendance/providers/attendance_provider.dart';
 import 'package:kyfein_frontend/features/auth/providers/auth_provider.dart';
 
@@ -146,11 +147,25 @@ class _KasirJadwalScreenState extends State<KasirJadwalScreen> {
         .toList();
   }
 
+  /// Permintaan tukar shift masuk yang menargetkan saya dan menunggu konfirmasi saya
+  List<Map<String, dynamic>> get _incomingPendingTukarShifts {
+    final uid = _myUserId;
+    if (uid == null || uid.isEmpty) return const [];
+    return _tukarShifts
+        .where((ts) =>
+            ts['karyawan_target_id']?.toString() == uid &&
+            (ts['status'] ?? 'pending').toString() == 'pending' &&
+            (ts['status_target'] ?? 'pending').toString() == 'pending')
+        .toList();
+  }
+
   @override
   void initState() {
     super.initState();
     _activeSection = widget.initialSection;
-    _load();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _load();
+    });
   }
 
   @override
@@ -589,8 +604,36 @@ class _KasirJadwalScreenState extends State<KasirJadwalScreen> {
         'karyawan_target_id': b['karyawan_id'],
         'alasan': alasan,
       },
-      'Pengajuan tukar shift terkirim ke Admin',
+      'Pengajuan tukar shift terkirim — menunggu konfirmasi rekan target',
     );
+  }
+
+  Future<void> _konfirmasiTargetTukar(String id, String status) async {
+    setState(() => _submitting = true);
+    try {
+      final resp = await http
+          .put(
+            Uri.parse(ApiEndpoints.konfirmasiTargetTukarShift(id)),
+            headers: _headers,
+            body: jsonEncode({'status': status}),
+          )
+          .timeout(const Duration(seconds: 10));
+      if (resp.statusCode == 200) {
+        _snack(
+          status == 'disetujui'
+              ? 'Konfirmasi disetujui — pengajuan diteruskan ke Admin untuk persetujuan akhir'
+              : 'Permintaan tukar shift ditolak',
+        );
+        await _load();
+      } else {
+        _snack(_errorMsg(resp));
+        if (resp.statusCode == 409) await _load();
+      }
+    } catch (_) {
+      _snack('Tidak bisa terhubung ke server');
+    } finally {
+      if (mounted) setState(() => _submitting = false);
+    }
   }
 
   Future<void> _izinTelat() async {
@@ -667,141 +710,51 @@ class _KasirJadwalScreenState extends State<KasirJadwalScreen> {
   // ── UI ─────────────────────────────────────────────────────────────────────
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: _cream,
-      body: Column(
-        children: [
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
-            decoration: const BoxDecoration(
-              color: Colors.white,
-              border: Border(bottom: BorderSide(color: Color(0xFFE5EBE7))),
-            ),
-            child: Wrap(
-              spacing: 16,
-              runSpacing: 12,
-              alignment: WrapAlignment.spaceBetween,
-              crossAxisAlignment: WrapCrossAlignment.center,
-              children: [
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      _activeSection == 0 ? 'Jadwal Kerja Saya' : 'Pengajuan Izin & Request Off',
-                      style: GoogleFonts.outfit(
-                        fontSize: 18,
-                        fontWeight: FontWeight.w700,
-                        color: const Color(0xFF2D312E),
-                      ),
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      _activeSection == 0
-                          ? 'Lihat jadwal shift hari ini, area kerja, dan jadwal mendatang'
-                          : 'Ajukan request off, pertukaran shift, izin terlambat, atau izin tidak masuk',
-                      style: GoogleFonts.outfit(
-                        fontSize: 12,
-                        color: Colors.grey.shade600,
-                      ),
-                    ),
-                  ],
-                ),
-                Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
-                      decoration: BoxDecoration(
-                        color: _cream,
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: const Color(0xFFE5EBE7)),
-                      ),
-                      child: DropdownButtonHideUnderline(
-                        child: DropdownButton<int>(
-                          value: _activeSection,
-                          isDense: true,
-                          icon: const Icon(Icons.keyboard_arrow_down_rounded, color: _brown),
-                          style: GoogleFonts.outfit(
-                            fontSize: 13,
-                            fontWeight: FontWeight.w600,
-                            color: const Color(0xFF2D312E),
-                          ),
-                          onChanged: (val) {
-                            if (val != null) setState(() => _activeSection = val);
-                          },
-                          items: const [
-                            DropdownMenuItem(
-                              value: 0,
-                              child: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  Icon(Icons.calendar_month_rounded, size: 16, color: _brown),
-                                  SizedBox(width: 8),
-                                  Text('Jadwal Kerja Saya'),
+    return PageRefreshRegistrar(
+      onRefresh: _load,
+      child: Scaffold(
+        backgroundColor: _cream,
+        appBar: buildStandaloneAppBar(
+          context,
+          title: _activeSection == 0
+              ? 'Jadwal Kerja Saya'
+              : 'Pengajuan Izin & Off',
+          onRefresh: _load,
+        ),
+        body: _loading
+            ? const Center(child: CircularProgressIndicator(color: _brown))
+            : _error != null
+                ? Center(child: Text(_error!))
+                : RefreshIndicator(
+                    color: _brown,
+                    onRefresh: _load,
+                    child: SingleChildScrollView(
+                      physics: const AlwaysScrollableScrollPhysics(),
+                      padding: const EdgeInsets.all(20),
+                      child: Align(
+                        alignment: Alignment.topLeft,
+                        child: ConstrainedBox(
+                          constraints: const BoxConstraints(maxWidth: 780),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              if (_submitting) ...[
+                                const LinearProgressIndicator(color: _brown),
+                                const SizedBox(height: 16),
+                              ],
+                              if (_activeSection == 0) ...[
+                                if (_incomingPendingTukarShifts.isNotEmpty) ...[
+                                  _buildIncomingTukarShiftCard(),
+                                  const SizedBox(height: 20),
                                 ],
-                              ),
-                            ),
-                            DropdownMenuItem(
-                              value: 1,
-                              child: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  Icon(Icons.assignment_turned_in_rounded, size: 16, color: _brown),
-                                  SizedBox(width: 8),
-                                  Text('Pengajuan Izin & Off'),
-                                ],
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    IconButton(
-                      onPressed: _load,
-                      tooltip: 'Segarkan data',
-                      style: IconButton.styleFrom(
-                        backgroundColor: _cream,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(10),
-                          side: const BorderSide(color: Color(0xFFE5EBE7)),
-                        ),
-                      ),
-                      icon: const Icon(Icons.refresh_rounded, size: 18, color: _brown),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-          Expanded(
-            child: _loading
-                ? const Center(child: CircularProgressIndicator(color: _brown))
-                : _error != null
-                    ? Center(child: Text(_error!))
-                    : RefreshIndicator(
-                        color: _brown,
-                        onRefresh: _load,
-                        child: SingleChildScrollView(
-                          physics: const AlwaysScrollableScrollPhysics(),
-                          padding: const EdgeInsets.all(24),
-                          child: Align(
-                            alignment: Alignment.topLeft,
-                            child: ConstrainedBox(
-                              constraints: const BoxConstraints(maxWidth: 780),
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  if (_submitting) ...[
-                                    const LinearProgressIndicator(color: _brown),
-                                    const SizedBox(height: 16),
-                                  ],
-                                  if (_activeSection == 0) ...[
-                                    _buildHariIni(),
-                                    const SizedBox(height: 24),
-                                    _buildMendatang(),
+                                _buildHariIni(),
+                                const SizedBox(height: 24),
+                                _buildMendatang(),
                                   ] else ...[
+                                    if (_incomingPendingTukarShifts.isNotEmpty) ...[
+                                      _buildIncomingTukarShiftCard(),
+                                      const SizedBox(height: 20),
+                                    ],
                                     _title('Form Pengajuan Baru'),
                                     const SizedBox(height: 12),
                                     _buildRequestButtons(),
@@ -816,8 +769,6 @@ class _KasirJadwalScreenState extends State<KasirJadwalScreen> {
                           ),
                         ),
                       ),
-          ),
-        ],
       ),
     );
   }
@@ -1164,6 +1115,174 @@ class _KasirJadwalScreenState extends State<KasirJadwalScreen> {
     );
   }
 
+  Widget _buildIncomingTukarShiftCard() {
+    final incoming = _incomingPendingTukarShifts;
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: const Color(0xFFFFFBEB),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: const Color(0xFFF59E0B), width: 1.4),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFF59E0B).withValues(alpha: 0.16),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: const Icon(Icons.swap_horiz_rounded,
+                    color: Color(0xFFB45309), size: 20),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Permintaan Tukar Shift Masuk (${incoming.length})',
+                      style: GoogleFonts.outfit(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w700,
+                        color: const Color(0xFF92400E),
+                      ),
+                    ),
+                    const Text(
+                      'Konfirmasi setuju atau tolak sebelum diteruskan ke Admin',
+                      style: TextStyle(fontSize: 12, color: Color(0xFF78350F)),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const Divider(height: 20, color: Color(0xFFFDE68A)),
+          for (final ts in incoming)
+            Container(
+              margin: const EdgeInsets.only(bottom: 10),
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: const Color(0xFFFDE68A)),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Dari: ${ts['nama_pengaju'] ?? 'Rekan Kerja'}',
+                    style: const TextStyle(
+                        fontSize: 13.5, fontWeight: FontWeight.w700),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    'Shift Pengaju: ${ts['info_shift_a'] ?? _ringkasByShiftId(ts['shift_a_id'])}',
+                    style: const TextStyle(fontSize: 12, color: Color(0xFF374151)),
+                  ),
+                  Text(
+                    'Shift Anda: ${ts['info_shift_b'] ?? _ringkasByShiftId(ts['shift_b_id'])}',
+                    style: const TextStyle(fontSize: 12, color: Color(0xFF374151)),
+                  ),
+                  if ((ts['alasan'] ?? '').toString().trim().isNotEmpty) ...[
+                    const SizedBox(height: 4),
+                    Text(
+                      'Alasan: ${ts['alasan']}',
+                      style: const TextStyle(fontSize: 12, color: _textDim),
+                    ),
+                  ],
+                  const SizedBox(height: 12),
+                  Wrap(
+                    spacing: 10,
+                    runSpacing: 8,
+                    children: [
+                      ElevatedButton.icon(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xFF10B981),
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 14, vertical: 8),
+                          shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(10)),
+                        ),
+                        icon: const Icon(Icons.check_circle_outline_rounded,
+                            size: 16),
+                        label: const Text('Setujui Tukar',
+                            style: TextStyle(fontSize: 12.5)),
+                        onPressed: _submitting
+                            ? null
+                            : () => _konfirmasiTargetTukar(
+                                ts['id'].toString(), 'disetujui'),
+                      ),
+                      OutlinedButton.icon(
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: Colors.red.shade700,
+                          side: BorderSide(color: Colors.red.shade300),
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 14, vertical: 8),
+                          shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(10)),
+                        ),
+                        icon: const Icon(Icons.cancel_outlined, size: 16),
+                        label: const Text('Tolak',
+                            style: TextStyle(fontSize: 12.5)),
+                        onPressed: _submitting
+                            ? null
+                            : () => _konfirmasiTargetTukar(
+                                ts['id'].toString(), 'ditolak'),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _tukarShiftStatusChip(Map<String, dynamic> ts) {
+    final status = (ts['status'] ?? 'pending').toString().toLowerCase();
+    final statusTarget =
+        (ts['status_target'] ?? 'pending').toString().toLowerCase();
+    Color bg;
+    Color fg;
+    String label;
+    if (status == 'disetujui') {
+      bg = Colors.green.shade50;
+      fg = Colors.green.shade700;
+      label = 'DISETUJUI';
+    } else if (status == 'ditolak') {
+      bg = Colors.red.shade50;
+      fg = Colors.red.shade700;
+      label = statusTarget == 'ditolak' ? 'DITOLAK REKAN' : 'DITOLAK ADMIN';
+    } else if (statusTarget == 'disetujui') {
+      bg = Colors.blue.shade50;
+      fg = Colors.blue.shade800;
+      label = 'MENUNGGU ADMIN';
+    } else {
+      bg = Colors.orange.shade50;
+      fg = Colors.orange.shade800;
+      label = 'MENUNGGU REKAN';
+    }
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+      decoration: BoxDecoration(
+        color: bg,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: fg.withValues(alpha: 0.3)),
+      ),
+      child: Text(
+        label,
+        style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.bold, color: fg),
+      ),
+    );
+  }
+
   Widget _buildRiwayatPengajuan() {
     final myOffs = _myRequestOffs;
     final hasAny = myOffs.isNotEmpty ||
@@ -1239,12 +1358,20 @@ class _KasirJadwalScreenState extends State<KasirJadwalScreen> {
               leading: const Icon(Icons.swap_horiz_rounded,
                   color: _brown, size: 20),
               title: Text(
-                  'Tukar Shift · ${_ringkasByShiftId(ts['shift_a_id'])}',
-                  style: const TextStyle(
-                      fontSize: 13, fontWeight: FontWeight.w600)),
-              subtitle: Text('Alasan: ${ts['alasan'] ?? '-'}',
-                  style: const TextStyle(fontSize: 12, color: _textDim)),
-              trailing: _statusChip((ts['status'] ?? 'pending').toString()),
+                ts['karyawan_target_id']?.toString() == _myUserId
+                    ? 'Permintaan Tukar dari ${ts['nama_pengaju'] ?? 'Rekan'}'
+                    : 'Tukar Shift ke ${ts['nama_target'] ?? 'Rekan'}',
+                style: const TextStyle(
+                    fontSize: 13, fontWeight: FontWeight.w600),
+              ),
+              subtitle: Text(
+                '${ts['info_shift_a'] ?? _ringkasByShiftId(ts['shift_a_id'])}\n'
+                '⇄ ${ts['info_shift_b'] ?? _ringkasByShiftId(ts['shift_b_id'])}\n'
+                'Alasan: ${ts['alasan'] ?? '-'}',
+                style: const TextStyle(fontSize: 12, color: _textDim),
+              ),
+              isThreeLine: true,
+              trailing: _tukarShiftStatusChip(ts),
             ),
         ],
       ),

@@ -1,5 +1,5 @@
-from datetime import datetime, date
-from typing import List, Optional, Literal
+from datetime import datetime, date, time, timedelta
+from typing import List, Optional, Literal, Union
 from decimal import Decimal
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -13,8 +13,9 @@ from app.models.stok import (
     StokGudang, StokTitik, BarangKeluar, BarangKeluarDetail,
     BarangMasuk, BarangMasukDetail, StokOpname, StokOpnameDetail, MutasiStok
 )
-from app.services.jadwal_service import get_shift_berjalan
+from app.services.jadwal_service import get_shift_berjalan, require_on_duty_karyawan
 from app.models.jadwal import JadwalShift
+from app.models.absensi import Absensi
 from app.models.master_data import Bahan, Menu, MenuResep, KategoriMenu
 from app.models.transaksi import Transaksi, TransaksiDetail
 from app.models.karyawan import Karyawan
@@ -22,7 +23,10 @@ from app.schemas.stok import (
     StokOpnameCreate, StokOpnameOut,
     BarangKeluarCreate, BarangKeluarOut,
     BarangMasukCreate, BarangMasukOut,
-    StokGudangOut, StokGudangUpdate, StokTitikOut, MutasiStokOut, OpnameTertundaOut,
+    BarangMasukRekapDetailOut, BarangMasukRekapItemOut, BarangMasukRekapResponse,
+    StokGudangOut, StokGudangAdminOut, StokGudangBomItemOut, StokGudangUpdate,
+    StokTitikOut, MutasiStokOut, OpnameTertundaOut,
+    ShiftOpnameSnapshotOut, ShiftComparisonItemOut,
     OpnameHarianResponse, OpnameAuditResponse,
     OpnameHarianItemOut, OpnameHarianSesiOut,
     BOMItemDetailOut, OpnameAuditItemOut, OpnameAuditSummaryOut
@@ -43,6 +47,7 @@ async def record_barang_masuk(
     - Updates stok_gudang (jumlah_kemasan_besar & jumlah_satuan_kecil)
     - Recalculates bahan.harga_rata_rata using Moving Weighted Average based on stock BEFORE addition
     """
+    await require_on_duty_karyawan(db, current_user, now_local())
     if not data.items:
         raise HTTPException(status_code=400, detail="List items barang masuk tidak boleh kosong")
 
@@ -111,6 +116,124 @@ async def record_barang_masuk(
     return bm_res.scalars().first()
 
 
+@router.get("/barang-masuk", response_model=BarangMasukRekapResponse)
+async def list_barang_masuk(
+    tanggal_mulai: Optional[date] = None,
+    tanggal_selesai: Optional[date] = None,
+    area: Optional[Literal['bar', 'kitchen', 'semua']] = None,
+    bahan_id: Optional[str] = None,
+    db: AsyncSession = Depends(get_db),
+    current_user: Karyawan = Depends(require_roles(["admin"])),
+):
+    """
+    Rekap riwayat barang masuk gudang beserta rincian kuantitas, harga per satuan/kemasan,
+    total nilai belanja, serta perbandingan terhadap harga rata-rata (AVG) terkini.
+    """
+    stmt = (
+        select(BarangMasuk)
+        .options(
+            selectinload(BarangMasuk.karyawan),
+            selectinload(BarangMasuk.details).selectinload(BarangMasukDetail.bahan),
+        )
+        .order_by(BarangMasuk.waktu.desc(), BarangMasuk.created_at.desc())
+    )
+    if tanggal_mulai:
+        stmt = stmt.where(BarangMasuk.waktu >= datetime.combine(tanggal_mulai, datetime.min.time()))
+    if tanggal_selesai:
+        stmt = stmt.where(BarangMasuk.waktu <= datetime.combine(tanggal_selesai, datetime.max.time()))
+
+    batches = (await db.execute(stmt)).scalars().all()
+
+    items_out: List[BarangMasukRekapItemOut] = []
+    grand_total_nilai = Decimal("0.00")
+    grand_total_items = 0
+
+    for bm in batches:
+        details_out: List[BarangMasukRekapDetailOut] = []
+        batch_nilai = Decimal("0.00")
+
+        for det in bm.details:
+            b = det.bahan
+            if not b:
+                continue
+            b_area = getattr(b, "area", "semua") or "semua"
+            if bahan_id and det.bahan_id != bahan_id:
+                continue
+            if area and area != "semua" and b_area not in (area, "semua"):
+                continue
+
+            isi_raw = Decimal(str(b.isi_per_kemasan or 0))
+            isi_eff = isi_raw if isi_raw > 0 else Decimal("1")
+            total_kecil = (
+                Decimal(str(det.jumlah_kemasan_besar or 0)) * isi_eff
+                + Decimal(str(det.jumlah_satuan_kecil or 0))
+            )
+            harga_tot = Decimal(str(det.harga_total or 0)).quantize(Decimal("0.01"))
+            harga_per_kecil = (
+                (harga_tot / total_kecil).quantize(Decimal("0.01"))
+                if total_kecil > 0
+                else Decimal("0.00")
+            )
+            harga_per_kem = (
+                ((harga_tot * isi_raw) / total_kecil).quantize(Decimal("0.01"))
+                if (isi_raw > 0 and total_kecil > 0)
+                else None
+            )
+            avg_now = Decimal(str(b.harga_rata_rata or 0)).quantize(Decimal("0.01"))
+            selisih = (
+                (harga_per_kecil - avg_now).quantize(Decimal("0.01"))
+                if total_kecil > 0
+                else None
+            )
+
+            details_out.append(
+                BarangMasukRekapDetailOut(
+                    id=det.id,
+                    bahan_id=det.bahan_id,
+                    nama_bahan=b.nama,
+                    satuan=b.satuan,
+                    area=b_area,
+                    isi_per_kemasan=isi_raw,
+                    jumlah_kemasan_besar=int(det.jumlah_kemasan_besar or 0),
+                    jumlah_satuan_kecil=Decimal(str(det.jumlah_satuan_kecil or 0)),
+                    total_satuan_kecil=total_kecil,
+                    harga_total=harga_tot,
+                    harga_per_satuan_kecil=harga_per_kecil,
+                    harga_per_kemasan=harga_per_kem,
+                    harga_rata_rata_saat_ini=avg_now,
+                    selisih_vs_avg=selisih,
+                )
+            )
+            batch_nilai += harga_tot
+
+        if not details_out:
+            continue
+
+        details_out.sort(key=lambda x: x.nama_bahan.lower())
+        batch_nilai_q = batch_nilai.quantize(Decimal("0.01"))
+        items_out.append(
+            BarangMasukRekapItemOut(
+                id=bm.id,
+                waktu=bm.waktu,
+                karyawan_id=bm.karyawan_id,
+                nama_karyawan=bm.karyawan.nama if bm.karyawan else "-",
+                catatan=bm.catatan,
+                jumlah_item=len(details_out),
+                total_nilai=batch_nilai_q,
+                details=details_out,
+            )
+        )
+        grand_total_nilai += batch_nilai_q
+        grand_total_items += len(details_out)
+
+    return BarangMasukRekapResponse(
+        total_transaksi=len(items_out),
+        total_item_masuk=grand_total_items,
+        total_nilai_pembelian=grand_total_nilai.quantize(Decimal("0.01")),
+        items=items_out,
+    )
+
+
 @router.post("/opname", response_model=StokOpnameOut)
 async def submit_stok_opname(
     data: StokOpnameCreate,
@@ -129,14 +252,23 @@ async def submit_stok_opname(
     shift = None
     if data.jadwal_shift_id:
         shift = await db.get(JadwalShift, data.jadwal_shift_id)
+        if not shift:
+            raise HTTPException(status_code=404, detail="Jadwal shift tidak ditemukan")
 
     if not shift:
         active_shift = await get_shift_berjalan(db, current_user.id, now)
-        if active_shift and active_shift.area_kerja == data.titik:
+        if active_shift:
             shift = active_shift
 
-    if not shift:
-        # Cari jadwal shift titik ini hari ini
+    # Karyawan biasa TIDAK boleh meminjam shift orang lain atau membuat shift fiktif
+    if not shift and current_user.role not in ["admin", "owner"]:
+        raise HTTPException(
+            status_code=403,
+            detail="Akses ditolak: Anda sedang off-shift / libur (tidak memiliki jadwal shift aktif saat ini)."
+        )
+
+    # Fallback hanya untuk Admin/Owner
+    if not shift and current_user.role in ["admin", "owner"]:
         shift_q = select(JadwalShift).where(
             and_(
                 JadwalShift.tanggal == today,
@@ -146,28 +278,15 @@ async def submit_stok_opname(
         shift_res = await db.execute(shift_q)
         shift = shift_res.scalars().first()
 
-    if not shift:
-        # Fallback 1: Cari shift apapun milik current_user hari ini
-        user_shift_q = select(JadwalShift).where(
-            and_(
-                JadwalShift.tanggal == today,
-                JadwalShift.karyawan_id == current_user.id
-            )
-        )
-        user_shift_res = await db.execute(user_shift_q)
-        shift = user_shift_res.scalars().first()
-
-    if not shift:
-        # Fallback 2: Cari shift apapun yang tercatat hari ini
+    if not shift and current_user.role in ["admin", "owner"]:
         any_shift_q = select(JadwalShift).where(JadwalShift.tanggal == today)
         any_shift_res = await db.execute(any_shift_q)
         shift = any_shift_res.scalars().first()
 
-    if not shift:
+    if not shift and current_user.role in ["admin", "owner"]:
         test_shift_id = f"shift-{data.titik}-{today.strftime('%Y%m%d')}"
         shift = await db.get(JadwalShift, test_shift_id)
         if not shift:
-            # Auto-create shift untuk titik ini agar testing opname & audit berjalan mulus
             shift = JadwalShift(
                 id=test_shift_id,
                 karyawan_id=current_user.id,
@@ -204,6 +323,27 @@ async def submit_stok_opname(
                 status_code=403,
                 detail="Tidak dapat mengisi opname untuk shift milik karyawan lain."
             )
+        # Karyawan wajib sudah Absen Masuk (dan belum Absen Pulang) sebelum isi opname
+        if current_user.role not in ["admin", "owner"]:
+            abs_res = await db.execute(
+                select(Absensi).where(
+                    and_(
+                        Absensi.jadwal_shift_id == shift.id,
+                        Absensi.karyawan_id == current_user.id,
+                    )
+                )
+            )
+            abs_obj = abs_res.scalars().first()
+            if not abs_obj:
+                raise HTTPException(
+                    status_code=403,
+                    detail="Akses ditolak: Anda wajib melakukan Absen Masuk terlebih dahulu sebelum mengisi stok opname."
+                )
+            if abs_obj.jam_pulang is not None:
+                raise HTTPException(
+                    status_code=403,
+                    detail="Akses ditolak: Anda sudah melakukan Absen Pulang pada shift ini."
+                )
     else:
         toleransi_hours = getattr(settings, "SHIFT_TOLERANSI_JAM", 3)
         shift_end_datetime = datetime.combine(shift.tanggal, shift.jam_selesai)
@@ -453,15 +593,16 @@ async def record_barang_keluar(
 ):
     """
     TRANSFER GUDANG -> TITIK (BAR/KITCHEN):
-    - Validasi area_kerja: titik_tujuan harus sesuai dengan area_kerja shift aktif karyawan saat itu
+    - Karyawan wajib on-duty (punya jadwal shift berjalan dan sudah absen masuk).
+    - Validasi area_kerja: jika shift bar/kitchen, titik_tujuan wajib sesuai area_kerja shift aktif.
     - Mengurangi stok_gudang. Tidak menambah stok_titik secara langsung.
     """
     now = now_local()
-    active_shift = await get_shift_berjalan(db, current_user.id, now)
+    active_shift = await require_on_duty_karyawan(db, current_user, now)
 
-    # Validasi area kerja hanya berlaku untuk karyawan biasa. Admin/Owner memiliki hak akses penuh ke semua area.
-    if current_user.role == "karyawan":
-        if active_shift and active_shift.area_kerja != data.titik_tujuan:
+    # Validasi area kerja berlaku untuk karyawan bar/kitchen. Admin/Owner memiliki hak akses penuh ke semua area.
+    if current_user.role == "karyawan" and active_shift:
+        if active_shift.area_kerja in ["bar", "kitchen"] and active_shift.area_kerja != data.titik_tujuan:
             raise HTTPException(
                 status_code=400,
                 detail=f"Titik tujuan barang keluar ('{data.titik_tujuan}') harus sesuai dengan area_kerja shift aktif Anda ('{active_shift.area_kerja}')."
@@ -501,33 +642,114 @@ async def record_barang_keluar(
     )
     return bk_res.scalars().first()
 
+async def _build_stok_gudang_admin_list(
+    db: AsyncSession,
+    items: List[StokGudang],
+) -> List[StokGudangAdminOut]:
+    """Bangun respons StokGudang khusus admin/owner lengkap dengan harga AVG & biaya per BOM."""
+    if not items:
+        return []
+
+    bahan_ids = [item.bahan_id for item in items if item.bahan_id]
+    bom_map: dict[str, List[MenuResep]] = {}
+    if bahan_ids:
+        resep_res = await db.execute(
+            select(MenuResep)
+            .join(Menu, MenuResep.menu_id == Menu.id)
+            .options(selectinload(MenuResep.menu).selectinload(Menu.kategori))
+            .where(
+                and_(
+                    MenuResep.bahan_id.in_(bahan_ids),
+                    Menu.status_aktif == True,
+                )
+            )
+            .order_by(Menu.kode_menu.asc(), Menu.nama.asc())
+        )
+        for mr in resep_res.scalars().all():
+            bom_map.setdefault(mr.bahan_id, []).append(mr)
+
+    out: List[StokGudangAdminOut] = []
+    for item in items:
+        b = item.bahan
+        avg = Decimal(str(b.harga_rata_rata or 0)).quantize(Decimal("0.01")) if b else Decimal("0.00")
+        isi_raw = Decimal(str(b.isi_per_kemasan or 0)) if b else Decimal("0")
+        isi_eff = isi_raw if isi_raw > 0 else Decimal("1")
+        avg_kemasan = (avg * isi_raw).quantize(Decimal("0.01")) if isi_raw > 0 else None
+        total_kecil = (
+            Decimal(str(item.jumlah_kemasan_besar or 0)) * isi_eff
+            + Decimal(str(item.jumlah_satuan_kecil or 0))
+        )
+        nilai_persediaan = (total_kecil * avg).quantize(Decimal("0.01"))
+
+        bom_list: List[StokGudangBomItemOut] = []
+        for mr in bom_map.get(item.bahan_id, []):
+            menu = mr.menu
+            if not menu:
+                continue
+            qty = Decimal(str(mr.jumlah_terpakai or 0))
+            biaya_porsi = (qty * avg).quantize(Decimal("0.01"))
+            est_porsi = int(total_kecil // qty) if qty > 0 else None
+            bom_list.append(
+                StokGudangBomItemOut(
+                    menu_id=menu.id,
+                    kode_menu=menu.kode_menu,
+                    nama_menu=menu.nama,
+                    area_produksi=menu.kategori.area_produksi if menu.kategori else None,
+                    jumlah_terpakai=qty,
+                    biaya_per_porsi=biaya_porsi,
+                    estimasi_porsi=est_porsi,
+                )
+            )
+
+        out.append(
+            StokGudangAdminOut(
+                id=item.id,
+                bahan_id=item.bahan_id,
+                nama_bahan=b.nama if b else None,
+                jumlah_kemasan_besar=int(item.jumlah_kemasan_besar or 0),
+                jumlah_satuan_kecil=Decimal(str(item.jumlah_satuan_kecil or 0)),
+                updated_at=item.updated_at,
+                bahan=b,
+                harga_rata_rata=avg,
+                harga_rata_rata_per_kemasan=avg_kemasan,
+                nilai_persediaan=nilai_persediaan,
+                bom_pemakaian=bom_list,
+            )
+        )
+    return out
+
+
 # --- VIEW ENDPOINTS ---
-@router.get("/stok-gudang", response_model=List[StokGudangOut])
-@router.get("/gudang", response_model=List[StokGudangOut], include_in_schema=False)
+@router.get("/stok-gudang", response_model=Union[List[StokGudangAdminOut], List[StokGudangOut]])
+@router.get("/gudang", response_model=Union[List[StokGudangAdminOut], List[StokGudangOut]], include_in_schema=False)
 async def list_stok_gudang(
     db: AsyncSession = Depends(get_db),
     current_user: Karyawan = Depends(get_current_user)
 ):
+    await require_on_duty_karyawan(db, current_user, now_local())
     result = await db.execute(
         select(StokGudang)
+        .join(Bahan, StokGudang.bahan_id == Bahan.id)
         .options(selectinload(StokGudang.bahan))
-        .order_by(StokGudang.updated_at.desc())
+        .order_by(Bahan.nama.asc())
     )
     items = result.scalars().all()
+    if current_user.role in ["admin", "owner"]:
+        return await _build_stok_gudang_admin_list(db, items)
     for item in items:
         if item.bahan:
             setattr(item, 'nama_bahan', item.bahan.nama)
-    return items
+    return [StokGudangOut.model_validate(item) for item in items]
 
-@router.put("/stok-gudang/{id_or_bahan_id}", response_model=StokGudangOut)
-@router.patch("/stok-gudang/{id_or_bahan_id}", response_model=StokGudangOut)
-@router.put("/gudang/{id_or_bahan_id}", response_model=StokGudangOut, include_in_schema=False)
-@router.patch("/gudang/{id_or_bahan_id}", response_model=StokGudangOut, include_in_schema=False)
+@router.put("/stok-gudang/{id_or_bahan_id}", response_model=StokGudangAdminOut)
+@router.patch("/stok-gudang/{id_or_bahan_id}", response_model=StokGudangAdminOut)
+@router.put("/gudang/{id_or_bahan_id}", response_model=StokGudangAdminOut, include_in_schema=False)
+@router.patch("/gudang/{id_or_bahan_id}", response_model=StokGudangAdminOut, include_in_schema=False)
 async def update_stok_gudang(
     id_or_bahan_id: str,
     payload: StokGudangUpdate,
     db: AsyncSession = Depends(get_db),
-    current_user: Karyawan = Depends(get_current_user)
+    current_user: Karyawan = Depends(require_roles(["admin"]))
 ):
     """
     Update stok gudang langsung (jumlah kemasan besar, eceran, isi per kemasan, stok minimum).
@@ -569,10 +791,13 @@ async def update_stok_gudang(
         setattr(stok, 'nama_bahan', stok.bahan.nama)
 
     await db.commit()
-    await db.refresh(stok)
-    if stok.bahan:
-        setattr(stok, 'nama_bahan', stok.bahan.nama)
-    return stok
+    refreshed_res = await db.execute(
+        select(StokGudang)
+        .options(selectinload(StokGudang.bahan))
+        .where(StokGudang.id == stok.id)
+    )
+    refreshed = refreshed_res.scalars().first()
+    return (await _build_stok_gudang_admin_list(db, [refreshed]))[0]
 
 @router.get("/stok-titik", response_model=List[StokTitikOut])
 async def list_stok_titik(
@@ -580,10 +805,11 @@ async def list_stok_titik(
     db: AsyncSession = Depends(get_db),
     current_user: Karyawan = Depends(get_current_user)
 ):
-    query = select(StokTitik).options(selectinload(StokTitik.bahan))
+    await require_on_duty_karyawan(db, current_user, now_local())
+    query = select(StokTitik).join(Bahan, StokTitik.bahan_id == Bahan.id).options(selectinload(StokTitik.bahan))
     if titik:
-        query = query.where(StokTitik.titik == titik)
-    result = await db.execute(query.order_by(StokTitik.updated_at.desc()))
+        query = query.where(StokTitik.titik == titik, Bahan.area.in_([titik, 'semua']))
+    result = await db.execute(query.order_by(Bahan.nama.asc()))
     items = result.scalars().all()
     for item in items:
         if item.bahan:
@@ -676,45 +902,191 @@ async def list_opname_tertunda(
     return result
 
 
-@router.get("/opname/harian", response_model=OpnameHarianResponse)
-async def get_opname_harian(
-    tanggal: Optional[date] = None,
-    titik: Optional[Literal['bar', 'kitchen']] = None,
-    db: AsyncSession = Depends(get_db),
-    current_user: Karyawan = Depends(get_current_user)
-):
-    """
-    TAB 1: STOK HARIAN (STOK AWAL & STOK AKHIR PER HARI & SELISIH)
-    - Mengumpulkan opname awal_shift dan akhir_shift pada tanggal tertentu
-    - Menghitung stok_awal, transfer_masuk (barang_keluar), stok_akhir, dan selisih
-    """
-    if not tanggal:
-        tanggal = now_local().date()
+def _fmt_dec(val: Decimal) -> str:
+    q = val.quantize(Decimal("0.01"))
+    s = format(q, "f")
+    if "." in s:
+        s = s.rstrip("0").rstrip(".")
+    return s or "0"
 
+
+def _shift_label(shift_key: Optional[str]) -> str:
+    if not shift_key:
+        return "Shift"
+    return shift_key.replace("_", " ").title()
+
+
+def _to_time_obj(val) -> time:
+    if isinstance(val, time):
+        return val
+    if isinstance(val, datetime):
+        return val.time()
+    parts = str(val).strip().split(":")
+    return time(int(parts[0]), int(parts[1]), int(parts[2]) if len(parts) > 2 else 0)
+
+
+def _diagnosa_bom_vs_aktual(
+    stok_awal: Optional[Decimal],
+    transfer_masuk: Decimal,
+    stok_akhir: Optional[Decimal],
+    pemakaian_bom: Decimal,
+    satuan: str,
+) -> tuple[
+    Optional[Decimal],
+    Optional[Decimal],
+    Optional[Decimal],
+    Optional[Decimal],
+    str,
+    str,
+    str,
+]:
+    """
+    Hitung ekspektasi stok sistem & perbandingan pemakaian aktual vs BOM:
+    - ekspektasi_stok = (stok_awal + transfer_masuk) - pemakaian_bom
+    - pemakaian_fisik = (stok_awal + transfer_masuk) - stok_akhir
+    - selisih_vs_bom = stok_akhir - ekspektasi_stok == pemakaian_bom - pemakaian_fisik
+      * Negatif (-): stok aktual lebih sedikit dari ekspektasi sistem -> indikasi tumpah/susut/over-portion
+      * Nol (0): sesuai ekspektasi sistem (klop)
+      * Positif (+): stok aktual lebih banyak dari ekspektasi sistem -> surplus/takaran kurang
+    """
+    ekspektasi = (
+        (stok_awal + transfer_masuk) - pemakaian_bom
+        if stok_awal is not None
+        else None
+    )
+    pemakaian_fisik = None
+    varians = None
+    persentase = None
+
+    if stok_awal is not None and stok_akhir is not None and ekspektasi is not None:
+        pemakaian_fisik = (stok_awal + transfer_masuk) - stok_akhir
+        varians = stok_akhir - ekspektasi  # identik dengan pemakaian_bom - pemakaian_fisik
+        if pemakaian_bom > 0:
+            persentase = ((varians / pemakaian_bom) * Decimal("100")).quantize(Decimal("0.01"))
+        elif pemakaian_fisik > 0:
+            persentase = Decimal("-100.00")
+        else:
+            persentase = Decimal("0.00")
+
+        if varians == 0:
+            status_audit = "sesuai"
+            diagnosa = "Sesuai Ekspektasi BOM"
+            penjelasan = (
+                f"Stok akhir aktual ({_fmt_dec(stok_akhir)} {satuan}) klop dengan ekspektasi sistem "
+                f"({_fmt_dec(ekspektasi)} {satuan}) setelah pemakaian BOM {_fmt_dec(pemakaian_bom)} {satuan}."
+            )
+        elif varians < 0:
+            kurang = abs(varians)
+            status_audit = "lebih_boros"
+            diagnosa = "Indikasi Tumpah / Susut / Over-portion"
+            penjelasan = (
+                f"Stok akhir aktual ({_fmt_dec(stok_akhir)} {satuan}) kurang {_fmt_dec(kurang)} {satuan} "
+                f"dari ekspektasi sistem ({_fmt_dec(ekspektasi)} {satuan}). "
+                f"Pemakaian aktual {_fmt_dec(pemakaian_fisik)} vs BOM {_fmt_dec(pemakaian_bom)} {satuan} "
+                f"— indikasi tumpah, susut, atau takaran berlebih."
+            )
+        else:
+            status_audit = "lebih_hemat"
+            diagnosa = "Surplus / Takaran Kurang"
+            penjelasan = (
+                f"Stok akhir aktual ({_fmt_dec(stok_akhir)} {satuan}) lebih +{_fmt_dec(varians)} {satuan} "
+                f"dari ekspektasi sistem ({_fmt_dec(ekspektasi)} {satuan}). "
+                f"Pemakaian aktual {_fmt_dec(pemakaian_fisik)} vs BOM {_fmt_dec(pemakaian_bom)} {satuan} "
+                f"— indikasi takaran kurang atau salah hitung opname."
+            )
+    elif stok_awal is not None and ekspektasi is not None:
+        status_audit = "belum_lengkap"
+        diagnosa = "Menunggu Opname Akhir Shift"
+        penjelasan = (
+            f"Ekspektasi stok sistem saat ini {_fmt_dec(ekspektasi)} {satuan} "
+            f"(Awal {_fmt_dec(stok_awal)} + Masuk {_fmt_dec(transfer_masuk)} - BOM {_fmt_dec(pemakaian_bom)}). "
+            f"Lengkapi opname akhir shift untuk melihat selisih aktual."
+        )
+    else:
+        status_audit = "belum_lengkap"
+        diagnosa = "Belum Ada Opname Awal"
+        penjelasan = (
+            f"Pemakaian BOM tercatat {_fmt_dec(pemakaian_bom)} {satuan}, namun stok awal shift belum diopname."
+        )
+
+    return ekspektasi, pemakaian_fisik, varians, persentase, status_audit, diagnosa, penjelasan
+
+
+async def _compute_opname_bom_and_shift_data(
+    db: AsyncSession,
+    tanggal: date,
+    titik: Optional[Literal['bar', 'kitchen']] = None,
+) -> dict:
     start_dt = datetime.combine(tanggal, datetime.min.time())
     end_dt = datetime.combine(tanggal, datetime.max.time())
 
-    # 1. Ambil semua bahan aktif
-    bahan_query = select(Bahan).order_by(Bahan.nama.asc())
-    bahan_res = await db.execute(bahan_query)
-    semua_bahan = bahan_res.scalars().all()
+    # 1. Semua bahan aktif
+    bahan_res = await db.execute(select(Bahan).order_by(Bahan.nama.asc()))
+    semua_bahan_list = list(bahan_res.scalars().all())
+    semua_bahan = {b.id: b for b in semua_bahan_list}
 
-    # 2. Ambil semua jadwal shift pada tanggal ini
-    shift_query = select(JadwalShift).where(JadwalShift.tanggal == tanggal)
-    shift_res = await db.execute(shift_query)
-    shifts = shift_res.scalars().all()
-    shift_ids = [s.id for s in shifts]
+    # 2. Semua jadwal shift pada tanggal ini (termasuk kasir untuk mapping transaksi -> shift)
+    shift_res = await db.execute(
+        select(JadwalShift)
+        .options(selectinload(JadwalShift.karyawan))
+        .where(JadwalShift.tanggal == tanggal)
+        .order_by(JadwalShift.jam_mulai.asc(), JadwalShift.shift.asc())
+    )
+    shifts = list(shift_res.scalars().all())
+    shift_by_id = {s.id: s for s in shifts}
+    shift_ids = list(shift_by_id.keys())
 
-    # 3. Ambil semua StokOpname pada tanggal ini
+    # Grup shift produksi per titik: shift_1 & shift_2 (fallback urut jam_mulai jika custom)
+    area_shifts: dict[str, List[JadwalShift]] = {"bar": [], "kitchen": []}
+    for s in shifts:
+        if s.area_kerja in area_shifts:
+            area_shifts[s.area_kerja].append(s)
+
+    def _pick_s1_s2(t: str) -> tuple[Optional[JadwalShift], Optional[JadwalShift]]:
+        slist = area_shifts.get(t, [])
+        if not slist:
+            return None, None
+        s1 = next((s for s in slist if s.shift == "shift_1"), None)
+        s2 = next((s for s in slist if s.shift == "shift_2"), None)
+        if s1 is None and slist:
+            s1 = slist[0]
+        if s2 is None and len(slist) > 1:
+            s2 = next((s for s in slist if s.id != (s1.id if s1 else None)), None)
+        return s1, s2
+
+    def _resolve_shift_id(t: str, event_dt: datetime, trx_shift_key: Optional[str] = None) -> Optional[str]:
+        slist = area_shifts.get(t, [])
+        if not slist:
+            return None
+        if trx_shift_key:
+            matched = next((s for s in slist if s.shift == trx_shift_key), None)
+            if matched:
+                return matched.id
+        ev_time = event_dt.time()
+        for s in slist:
+            jm = _to_time_obj(s.jam_mulai)
+            js = _to_time_obj(s.jam_selesai)
+            if jm <= js:
+                if jm <= ev_time <= js:
+                    return s.id
+            else:
+                if ev_time >= jm or ev_time <= js:
+                    return s.id
+        # Fallback: jika setelah jam selesai shift pertama, arahkan ke shift terakhir
+        if len(slist) >= 2 and ev_time >= _to_time_obj(slist[0].jam_selesai):
+            return slist[-1].id
+        return slist[0].id
+
+    # 3. Semua StokOpname pada tanggal ini
     opname_query = select(StokOpname).options(
         selectinload(StokOpname.details),
-        selectinload(StokOpname.karyawan)
+        selectinload(StokOpname.karyawan),
     )
     if shift_ids:
         opname_query = opname_query.where(
             or_(
                 StokOpname.jadwal_shift_id.in_(shift_ids),
-                and_(StokOpname.waktu_opname >= start_dt, StokOpname.waktu_opname <= end_dt)
+                and_(StokOpname.waktu_opname >= start_dt, StokOpname.waktu_opname <= end_dt),
             )
         )
     else:
@@ -723,15 +1095,290 @@ async def get_opname_harian(
         )
     if titik:
         opname_query = opname_query.where(StokOpname.titik == titik)
+    opname_list = list((await db.execute(opname_query.order_by(StokOpname.waktu_opname.asc()))).scalars().all())
 
-    opname_res = await db.execute(opname_query.order_by(StokOpname.waktu_opname.asc()))
-    opname_list = opname_res.scalars().all()
+    # Map opname harian & per-shift
+    stok_awal_map: dict[tuple[str, str], Decimal] = {}
+    stok_akhir_map: dict[tuple[str, str], Decimal] = {}
+    shift_awal_map: dict[tuple[str, str, str], Decimal] = {}
+    shift_akhir_map: dict[tuple[str, str, str], Decimal] = {}
+    shift_karyawan_map: dict[str, str] = {}
+
+    for s in shifts:
+        if s.karyawan:
+            shift_karyawan_map[s.id] = s.karyawan.nama
+
+    for op in opname_list:
+        t = op.titik
+        if op.karyawan and op.jadwal_shift_id not in shift_karyawan_map:
+            shift_karyawan_map[op.jadwal_shift_id] = op.karyawan.nama
+        if op.tipe == "awal_shift":
+            for d in op.details:
+                k = (d.bahan_id, t)
+                if k not in stok_awal_map:
+                    stok_awal_map[k] = Decimal(str(d.jumlah))
+                shift_awal_map[(op.jadwal_shift_id, d.bahan_id, t)] = Decimal(str(d.jumlah))
+        elif op.tipe == "akhir_shift":
+            for d in op.details:
+                k = (d.bahan_id, t)
+                stok_akhir_map[k] = Decimal(str(d.jumlah))
+                shift_akhir_map[(op.jadwal_shift_id, d.bahan_id, t)] = Decimal(str(d.jumlah))
+
+    # 4. Transfer masuk (BarangKeluar gudang -> titik) pada tanggal ini
+    bk_query = select(BarangKeluar).options(selectinload(BarangKeluar.details)).where(
+        and_(BarangKeluar.waktu >= start_dt, BarangKeluar.waktu <= end_dt)
+    )
+    if titik:
+        bk_query = bk_query.where(BarangKeluar.titik_tujuan == titik)
+    bk_list = list((await db.execute(bk_query.order_by(BarangKeluar.waktu.asc()))).scalars().all())
+
+    transfer_map: dict[tuple[str, str], Decimal] = {}
+    shift_transfer_map: dict[tuple[str, str, str], Decimal] = {}
+    for bk in bk_list:
+        t_titik = bk.titik_tujuan
+        target_sid = _resolve_shift_id(t_titik, bk.waktu)
+        for d in bk.details:
+            qty_dec = Decimal(str(d.jumlah))
+            key = (d.bahan_id, t_titik)
+            transfer_map[key] = transfer_map.get(key, Decimal("0")) + qty_dec
+            if target_sid:
+                sk = (target_sid, d.bahan_id, t_titik)
+                shift_transfer_map[sk] = shift_transfer_map.get(sk, Decimal("0")) + qty_dec
+
+    # 5. Transaksi POS selesai & resep BOM
+    trx_query = select(Transaksi).options(
+        selectinload(Transaksi.details).selectinload(TransaksiDetail.menu)
+    ).where(
+        and_(
+            Transaksi.waktu_transaksi >= start_dt,
+            Transaksi.waktu_transaksi <= end_dt,
+            Transaksi.status == "selesai",
+        )
+    )
+    transaksi_list = list((await db.execute(trx_query)).scalars().all())
+    total_trx = len(transaksi_list)
+    total_item_terjual = sum(sum(d.qty for d in t.details) for t in transaksi_list)
+
+    resep_res = await db.execute(
+        select(MenuResep).options(
+            selectinload(MenuResep.bahan),
+            selectinload(MenuResep.menu).selectinload(Menu.kategori),
+        )
+    )
+    menu_resep_map: dict[str, list] = {}
+    for r in resep_res.scalars().all():
+        menu_resep_map.setdefault(r.menu_id, []).append(r)
+
+    bom_usage: dict[tuple[str, str], Decimal] = {}
+    shift_bom_usage: dict[tuple[str, str, str], Decimal] = {}
+    bom_menu_map: dict[tuple[str, str, str], dict] = {}
+
+    for trx in transaksi_list:
+        trx_shift_obj = shift_by_id.get(trx.jadwal_shift_id) if trx.jadwal_shift_id else None
+        trx_shift_key = trx_shift_obj.shift if trx_shift_obj else None
+        trx_dt = trx.waktu_transaksi or start_dt
+        for d in trx.details:
+            for r in menu_resep_map.get(d.menu_id, []):
+                r_titik = "bar"
+                if r.menu and r.menu.kategori and r.menu.kategori.area_produksi:
+                    r_titik = r.menu.kategori.area_produksi
+                if titik and r_titik != titik:
+                    continue
+
+                b_id = r.bahan_id
+                subtotal_bom = Decimal(str(d.qty)) * Decimal(str(r.jumlah_terpakai))
+                key = (b_id, r_titik)
+                bom_usage[key] = bom_usage.get(key, Decimal("0")) + subtotal_bom
+
+                target_sid = _resolve_shift_id(r_titik, trx_dt, trx_shift_key=trx_shift_key)
+                if target_sid:
+                    sk = (target_sid, b_id, r_titik)
+                    shift_bom_usage[sk] = shift_bom_usage.get(sk, Decimal("0")) + subtotal_bom
+
+                menu_key = (b_id, r_titik, d.menu_id)
+                if menu_key not in bom_menu_map:
+                    bom_menu_map[menu_key] = {
+                        "menu_id": d.menu_id,
+                        "nama_menu": r.menu.nama if r.menu else "Menu",
+                        "qty_terjual": 0,
+                        "takaran": Decimal(str(r.jumlah_terpakai)),
+                        "subtotal_bom": Decimal("0"),
+                    }
+                bom_menu_map[menu_key]["qty_terjual"] += d.qty
+                bom_menu_map[menu_key]["subtotal_bom"] += subtotal_bom
+
+    # 6. Bangun perbandingan Shift 1 vs Shift 2 per bahan & titik
+    titik_list = [titik] if titik else ["bar", "kitchen"]
+    perbandingan_shift: List[ShiftComparisonItemOut] = []
+    handover_selisih_count = 0
+
+    def _build_shift_snapshot(
+        s_obj: Optional[JadwalShift],
+        b_obj: Bahan,
+        t: str,
+    ) -> Optional[ShiftOpnameSnapshotOut]:
+        if s_obj is None:
+            return None
+        sa = shift_awal_map.get((s_obj.id, b_obj.id, t))
+        sk_akhir = shift_akhir_map.get((s_obj.id, b_obj.id, t))
+        trf = shift_transfer_map.get((s_obj.id, b_obj.id, t), Decimal("0"))
+        bom = shift_bom_usage.get((s_obj.id, b_obj.id, t), Decimal("0"))
+        if sa is None and sk_akhir is None and trf == 0 and bom == 0:
+            return None
+        eksp, pem_aktual, sel_bom, _, st_audit, diag, _ = _diagnosa_bom_vs_aktual(
+            sa, trf, sk_akhir, bom, b_obj.satuan
+        )
+        return ShiftOpnameSnapshotOut(
+            shift_key=s_obj.shift,
+            shift_label=_shift_label(s_obj.shift),
+            jadwal_shift_id=s_obj.id,
+            karyawan_nama=shift_karyawan_map.get(s_obj.id),
+            stok_awal=sa,
+            transfer_masuk=trf,
+            pemakaian_bom=bom,
+            ekspektasi_stok=eksp,
+            stok_akhir=sk_akhir,
+            pemakaian_aktual=pem_aktual,
+            selisih_vs_bom=sel_bom,
+            status_audit=st_audit,
+            diagnosa=diag,
+        )
+
+    for b in semua_bahan_list:
+        for t in titik_list:
+            s1_obj, s2_obj = _pick_s1_s2(t)
+            if s1_obj is None and s2_obj is None:
+                continue
+            snap1 = _build_shift_snapshot(s1_obj, b, t)
+            snap2 = _build_shift_snapshot(s2_obj, b, t)
+            if snap1 is None and snap2 is None:
+                continue
+
+            sel_handover = None
+            status_handover = "belum_lengkap"
+            notes: List[str] = []
+
+            if snap1 and snap2 and snap1.stok_akhir is not None and snap2.stok_awal is not None:
+                sel_handover = snap2.stok_awal - snap1.stok_akhir
+                if sel_handover == 0:
+                    status_handover = "sesuai"
+                    notes.append("Serah terima Akhir S1 → Awal S2 klop (0)")
+                elif sel_handover < 0:
+                    status_handover = "kurang"
+                    handover_selisih_count += 1
+                    notes.append(
+                        f"Selisih serah terima S1→S2 kurang {_fmt_dec(sel_handover)} {b.satuan} "
+                        f"(Akhir S1: {_fmt_dec(snap1.stok_akhir)} vs Awal S2: {_fmt_dec(snap2.stok_awal)})"
+                    )
+                else:
+                    status_handover = "lebih"
+                    handover_selisih_count += 1
+                    notes.append(
+                        f"Selisih serah terima S1→S2 lebih +{_fmt_dec(sel_handover)} {b.satuan} "
+                        f"(Akhir S1: {_fmt_dec(snap1.stok_akhir)} vs Awal S2: {_fmt_dec(snap2.stok_awal)})"
+                    )
+
+            sel_akhir_s1_s2 = (
+                snap2.stok_akhir - snap1.stok_akhir
+                if (snap1 and snap2 and snap1.stok_akhir is not None and snap2.stok_akhir is not None)
+                else None
+            )
+            sel_pakai_s1_s2 = (
+                snap2.pemakaian_aktual - snap1.pemakaian_aktual
+                if (snap1 and snap2 and snap1.pemakaian_aktual is not None and snap2.pemakaian_aktual is not None)
+                else None
+            )
+            sel_var_s1_s2 = (
+                snap2.selisih_vs_bom - snap1.selisih_vs_bom
+                if (snap1 and snap2 and snap1.selisih_vs_bom is not None and snap2.selisih_vs_bom is not None)
+                else None
+            )
+
+            if snap1 and snap1.selisih_vs_bom is not None and snap1.selisih_vs_bom != 0:
+                sign1 = "+" if snap1.selisih_vs_bom > 0 else ""
+                notes.append(f"S1 vs BOM: {sign1}{_fmt_dec(snap1.selisih_vs_bom)} {b.satuan}")
+            if snap2 and snap2.selisih_vs_bom is not None and snap2.selisih_vs_bom != 0:
+                sign2 = "+" if snap2.selisih_vs_bom > 0 else ""
+                notes.append(f"S2 vs BOM: {sign2}{_fmt_dec(snap2.selisih_vs_bom)} {b.satuan}")
+            if not notes:
+                notes.append("Menunggu kelengkapan opname Shift 1 & Shift 2")
+
+            perbandingan_shift.append(
+                ShiftComparisonItemOut(
+                    bahan_id=b.id,
+                    nama_bahan=b.nama,
+                    satuan=b.satuan,
+                    titik=t,
+                    shift_1=snap1,
+                    shift_2=snap2,
+                    selisih_akhir_s1_vs_awal_s2=sel_handover,
+                    selisih_stok_akhir_s1_vs_s2=sel_akhir_s1_s2,
+                    selisih_pemakaian_s1_vs_s2=sel_pakai_s1_s2,
+                    selisih_varians_s1_vs_s2=sel_var_s1_s2,
+                    status_handover=status_handover,
+                    catatan_perbandingan=" · ".join(notes),
+                )
+            )
+
+    perbandingan_shift.sort(
+        key=lambda x: (
+            0 if x.status_handover in ["kurang", "lebih"] else 1,
+            -abs(x.selisih_akhir_s1_vs_awal_s2 or Decimal("0")),
+            x.nama_bahan.lower(),
+        )
+    )
+
+    return {
+        "semua_bahan_list": semua_bahan_list,
+        "semua_bahan": semua_bahan,
+        "shift_by_id": shift_by_id,
+        "opname_list": opname_list,
+        "stok_awal_map": stok_awal_map,
+        "stok_akhir_map": stok_akhir_map,
+        "transfer_map": transfer_map,
+        "bom_usage": bom_usage,
+        "bom_menu_map": bom_menu_map,
+        "total_trx": total_trx,
+        "total_item_terjual": total_item_terjual,
+        "perbandingan_shift": perbandingan_shift,
+        "handover_selisih_count": handover_selisih_count,
+    }
+
+
+@router.get("/opname/harian", response_model=OpnameHarianResponse)
+async def get_opname_harian(
+    tanggal: Optional[date] = None,
+    titik: Optional[Literal['bar', 'kitchen']] = None,
+    db: AsyncSession = Depends(get_db),
+    current_user: Karyawan = Depends(get_current_user)
+):
+    """
+    TAB 1: STOK HARIAN (STOK AWAL, EKSPEKTASI BOM, STOK AKHIR & PERBANDINGAN SHIFT 1 vs SHIFT 2)
+    - Karyawan wajib on-duty (sedang bekerja hari ini dan sudah absen masuk).
+    """
+    await require_on_duty_karyawan(db, current_user, now_local())
+
+    if not tanggal:
+        tanggal = now_local().date()
+
+    data_ctx = await _compute_opname_bom_and_shift_data(db, tanggal, titik)
+    semua_bahan = data_ctx["semua_bahan_list"]
+    shift_by_id = data_ctx["shift_by_id"]
+    opname_list = data_ctx["opname_list"]
+    stok_awal_map = data_ctx["stok_awal_map"]
+    stok_akhir_map = data_ctx["stok_akhir_map"]
+    transfer_map = data_ctx["transfer_map"]
+    bom_usage = data_ctx["bom_usage"]
 
     sesi_list = []
     for op in opname_list:
+        s_obj = shift_by_id.get(op.jadwal_shift_id)
+        s_key = s_obj.shift if s_obj else None
         sesi_list.append(OpnameHarianSesiOut(
             id=op.id,
             jadwal_shift_id=op.jadwal_shift_id,
+            shift_key=s_key,
+            shift_label=_shift_label(s_key) if s_key else None,
             titik=op.titik,
             tipe=op.tipe,
             metode=op.metode,
@@ -741,44 +1388,7 @@ async def get_opname_harian(
             items_count=len(op.details)
         ))
 
-    # 4. Ambil barang keluar (transfer masuk ke titik) pada tanggal ini
-    bk_query = select(BarangKeluar).options(selectinload(BarangKeluar.details)).where(
-        and_(
-            BarangKeluar.waktu >= start_dt,
-            BarangKeluar.waktu <= end_dt
-        )
-    )
-    if titik:
-        bk_query = bk_query.where(BarangKeluar.titik_tujuan == titik)
-    bk_res = await db.execute(bk_query)
-    bk_list = bk_res.scalars().all()
-
-    transfer_map = {}
-    for bk in bk_list:
-        t_titik = bk.titik_tujuan
-        for d in bk.details:
-            key = (d.bahan_id, t_titik)
-            transfer_map[key] = transfer_map.get(key, Decimal('0')) + Decimal(str(d.jumlah))
-
-    # 5. Petakan stok awal dan stok akhir per bahan dan titik
     titik_list = [titik] if titik else ['bar', 'kitchen']
-
-    stok_awal_map = {}
-    stok_akhir_map = {}
-
-    for op in opname_list:
-        t = op.titik
-        if op.tipe == 'awal_shift':
-            for d in op.details:
-                key = (d.bahan_id, t)
-                if key not in stok_awal_map:
-                    stok_awal_map[key] = Decimal(str(d.jumlah))
-        elif op.tipe == 'akhir_shift':
-            for d in op.details:
-                key = (d.bahan_id, t)
-                stok_akhir_map[key] = Decimal(str(d.jumlah))
-
-    # Himpun titik aktif untuk tiap bahan (dari stok_titik atau riwayat opname/transfer)
     st_res = await db.execute(select(StokTitik.bahan_id, StokTitik.titik))
     titik_bahan_set = set(st_res.all())
     for k in stok_awal_map.keys():
@@ -787,29 +1397,43 @@ async def get_opname_harian(
         titik_bahan_set.add(k)
     for k in transfer_map.keys():
         titik_bahan_set.add(k)
+    for k in bom_usage.keys():
+        titik_bahan_set.add(k)
 
     items_out = []
     for b in semua_bahan:
+        b_area = getattr(b, 'area', 'semua') or 'semua'
+        allowed_titiks = ['bar', 'kitchen'] if b_area == 'semua' else [b_area]
         for t in titik_list:
             key = (b.id, t)
-            # Jika bahan tidak terdaftar / tidak aktif di titik ini, jangan tampilkan
-            if key not in titik_bahan_set:
-                continue
             stok_awal = stok_awal_map.get(key)
             stok_akhir = stok_akhir_map.get(key)
             transfer = transfer_map.get(key, Decimal('0'))
+            bom_val = bom_usage.get(key, Decimal('0'))
+            has_activity = (
+                stok_awal is not None
+                or stok_akhir is not None
+                or transfer != 0
+                or bom_val != 0
+            )
+            if (t not in allowed_titiks or key not in titik_bahan_set) and not has_activity:
+                continue
 
-            if stok_awal is None and stok_akhir is None and transfer == 0:
-                status = 'belum_opname'
+            eksp, pem_fisik, sel_vs_bom, _, _, diag, _ = _diagnosa_bom_vs_aktual(
+                stok_awal, transfer, stok_akhir, bom_val, b.satuan
+            )
+
+            if stok_awal is None and stok_akhir is None and transfer == 0 and bom_val == 0:
+                status_harian = 'belum_opname'
                 selisih = None
             elif stok_awal is not None and stok_akhir is not None:
-                status = 'lengkap'
-                selisih = (stok_awal + transfer) - stok_akhir
+                status_harian = 'lengkap'
+                selisih = pem_fisik
             elif stok_awal is not None:
-                status = 'hanya_awal'
+                status_harian = 'hanya_awal'
                 selisih = None
             else:
-                status = 'hanya_akhir'
+                status_harian = 'hanya_akhir'
                 selisih = None
 
             items_out.append(OpnameHarianItemOut(
@@ -819,16 +1443,21 @@ async def get_opname_harian(
                 titik=t,
                 stok_awal=stok_awal,
                 transfer_masuk=transfer,
+                pemakaian_bom=bom_val,
+                ekspektasi_stok=eksp,
                 stok_akhir=stok_akhir,
                 selisih=selisih,
-                status=status
+                selisih_vs_bom=sel_vs_bom,
+                diagnosa=diag if has_activity else None,
+                status=status_harian
             ))
 
     return OpnameHarianResponse(
         tanggal=str(tanggal),
         titik=titik,
         items=items_out,
-        sesi=sesi_list
+        sesi=sesi_list,
+        perbandingan_shift=data_ctx["perbandingan_shift"],
     )
 
 
@@ -840,135 +1469,32 @@ async def get_opname_audit(
     current_user: Karyawan = Depends(get_current_user)
 ):
     """
-    TAB 2: AUDIT PEMAKAIAN (BOM POS vs OPNAME FISIK)
-    - Dari selisih stok awal & akhir (pemakaian fisik), disamakan dengan total bahan yang digunakan BOM saat POS berlangsung
-    - Menjumlahkan BOM dari transaksi POS dan membandingkannya dengan selisih fisik
+    TAB 2: AUDIT PEMAKAIAN (BOM POS vs OPNAME FISIK) + PERBANDINGAN SHIFT 1 vs SHIFT 2
+    - Menghitung ekspektasi stok sistem = (stok_awal + transfer_masuk) - pemakaian_bom
+    - Membandingkan stok akhir aktual dengan ekspektasi sistem untuk mendeteksi tumpah/susut/surplus
+    - Menyertakan perbandingan opname Shift 1 vs Shift 2 (serah terima & selisih BOM per shift)
     """
+    await require_on_duty_karyawan(db, current_user, now_local())
+
     if not tanggal:
         tanggal = now_local().date()
 
-    start_dt = datetime.combine(tanggal, datetime.min.time())
-    end_dt = datetime.combine(tanggal, datetime.max.time())
-
-    # 1. Ambil transaksi POS status='selesai' pada tanggal ini
-    trx_query = select(Transaksi).options(
-        selectinload(Transaksi.details).selectinload(TransaksiDetail.menu)
-    ).where(
-        and_(
-            Transaksi.waktu_transaksi >= start_dt,
-            Transaksi.waktu_transaksi <= end_dt,
-            Transaksi.status == 'selesai'
-        )
-    )
-    trx_res = await db.execute(trx_query)
-    transaksi_list = trx_res.scalars().all()
-    total_trx = len(transaksi_list)
-    total_item_terjual = sum(sum(d.qty for d in t.details) for t in transaksi_list)
-
-    # 2. Ambil semua resep menu (MenuResep) dengan Bahan dan Menu
-    resep_query = select(MenuResep).options(
-        selectinload(MenuResep.bahan),
-        selectinload(MenuResep.menu).selectinload(Menu.kategori)
-    )
-    resep_res = await db.execute(resep_query)
-    semua_resep = resep_res.scalars().all()
-
-    menu_resep_map = {}
-    for r in semua_resep:
-        menu_resep_map.setdefault(r.menu_id, []).append(r)
-
-    # 3. Hitung pemakaian BOM dari transaksi
-    bom_usage = {}
-    bom_menu_map = {}
-
-    for trx in transaksi_list:
-        for d in trx.details:
-            menu_recipes = menu_resep_map.get(d.menu_id, [])
-            for r in menu_recipes:
-                r_titik = 'bar'
-                if r.menu and r.menu.kategori and r.menu.kategori.area_produksi:
-                    r_titik = r.menu.kategori.area_produksi
-
-                if titik and r_titik != titik:
-                    continue
-
-                b_id = r.bahan_id
-                key = (b_id, r_titik)
-                subtotal_bom = Decimal(str(d.qty)) * Decimal(str(r.jumlah_terpakai))
-                bom_usage[key] = bom_usage.get(key, Decimal('0')) + subtotal_bom
-
-                menu_key = (b_id, r_titik, d.menu_id)
-                if menu_key not in bom_menu_map:
-                    bom_menu_map[menu_key] = {
-                        "menu_id": d.menu_id,
-                        "nama_menu": r.menu.nama if r.menu else "Menu",
-                        "qty_terjual": 0,
-                        "takaran": Decimal(str(r.jumlah_terpakai)),
-                        "subtotal_bom": Decimal('0')
-                    }
-                bom_menu_map[menu_key]["qty_terjual"] += d.qty
-                bom_menu_map[menu_key]["subtotal_bom"] += subtotal_bom
-
-    # 4. Ambil opname fisik untuk tanggal ini
-    shift_query = select(JadwalShift).where(JadwalShift.tanggal == tanggal)
-    shift_res = await db.execute(shift_query)
-    shift_ids = [s.id for s in shift_res.scalars().all()]
-
-    opname_query = select(StokOpname).options(selectinload(StokOpname.details))
-    if shift_ids:
-        opname_query = opname_query.where(
-            or_(
-                StokOpname.jadwal_shift_id.in_(shift_ids),
-                and_(StokOpname.waktu_opname >= start_dt, StokOpname.waktu_opname <= end_dt)
-            )
-        )
-    else:
-        opname_query = opname_query.where(
-            and_(StokOpname.waktu_opname >= start_dt, StokOpname.waktu_opname <= end_dt)
-        )
-    if titik:
-        opname_query = opname_query.where(StokOpname.titik == titik)
-
-    opname_res = await db.execute(opname_query.order_by(StokOpname.waktu_opname.asc()))
-    opname_list = opname_res.scalars().all()
-
-    stok_awal_map = {}
-    stok_akhir_map = {}
-    for op in opname_list:
-        t = op.titik
-        if op.tipe == 'awal_shift':
-            for d in op.details:
-                k = (d.bahan_id, t)
-                if k not in stok_awal_map:
-                    stok_awal_map[k] = Decimal(str(d.jumlah))
-        elif op.tipe == 'akhir_shift':
-            for d in op.details:
-                k = (d.bahan_id, t)
-                stok_akhir_map[k] = Decimal(str(d.jumlah))
-
-    # Transfer dari gudang
-    bk_query = select(BarangKeluar).options(selectinload(BarangKeluar.details)).where(
-        and_(BarangKeluar.waktu >= start_dt, BarangKeluar.waktu <= end_dt)
-    )
-    if titik:
-        bk_query = bk_query.where(BarangKeluar.titik_tujuan == titik)
-    bk_res = await db.execute(bk_query)
-    transfer_map = {}
-    for bk in bk_res.scalars().all():
-        for d in bk.details:
-            k = (d.bahan_id, bk.titik_tujuan)
-            transfer_map[k] = transfer_map.get(k, Decimal('0')) + Decimal(str(d.jumlah))
-
-    # 5. Gabungkan bahan yang punya BOM usage atau punya Opname
-    bahan_query = select(Bahan).order_by(Bahan.nama.asc())
-    bahan_res = await db.execute(bahan_query)
-    semua_bahan = {b.id: b for b in bahan_res.scalars().all()}
+    data_ctx = await _compute_opname_bom_and_shift_data(db, tanggal, titik)
+    semua_bahan = data_ctx["semua_bahan"]
+    stok_awal_map = data_ctx["stok_awal_map"]
+    stok_akhir_map = data_ctx["stok_akhir_map"]
+    transfer_map = data_ctx["transfer_map"]
+    bom_usage = data_ctx["bom_usage"]
+    bom_menu_map = data_ctx["bom_menu_map"]
+    perbandingan_shift = data_ctx["perbandingan_shift"]
 
     titik_list = [titik] if titik else ['bar', 'kitchen']
     audit_items = []
     cnt_sesuai = 0
     cnt_selisih = 0
     cnt_belum = 0
+    cnt_tumpah = 0
+    cnt_surplus = 0
 
     for b_id, b in semua_bahan.items():
         for t in titik_list:
@@ -981,37 +1507,19 @@ async def get_opname_audit(
             if pemakaian_bom == 0 and stok_awal is None and stok_akhir is None and transfer == 0:
                 continue
 
-            pemakaian_fisik = None
-            varians = None
-            persentase = None
+            eksp, pemakaian_fisik, varians, persentase, status_audit, diagnosa, penjelasan = (
+                _diagnosa_bom_vs_aktual(stok_awal, transfer, stok_akhir, pemakaian_bom, b.satuan)
+            )
 
-            if stok_awal is not None and stok_akhir is not None:
-                pemakaian_fisik = (stok_awal + transfer) - stok_akhir
-                # Logika audit inventori Cafe Kyfein:
-                # Varians = Teoritis BOM POS - Pemakaian Fisik Aktual
-                # Jika fisik habis lebih banyak daripada penjualan:
-                # Varians bernilai MINUS (-) -> Barang Hilang / Tekor (status 'lebih_boros')
-                # Jika fisik habis lebih sedikit daripada penjualan:
-                # Varians bernilai POSITIF (+) -> Barang Surplus / Sisa Lebih (status 'lebih_hemat')
-                varians = pemakaian_bom - pemakaian_fisik
-                if pemakaian_bom > 0:
-                    persentase = (varians / pemakaian_bom) * 100
-                elif pemakaian_fisik > 0:
-                    persentase = Decimal('-100.0')
-                else:
-                    persentase = Decimal('0.0')
-
-                if varians == 0:
-                    status_audit = 'sesuai'
-                    cnt_sesuai += 1
-                elif varians < 0:
-                    status_audit = 'lebih_boros'
-                    cnt_selisih += 1
-                else:
-                    status_audit = 'lebih_hemat'
-                    cnt_selisih += 1
+            if status_audit == 'sesuai':
+                cnt_sesuai += 1
+            elif status_audit == 'lebih_boros':
+                cnt_selisih += 1
+                cnt_tumpah += 1
+            elif status_audit == 'lebih_hemat':
+                cnt_selisih += 1
+                cnt_surplus += 1
             else:
-                status_audit = 'belum_lengkap'
                 cnt_belum += 1
 
             detail_menu = []
@@ -1035,9 +1543,13 @@ async def get_opname_audit(
                 stok_akhir=stok_akhir,
                 pemakaian_fisik=pemakaian_fisik,
                 pemakaian_bom=pemakaian_bom,
+                ekspektasi_stok=eksp,
+                selisih_stok_akhir_vs_ekspektasi=varians,
                 varians=varians,
                 persentase_selisih=persentase,
                 status_audit=status_audit,
+                diagnosa=diagnosa,
+                penjelasan_diagnosa=penjelasan,
                 detail_menu=detail_menu
             ))
 
@@ -1051,17 +1563,22 @@ async def get_opname_audit(
     audit_items.sort(key=_sort_key)
 
     summary = OpnameAuditSummaryOut(
-        total_transaksi=total_trx,
-        total_item_terjual=total_item_terjual,
+        total_transaksi=data_ctx["total_trx"],
+        total_item_terjual=data_ctx["total_item_terjual"],
         total_bahan_diaudit=len(audit_items),
         bahan_sesuai=cnt_sesuai,
         bahan_selisih=cnt_selisih,
-        bahan_belum_lengkap=cnt_belum
+        bahan_belum_lengkap=cnt_belum,
+        bahan_indikasi_tumpah=cnt_tumpah,
+        bahan_surplus=cnt_surplus,
+        total_shift_dibandingkan=len(perbandingan_shift),
+        handover_selisih_count=data_ctx["handover_selisih_count"],
     )
 
     return OpnameAuditResponse(
         tanggal=str(tanggal),
         titik=titik,
         summary=summary,
-        items=audit_items
+        items=audit_items,
+        perbandingan_shift=perbandingan_shift,
     )

@@ -5,9 +5,12 @@ from sqlalchemy import select, and_
 from sqlalchemy.orm import selectinload
 
 from app.core.deps import get_db, get_current_user
+from app.core.utils import now_local
+from app.models.karyawan import Karyawan
 from app.models.transaksi import Transaksi, TransaksiDetail
 from app.models.master_data import Menu, KategoriMenu
 from app.schemas.transaksi import TransaksiDetailOut, KdsStatusUpdate
+from app.services.jadwal_service import require_on_duty_karyawan
 
 router = APIRouter()
 
@@ -34,11 +37,14 @@ class KDSConnectionManager:
     async def broadcast_order(self, area_produksi: str, message: dict):
         """Broadcast new transaction item or status update to targeted area_produksi screens"""
         if area_produksi in self.active_connections:
+            dead_connections: List[WebSocket] = []
             for connection in list(self.active_connections[area_produksi]):
                 try:
                     await connection.send_json(message)
                 except Exception:
-                    pass
+                    dead_connections.append(connection)
+            for dead in dead_connections:
+                self.disconnect(dead, area_produksi)
 
 
 kds_manager = KDSConnectionManager()
@@ -66,14 +72,24 @@ async def websocket_kds_endpoint(websocket: WebSocket, area_produksi: str):
 async def get_kds_orders_by_area(
     area_produksi: str,
     include_selesai: bool = Query(False),
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
+    current_user: Karyawan = Depends(get_current_user),
 ):
     """
     ROUTING LAYAR KDS REST API:
-    Retrieve pending/in-progress (and optionally completed) orders routed by category area_produksi ('kitchen', 'bar', or 'all')
+    Retrieve pending/in-progress (and optionally completed) orders routed by category area_produksi ('kitchen', 'bar', or 'all').
+    Karyawan wajib on-duty (memiliki shift aktif dan sudah absen masuk).
     """
     if area_produksi not in ["kitchen", "bar", "all"]:
         raise HTTPException(status_code=400, detail="Area produksi harus 'kitchen', 'bar', atau 'all'")
+
+    active_shift = await require_on_duty_karyawan(db, current_user, now_local())
+    if active_shift and active_shift.area_kerja in ["kitchen", "bar"]:
+        if area_produksi != active_shift.area_kerja:
+            raise HTTPException(
+                status_code=403,
+                detail=f"Akses KDS ditolak: shift aktif Anda adalah area {active_shift.area_kerja.upper()}.",
+            )
 
     statuses = ["menunggu", "diproses", "selesai"] if include_selesai else ["menunggu", "diproses"]
 
@@ -104,12 +120,15 @@ async def update_item_status(
     detail_id: str,
     status_item: Optional[str] = Query(None),
     payload: Optional[KdsStatusUpdate] = Body(None),
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
+    current_user: Karyawan = Depends(get_current_user),
 ):
     """
-    Update status_item oleh staff kitchen/bar (menunggu -> diproses -> selesai)
-    Mendukung pengiriman status_item via query parameter maupun JSON body.
+    Update status_item oleh staff kitchen/bar (menunggu -> diproses -> selesai).
+    Karyawan wajib on-duty (memiliki shift aktif dan sudah absen masuk).
     """
+    active_shift = await require_on_duty_karyawan(db, current_user, now_local())
+
     target_status = status_item or (payload.status_item if payload else None)
     if target_status not in ["menunggu", "diproses", "selesai"]:
         raise HTTPException(status_code=400, detail="Status item tidak valid")
@@ -126,10 +145,16 @@ async def update_item_status(
     if not detail:
         raise HTTPException(status_code=404, detail="Detail pesanan tidak ditemukan")
 
+    area = detail.area_produksi or "kitchen"
+    if active_shift and active_shift.area_kerja in ["kitchen", "bar"] and area != active_shift.area_kerja:
+        raise HTTPException(
+            status_code=403,
+            detail=f"Akses KDS ditolak: item ini milik area {area.upper()}, bukan {active_shift.area_kerja.upper()}.",
+        )
+
     detail.status_item = target_status
     await db.commit()
 
-    area = detail.area_produksi or "kitchen"
     ws_msg = {
         "event": "status_updated",
         "id": detail.id,

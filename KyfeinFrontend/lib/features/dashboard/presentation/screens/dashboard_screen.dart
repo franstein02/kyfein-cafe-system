@@ -12,6 +12,7 @@ import '../../../pos/presentation/screens/pos_screen.dart';
 import '../../../pos/presentation/screens/transaksi_screen.dart';
 import '../../../master_data/presentation/screens/master_data_screen.dart';
 import '../../../../core/services/firebase_messaging_service.dart';
+import '../../../../core/widgets/page_refresh_scope.dart';
 import '../../../notifications/presentation/screens/notification_screen.dart';
 import '../../../notifications/providers/notification_provider.dart';
 import '../../../stok/presentation/screens/stok_gudang_screen.dart';
@@ -40,12 +41,14 @@ class _NavSubItem {
   final IconData icon;
   final String label;
   final Widget Function(BuildContext) pageBuilder;
+  final bool requiresOnDuty;
 
   const _NavSubItem({
     required this.id,
     required this.icon,
     required this.label,
     required this.pageBuilder,
+    this.requiresOnDuty = false,
   });
 }
 
@@ -55,6 +58,7 @@ class _NavItem {
   final String label;
   final List<_NavSubItem> children;
   final Widget Function(BuildContext)? pageBuilder;
+  final bool requiresOnDuty;
 
   const _NavItem({
     required this.id,
@@ -62,6 +66,7 @@ class _NavItem {
     required this.label,
     this.children = const [],
     this.pageBuilder,
+    this.requiresOnDuty = false,
   });
 }
 
@@ -77,14 +82,16 @@ class _DashboardScreenState extends State<DashboardScreen> {
   String _selectedGroupId = 'dashboard';
   String? _selectedSubId;
   String _activePageLabel = 'Dashboard';
-  final Set<String> _expandedGroupIds = {
-    'pos_group',
-    'stok_group',
-    'kasir_jadwal_group',
-    'laporan_group',
-  };
+  final Set<String> _expandedGroupIds = {};
   Widget? _currentPage;
   bool _fcmInitialized = false;
+  final PageRefreshController _refreshController = PageRefreshController();
+
+  @override
+  void dispose() {
+    _refreshController.dispose();
+    super.dispose();
+  }
 
   @override
   void initState() {
@@ -318,6 +325,15 @@ class _DashboardScreenState extends State<DashboardScreen> {
               ),
             ),
             _NavSubItem(
+              id: 'rep_hpp_menu',
+              icon: Icons.calculate_rounded,
+              label: 'HPP & Margin Menu',
+              pageBuilder: (_) => const ReportingScreen(
+                key: ValueKey('rep_5'),
+                initialSection: 5,
+              ),
+            ),
+            _NavSubItem(
               id: 'rep_pengeluaran',
               icon: Icons.receipt_long_rounded,
               label: 'Catat Pengeluaran',
@@ -344,17 +360,20 @@ class _DashboardScreenState extends State<DashboardScreen> {
             id: 'pos_group',
             icon: Icons.point_of_sale_rounded,
             label: 'Kasir & Transaksi',
+            requiresOnDuty: true,
             children: [
               _NavSubItem(
                 id: 'pos_kasir',
                 icon: Icons.storefront_rounded,
                 label: 'Kasir POS',
+                requiresOnDuty: true,
                 pageBuilder: (_) => const PosScreen(),
               ),
               _NavSubItem(
                 id: 'pos_transaksi',
                 icon: Icons.receipt_long_rounded,
                 label: 'Riwayat Transaksi',
+                requiresOnDuty: true,
                 pageBuilder: (_) => const TransaksiScreen(),
               ),
             ],
@@ -363,17 +382,20 @@ class _DashboardScreenState extends State<DashboardScreen> {
             id: 'stok_group',
             icon: Icons.warehouse_rounded,
             label: 'Stok Gudang',
+            requiresOnDuty: true,
             children: [
               _NavSubItem(
                 id: 'stok_gudang',
                 icon: Icons.warehouse_rounded,
                 label: 'Ambil Barang Gudang',
+                requiresOnDuty: true,
                 pageBuilder: (_) => const StokGudangScreen(),
               ),
               _NavSubItem(
                 id: 'hub_harian',
                 icon: Icons.calendar_view_day_rounded,
                 label: 'Rekap Stok Harian',
+                requiresOnDuty: true,
                 pageBuilder: (_) => const StokOpnameHubScreen(
                   key: ValueKey('hub_kasir_0'),
                   initialSection: 0,
@@ -387,6 +409,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
             id: 'kds_kitchen',
             icon: Icons.soup_kitchen_rounded,
             label: 'Layar Pesanan KDS',
+            requiresOnDuty: true,
             pageBuilder: (_) => const KdsScreen(
               key: ValueKey('kds_kitchen'),
               areaProduksi: 'kitchen',
@@ -396,17 +419,20 @@ class _DashboardScreenState extends State<DashboardScreen> {
             id: 'stok_group',
             icon: Icons.warehouse_rounded,
             label: 'Stok & Opname Kitchen',
+            requiresOnDuty: true,
             children: [
               _NavSubItem(
                 id: 'stok_gudang',
                 icon: Icons.warehouse_rounded,
                 label: 'Ambil Barang Gudang',
+                requiresOnDuty: true,
                 pageBuilder: (_) => const StokGudangScreen(),
               ),
               _NavSubItem(
                 id: 'opname_awal',
                 icon: Icons.wb_sunny_rounded,
                 label: 'Opname Awal Shift',
+                requiresOnDuty: true,
                 pageBuilder: (_) => const CatatOpnameScreen(
                   key: ValueKey('opname_kitchen_0'),
                   initialSection: 0,
@@ -417,6 +443,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 id: 'opname_akhir',
                 icon: Icons.nights_stay_rounded,
                 label: 'Opname Akhir Shift',
+                requiresOnDuty: true,
                 pageBuilder: (_) => const CatatOpnameScreen(
                   key: ValueKey('opname_kitchen_1'),
                   initialSection: 1,
@@ -427,6 +454,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 id: 'hub_harian',
                 icon: Icons.calendar_view_day_rounded,
                 label: 'Rekap Stok Harian',
+                requiresOnDuty: true,
                 pageBuilder: (_) => const StokOpnameHubScreen(
                   key: ValueKey('hub_kitchen_0'),
                   initialSection: 0,
@@ -440,6 +468,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
             id: 'kds_bar',
             icon: Icons.local_cafe_rounded,
             label: 'Layar Pesanan KDS (Bar)',
+            requiresOnDuty: true,
             pageBuilder: (_) => const KdsScreen(
               key: ValueKey('kds_bar'),
               areaProduksi: 'bar',
@@ -449,17 +478,20 @@ class _DashboardScreenState extends State<DashboardScreen> {
             id: 'stok_group',
             icon: Icons.warehouse_rounded,
             label: 'Stok & Opname Bar',
+            requiresOnDuty: true,
             children: [
               _NavSubItem(
                 id: 'stok_gudang',
                 icon: Icons.warehouse_rounded,
                 label: 'Ambil Barang Gudang',
+                requiresOnDuty: true,
                 pageBuilder: (_) => const StokGudangScreen(),
               ),
               _NavSubItem(
                 id: 'opname_awal',
                 icon: Icons.wb_sunny_rounded,
                 label: 'Opname Awal Shift',
+                requiresOnDuty: true,
                 pageBuilder: (_) => const CatatOpnameScreen(
                   key: ValueKey('opname_bar_0'),
                   initialSection: 0,
@@ -470,6 +502,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 id: 'opname_akhir',
                 icon: Icons.nights_stay_rounded,
                 label: 'Opname Akhir Shift',
+                requiresOnDuty: true,
                 pageBuilder: (_) => const CatatOpnameScreen(
                   key: ValueKey('opname_bar_1'),
                   initialSection: 1,
@@ -480,6 +513,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 id: 'hub_harian',
                 icon: Icons.calendar_view_day_rounded,
                 label: 'Rekap Stok Harian',
+                requiresOnDuty: true,
                 pageBuilder: (_) => const StokOpnameHubScreen(
                   key: ValueKey('hub_bar_0'),
                   initialSection: 0,
@@ -523,7 +557,34 @@ class _DashboardScreenState extends State<DashboardScreen> {
     ];
   }
 
+  bool _isLockedForCurrentUser(bool requiresOnDuty) {
+    if (!requiresOnDuty) return false;
+    final auth = context.read<AuthProvider>();
+    if (auth.role != 'karyawan') return false;
+    return !context.read<DashboardProvider>().isOnDuty;
+  }
+
+  void _showLockedSnack() {
+    final reason = context.read<DashboardProvider>().offDutyReason;
+    ScaffoldMessenger.of(context).hideCurrentSnackBar();
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          reason.isNotEmpty
+              ? reason
+              : 'Fitur operasional dikunci saat off-shift / belum Absen Masuk.',
+        ),
+        backgroundColor: const Color(0xFFB45309),
+      ),
+    );
+  }
+
   void _onGroupTap(_NavItem item) {
+    if (_isLockedForCurrentUser(item.requiresOnDuty)) {
+      _showLockedSnack();
+      return;
+    }
+    final bool returningToDashboard = item.children.isEmpty && item.id == 'dashboard';
     setState(() {
       if (item.children.isEmpty) {
         _selectedGroupId = item.id;
@@ -538,9 +599,16 @@ class _DashboardScreenState extends State<DashboardScreen> {
         }
       }
     });
+    if (returningToDashboard) {
+      context.read<DashboardProvider>().refresh();
+    }
   }
 
   void _onSubItemTap(_NavItem group, _NavSubItem sub) {
+    if (_isLockedForCurrentUser(group.requiresOnDuty || sub.requiresOnDuty)) {
+      _showLockedSnack();
+      return;
+    }
     setState(() {
       _selectedGroupId = group.id;
       _selectedSubId = sub.id;
@@ -577,36 +645,42 @@ class _DashboardScreenState extends State<DashboardScreen> {
       dashboard.shiftAktif?.areaKerja,
     );
 
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        if (constraints.maxWidth > 900) {
-          return _WebLayout(
+    return PageRefreshScope(
+      controller: _refreshController,
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          if (constraints.maxWidth > 900) {
+            return _WebLayout(
+              auth: auth,
+              dashboard: dashboard,
+              refreshController: _refreshController,
+              navItems: navItems,
+              selectedGroupId: _selectedGroupId,
+              selectedSubId: _selectedSubId,
+              activePageLabel: _activePageLabel,
+              expandedGroupIds: _expandedGroupIds,
+              currentPage: _currentPage,
+              onGroupTap: _onGroupTap,
+              onSubItemTap: _onSubItemTap,
+              onNavigate: (g, [s]) => _navigateToNav(navItems, g, s),
+            );
+          }
+          return _MobileLayout(
             auth: auth,
             dashboard: dashboard,
+            refreshController: _refreshController,
             navItems: navItems,
             selectedGroupId: _selectedGroupId,
             selectedSubId: _selectedSubId,
+            activePageLabel: _activePageLabel,
             expandedGroupIds: _expandedGroupIds,
             currentPage: _currentPage,
             onGroupTap: _onGroupTap,
             onSubItemTap: _onSubItemTap,
             onNavigate: (g, [s]) => _navigateToNav(navItems, g, s),
           );
-        }
-        return _MobileLayout(
-          auth: auth,
-          dashboard: dashboard,
-          navItems: navItems,
-          selectedGroupId: _selectedGroupId,
-          selectedSubId: _selectedSubId,
-          activePageLabel: _activePageLabel,
-          expandedGroupIds: _expandedGroupIds,
-          currentPage: _currentPage,
-          onGroupTap: _onGroupTap,
-          onSubItemTap: _onSubItemTap,
-          onNavigate: (g, [s]) => _navigateToNav(navItems, g, s),
-        );
-      },
+        },
+      ),
     );
   }
 }
@@ -615,9 +689,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
 class _WebLayout extends StatelessWidget {
   final AuthProvider auth;
   final DashboardProvider dashboard;
+  final PageRefreshController refreshController;
   final List<_NavItem> navItems;
   final String selectedGroupId;
   final String? selectedSubId;
+  final String activePageLabel;
   final Set<String> expandedGroupIds;
   final Widget? currentPage;
   final ValueChanged<_NavItem> onGroupTap;
@@ -627,9 +703,11 @@ class _WebLayout extends StatelessWidget {
   const _WebLayout({
     required this.auth,
     required this.dashboard,
+    required this.refreshController,
     required this.navItems,
     required this.selectedGroupId,
     required this.selectedSubId,
+    required this.activePageLabel,
     required this.expandedGroupIds,
     required this.currentPage,
     required this.onGroupTap,
@@ -647,6 +725,7 @@ class _WebLayout extends StatelessWidget {
           _Sidebar(
             auth: auth,
             activeAreaKerja: dashboard.shiftAktif?.areaKerja,
+            isOperationalLocked: auth.role == 'karyawan' && !dashboard.isOnDuty,
             navItems: navItems,
             selectedGroupId: selectedGroupId,
             selectedSubId: selectedSubId,
@@ -656,12 +735,112 @@ class _WebLayout extends StatelessWidget {
           ),
           // ── Main Content ─────────────────────────────────
           Expanded(
-            child: currentPage ??
-                _DashboardContent(
-                  auth: auth,
-                  dashboard: dashboard,
-                  onNavigate: onNavigate,
-                ),
+            child: currentPage == null
+                ? _DashboardContent(
+                    auth: auth,
+                    dashboard: dashboard,
+                    onNavigate: onNavigate,
+                  )
+                : Column(
+                    children: [
+                      Container(
+                        height: 52,
+                        padding: const EdgeInsets.symmetric(horizontal: 20),
+                        decoration: const BoxDecoration(
+                          color: Colors.white,
+                          border: Border(
+                            bottom: BorderSide(color: Color(0xFFE5EBE7)),
+                          ),
+                        ),
+                        child: Row(
+                          children: [
+                            Expanded(
+                              child: Text(
+                                activePageLabel,
+                                style: GoogleFonts.outfit(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.w700,
+                                  color: const Color(0xFF1A1D1B),
+                                ),
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                            AnimatedBuilder(
+                              animation: refreshController,
+                              builder: (_, __) {
+                                final busy = refreshController.isRefreshing;
+                                return IconButton(
+                                  tooltip: 'Segarkan Data',
+                                  onPressed: busy
+                                      ? null
+                                      : () => refreshController.triggerRefresh(),
+                                  icon: busy
+                                      ? const SizedBox(
+                                          width: 18,
+                                          height: 18,
+                                          child: CircularProgressIndicator(
+                                            strokeWidth: 2,
+                                            color: _brown,
+                                          ),
+                                        )
+                                      : const Icon(
+                                          Icons.refresh_rounded,
+                                          size: 20,
+                                          color: _brown,
+                                        ),
+                                );
+                              },
+                            ),
+                            Consumer<NotificationProvider>(
+                              builder: (context, notifProv, _) {
+                                return Stack(
+                                  alignment: Alignment.topRight,
+                                  children: [
+                                    IconButton(
+                                      tooltip: 'Notifikasi',
+                                      icon: const Icon(
+                                        Icons.notifications_rounded,
+                                        size: 20,
+                                        color: _brown,
+                                      ),
+                                      onPressed: () {
+                                        Navigator.push(
+                                          context,
+                                          MaterialPageRoute(
+                                            builder: (_) =>
+                                                const NotificationScreen(),
+                                          ),
+                                        );
+                                      },
+                                    ),
+                                    if (notifProv.hasUnread ||
+                                        (auth.role == 'admin' &&
+                                            (dashboard.adminSummary
+                                                        ?.pendingApprovals ??
+                                                    0) >
+                                                0))
+                                      Positioned(
+                                        right: 8,
+                                        top: 8,
+                                        child: Container(
+                                          width: 9,
+                                          height: 9,
+                                          decoration: const BoxDecoration(
+                                            color: Colors.red,
+                                            shape: BoxShape.circle,
+                                          ),
+                                        ),
+                                      ),
+                                  ],
+                                );
+                              },
+                            ),
+                          ],
+                        ),
+                      ),
+                      Expanded(child: currentPage!),
+                    ],
+                  ),
           ),
         ],
       ),
@@ -673,6 +852,7 @@ class _WebLayout extends StatelessWidget {
 class _Sidebar extends StatelessWidget {
   final AuthProvider auth;
   final String? activeAreaKerja;
+  final bool isOperationalLocked;
   final List<_NavItem> navItems;
   final String selectedGroupId;
   final String? selectedSubId;
@@ -683,6 +863,7 @@ class _Sidebar extends StatelessWidget {
   const _Sidebar({
     required this.auth,
     this.activeAreaKerja,
+    this.isOperationalLocked = false,
     required this.navItems,
     required this.selectedGroupId,
     required this.selectedSubId,
@@ -807,6 +988,7 @@ class _Sidebar extends StatelessWidget {
                 final hasChildren = item.children.isNotEmpty;
                 final isGroupSelected = item.id == selectedGroupId;
                 final isExpanded = expandedGroupIds.contains(item.id);
+                final isLocked = isOperationalLocked && item.requiresOnDuty;
 
                 return Padding(
                   padding: const EdgeInsets.only(bottom: 4),
@@ -823,28 +1005,34 @@ class _Sidebar extends StatelessWidget {
                             padding: const EdgeInsets.symmetric(
                                 horizontal: 14, vertical: 11),
                             decoration: BoxDecoration(
-                              color: (isGroupSelected && !hasChildren)
-                                  ? Colors.white.withValues(alpha: 0.18)
-                                  : (isGroupSelected && hasChildren)
-                                      ? Colors.white.withValues(alpha: 0.08)
-                                      : Colors.transparent,
+                              color: isLocked
+                                  ? Colors.white.withValues(alpha: 0.03)
+                                  : (isGroupSelected && !hasChildren)
+                                      ? Colors.white.withValues(alpha: 0.18)
+                                      : (isGroupSelected && hasChildren)
+                                          ? Colors.white.withValues(alpha: 0.08)
+                                          : Colors.transparent,
                               borderRadius: BorderRadius.circular(10),
                             ),
                             child: Row(
                               children: [
                                 Icon(item.icon,
-                                    color: isGroupSelected
-                                        ? Colors.white
-                                        : Colors.white70,
+                                    color: isLocked
+                                        ? Colors.white30
+                                        : (isGroupSelected
+                                            ? Colors.white
+                                            : Colors.white70),
                                     size: 19),
                                 const SizedBox(width: 12),
                                 Expanded(
                                   child: Text(
                                     item.label,
                                     style: TextStyle(
-                                      color: isGroupSelected
-                                          ? Colors.white
-                                          : Colors.white70,
+                                      color: isLocked
+                                          ? Colors.white38
+                                          : (isGroupSelected
+                                              ? Colors.white
+                                              : Colors.white70),
                                       fontSize: 13.5,
                                       fontWeight: isGroupSelected
                                           ? FontWeight.w600
@@ -852,7 +1040,13 @@ class _Sidebar extends StatelessWidget {
                                     ),
                                   ),
                                 ),
-                                if (hasChildren)
+                                if (isLocked)
+                                  const Icon(
+                                    Icons.lock_outline_rounded,
+                                    color: Colors.white38,
+                                    size: 16,
+                                  )
+                                else if (hasChildren)
                                   Icon(
                                     isExpanded
                                         ? Icons.keyboard_arrow_up_rounded
@@ -865,7 +1059,7 @@ class _Sidebar extends StatelessWidget {
                           ),
                         ),
                       ),
-                      if (hasChildren && isExpanded)
+                      if (hasChildren && isExpanded && !isLocked)
                         Padding(
                           padding: const EdgeInsets.only(left: 16, top: 4, bottom: 4),
                           child: Column(
@@ -1037,11 +1231,13 @@ class _DashboardContent extends StatelessWidget {
               ],
             ),
             actions: [
-              IconButton(
-                icon: const Icon(Icons.refresh_rounded, color: _brown),
-                onPressed: dashboard.refresh,
-              ),
-              const SizedBox(width: 8),
+              if (MediaQuery.of(context).size.width > 900) ...[
+                IconButton(
+                  icon: const Icon(Icons.refresh_rounded, color: _brown),
+                  onPressed: dashboard.refresh,
+                ),
+                const SizedBox(width: 8),
+              ],
             ],
           ),
           SliverPadding(
@@ -1097,12 +1293,44 @@ class _KaryawanContent extends StatelessWidget {
   Widget build(BuildContext context) {
     final effectiveArea = dashboard.shiftAktif?.areaKerja ?? auth.divisiEfektif;
     final isKasir = effectiveArea == 'kasir';
+    final isOnDuty = dashboard.isOnDuty;
+    final offDutyReason = dashboard.offDutyReason;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         // Shift card
         _ShiftCard(shift: dashboard.shiftAktif),
+        if (!isOnDuty) ...[
+          const SizedBox(height: 12),
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+            decoration: BoxDecoration(
+              color: const Color(0xFFFFFBEB),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: const Color(0xFFFDE68A)),
+            ),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Icon(Icons.lock_outline_rounded,
+                    size: 18, color: Color(0xFFD97706)),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    '$offDutyReason Fitur POS, KDS, Stok Gudang, Stok Opname, dan Rekap Stok dinonaktifkan hingga Anda aktif bertugas dan melakukan Absen Masuk.',
+                    style: const TextStyle(
+                      fontSize: 12.5,
+                      color: Color(0xFF92400E),
+                      height: 1.4,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
         const SizedBox(height: 20),
         // Quick actions
         const _SectionTitle('Aksi Cepat'),
@@ -1110,18 +1338,41 @@ class _KaryawanContent extends StatelessWidget {
         if (dashboard.shiftAktif != null)
           _QuickActions(
             shift: dashboard.shiftAktif!,
+            isOnDuty: isOnDuty,
+            offDutyReason: offDutyReason,
             onNavigate: onNavigate,
           )
         else
           _NoShiftQuickActions(
             effectiveArea: effectiveArea,
+            offDutyReason: offDutyReason,
             onNavigate: onNavigate,
           ),
         const SizedBox(height: 20),
         if (isKasir) ...[
           const _SectionTitle('Laporan Shift Aktif'),
           const SizedBox(height: 12),
-          _LaporanShiftCard(laporan: dashboard.laporanShift),
+          if (isOnDuty)
+            _LaporanShiftCard(laporan: dashboard.laporanShift)
+          else
+            _Card(
+              child: Padding(
+                padding: const EdgeInsets.all(20),
+                child: Row(
+                  children: [
+                    Icon(Icons.lock_outline_rounded,
+                        color: Colors.grey.shade500, size: 22),
+                    const SizedBox(width: 12),
+                    const Expanded(
+                      child: Text(
+                        'Ringkasan penjualan & rekap stok hanya tampil saat Anda sedang aktif bertugas dan sudah Absen Masuk.',
+                        style: TextStyle(color: _textDim, fontSize: 13),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
         ] else ...[
           _SectionTitle(
             effectiveArea == 'kitchen' ? 'Ruang Kerja Kitchen' : 'Ruang Kerja Bar',
@@ -1129,6 +1380,7 @@ class _KaryawanContent extends StatelessWidget {
           const SizedBox(height: 12),
           _ProduksiFocusCard(
             area: effectiveArea,
+            isOnDuty: isOnDuty,
             onOpenKds: () => onNavigate(
               effectiveArea == 'kitchen' ? 'kds_kitchen' : 'kds_bar',
             ),
@@ -1174,7 +1426,7 @@ class _ShiftCard extends StatelessWidget {
                 color: Colors.grey.shade100,
                 borderRadius: BorderRadius.circular(12),
               ),
-              child: const Icon(Icons.schedule_rounded,
+              child: const Icon(Icons.event_busy_rounded,
                   color: Colors.grey, size: 28),
             ),
             const SizedBox(width: 16),
@@ -1182,14 +1434,14 @@ class _ShiftCard extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('Tidak ada jadwal hari ini',
+                  Text('Off-Shift / Tidak Ada Jadwal Hari Ini',
                       style: TextStyle(
                           fontSize: 16,
-                          fontWeight: FontWeight.w600,
-                          color: Colors.grey)),
+                          fontWeight: FontWeight.w700,
+                          color: Color(0xFF4B5563))),
                   SizedBox(height: 4),
-                  Text('Hubungi admin untuk informasi jadwal',
-                      style: TextStyle(fontSize: 13, color: Colors.grey)),
+                  Text('Menu operasional terkunci saat libur. Cek Jadwal Kerja Saya atau hubungi Admin.',
+                      style: TextStyle(fontSize: 12.5, color: Colors.grey)),
                 ],
               ),
             ),
@@ -1197,6 +1449,15 @@ class _ShiftCard extends StatelessWidget {
         ),
       );
     }
+
+    final bool sudahMasuk = shift!.sudahAbsenMasuk;
+    final bool sudahPulang = shift!.sudahAbsenPulang;
+    final String statusBadgeLabel = sudahPulang
+        ? 'Shift Selesai'
+        : (sudahMasuk ? 'On-Duty · Sudah Absen' : 'Belum Absen Masuk');
+    final Color statusDotColor = sudahPulang
+        ? Colors.grey.shade300
+        : (sudahMasuk ? const Color(0xFF4ADE80) : const Color(0xFFFBBF24));
 
     return Container(
       padding: const EdgeInsets.all(20),
@@ -1217,45 +1478,58 @@ class _ShiftCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                decoration: BoxDecoration(
-                  color: Colors.white.withValues(alpha: 0.2),
-                  borderRadius: BorderRadius.circular(20),
+          SizedBox(
+            width: double.infinity,
+            child: Wrap(
+              spacing: 8,
+              runSpacing: 6,
+              alignment: WrapAlignment.spaceBetween,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              children: [
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withValues(alpha: 0.2),
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.circle, color: statusDotColor, size: 8),
+                      const SizedBox(width: 6),
+                      Flexible(
+                        child: Text(
+                          statusBadgeLabel,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                              color: Colors.white.withValues(alpha: 0.95),
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600),
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
-                child: Row(
-                  children: [
-                    const Icon(Icons.circle,
-                        color: Color(0xFF4ADE80), size: 8),
-                    const SizedBox(width: 6),
-                    Text(
-                      'Shift Aktif',
-                      style: TextStyle(
-                          color: Colors.white.withValues(alpha: 0.9),
-                          fontSize: 12,
-                          fontWeight: FontWeight.w600),
-                    ),
-                  ],
+                Text(
+                  () {
+                    try {
+                      return DateFormat('EEEE, d MMM', 'id_ID').format(DateTime.now());
+                    } catch (_) {
+                      return DateFormat('EEEE, d MMM').format(DateTime.now());
+                    }
+                  }(),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(color: Colors.white70, fontSize: 12),
                 ),
-              ),
-              const Spacer(),
-              Text(
-                () {
-                  try {
-                    return DateFormat('EEEE, d MMM', 'id_ID').format(DateTime.now());
-                  } catch (_) {
-                    return DateFormat('EEEE, d MMM').format(DateTime.now());
-                  }
-                }(),
-                style: const TextStyle(color: Colors.white70, fontSize: 12),
-              ),
-            ],
+              ],
+            ),
           ),
           const SizedBox(height: 16),
           Text(
-            shift!.shift.replaceAll('_', ' ').toUpperCase(),
+            (shift!.shiftNama != null && shift!.shiftNama!.trim().isNotEmpty)
+                ? shift!.shiftNama!.toUpperCase()
+                : shift!.shift.replaceAll('_', ' ').toUpperCase(),
             style: GoogleFonts.outfit(
               color: Colors.white,
               fontSize: 22,
@@ -1264,12 +1538,13 @@ class _ShiftCard extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 8),
-          Row(
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
             children: [
               _ShiftChip(
                   icon: Icons.access_time_rounded,
                   label: '${shift!.jamMulai} – ${shift!.jamSelesai}'),
-              const SizedBox(width: 8),
               _ShiftChip(
                   icon: Icons.place_rounded,
                   label: shift!.areaKerja.toUpperCase()),
@@ -1295,11 +1570,16 @@ class _ShiftChip extends StatelessWidget {
         borderRadius: BorderRadius.circular(8),
       ),
       child: Row(
+        mainAxisSize: MainAxisSize.min,
         children: [
           Icon(icon, color: Colors.white70, size: 13),
           const SizedBox(width: 5),
-          Text(label,
-              style: const TextStyle(color: Colors.white, fontSize: 12)),
+          Flexible(
+            child: Text(label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(color: Colors.white, fontSize: 12)),
+          ),
         ],
       ),
     );
@@ -1308,10 +1588,14 @@ class _ShiftChip extends StatelessWidget {
 
 class _QuickActions extends StatelessWidget {
   final ShiftAktif shift;
+  final bool isOnDuty;
+  final String offDutyReason;
   final void Function(String groupId, [String? subId]) onNavigate;
 
   const _QuickActions({
     required this.shift,
+    required this.isOnDuty,
+    required this.offDutyReason,
     required this.onNavigate,
   });
 
@@ -1319,6 +1603,16 @@ class _QuickActions extends StatelessWidget {
     final dashboard = context.read<DashboardProvider>();
     final ok = await bukaOpname(context, areaKerja: shift.areaKerja, tipe: tipe);
     if (ok) await dashboard.refresh();
+  }
+
+  void _showLocked(BuildContext context) {
+    ScaffoldMessenger.of(context).hideCurrentSnackBar();
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(offDutyReason),
+        backgroundColor: const Color(0xFFB45309),
+      ),
+    );
   }
 
   @override
@@ -1349,28 +1643,40 @@ class _QuickActions extends StatelessWidget {
               icon: Icons.inventory_2_rounded,
               label: 'Opname Awal Shift',
               color: const Color(0xFFF59E0B),
-              onTap: () => _jalankanOpname(context, TipeOpname.awalShift),
+              enabled: isOnDuty,
+              onTap: isOnDuty
+                  ? () => _jalankanOpname(context, TipeOpname.awalShift)
+                  : () => _showLocked(context),
             )
           else
             _ActionButton(
               icon: Icons.inventory_2_rounded,
               label: 'Opname Akhir Shift',
               color: const Color(0xFFF59E0B),
-              onTap: () => _jalankanOpname(context, TipeOpname.akhirShift),
+              enabled: isOnDuty,
+              onTap: isOnDuty
+                  ? () => _jalankanOpname(context, TipeOpname.akhirShift)
+                  : () => _showLocked(context),
             ),
         if (shift.areaKerja == 'kasir')
           _ActionButton(
             icon: Icons.point_of_sale_rounded,
             label: 'Buka POS',
             color: _brown,
-            onTap: () => onNavigate('pos_group', 'pos_kasir'),
+            enabled: isOnDuty,
+            onTap: isOnDuty
+                ? () => onNavigate('pos_group', 'pos_kasir')
+                : () => _showLocked(context),
           ),
         if (isProduksi)
           _ActionButton(
             icon: isKitchen ? Icons.soup_kitchen_rounded : Icons.local_cafe_rounded,
             label: isKitchen ? 'Buka KDS Kitchen' : 'Buka KDS Bar',
             color: const Color(0xFF6366F1),
-            onTap: () => onNavigate(isKitchen ? 'kds_kitchen' : 'kds_bar'),
+            enabled: isOnDuty,
+            onTap: isOnDuty
+                ? () => onNavigate(isKitchen ? 'kds_kitchen' : 'kds_bar')
+                : () => _showLocked(context),
           ),
       ],
     );
@@ -1379,12 +1685,24 @@ class _QuickActions extends StatelessWidget {
 
 class _NoShiftQuickActions extends StatelessWidget {
   final String effectiveArea;
+  final String offDutyReason;
   final void Function(String groupId, [String? subId]) onNavigate;
 
   const _NoShiftQuickActions({
     required this.effectiveArea,
+    required this.offDutyReason,
     required this.onNavigate,
   });
+
+  void _showLocked(BuildContext context) {
+    ScaffoldMessenger.of(context).hideCurrentSnackBar();
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(offDutyReason),
+        backgroundColor: const Color(0xFFB45309),
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -1417,16 +1735,18 @@ class _NoShiftQuickActions extends StatelessWidget {
         if (isKitchen || isBar)
           _ActionButton(
             icon: isKitchen ? Icons.soup_kitchen_rounded : Icons.local_cafe_rounded,
-            label: isKitchen ? 'Buka KDS Kitchen' : 'Buka KDS Bar',
+            label: isKitchen ? 'KDS Kitchen (Terkunci)' : 'KDS Bar (Terkunci)',
             color: const Color(0xFF6366F1),
-            onTap: () => onNavigate(isKitchen ? 'kds_kitchen' : 'kds_bar'),
+            enabled: false,
+            onTap: () => _showLocked(context),
           )
         else
           _ActionButton(
             icon: Icons.point_of_sale_rounded,
-            label: 'Buka POS',
+            label: 'POS Kasir (Terkunci)',
             color: _brown,
-            onTap: () => onNavigate('pos_group', 'pos_kasir'),
+            enabled: false,
+            onTap: () => _showLocked(context),
           ),
       ],
     );
@@ -1435,12 +1755,14 @@ class _NoShiftQuickActions extends StatelessWidget {
 
 class _ProduksiFocusCard extends StatelessWidget {
   final String area;
+  final bool isOnDuty;
   final VoidCallback onOpenKds;
   final VoidCallback onOpenStok;
   final VoidCallback onOpenAbsensi;
 
   const _ProduksiFocusCard({
     required this.area,
+    required this.isOnDuty,
     required this.onOpenKds,
     required this.onOpenStok,
     required this.onOpenAbsensi,
@@ -1484,9 +1806,11 @@ class _ProduksiFocusCard extends StatelessWidget {
                       ),
                       const SizedBox(height: 2),
                       Text(
-                        isKitchen
-                            ? 'Pantau antrian masak realtime di KDS Kitchen, stok bahan dapur, serta jadwal & absensi.'
-                            : 'Pantau antrian minuman di KDS Bar, stok bahan bar, serta jadwal & absensi.',
+                        isOnDuty
+                            ? (isKitchen
+                                ? 'Pantau antrian masak realtime di KDS Kitchen, stok bahan dapur, serta jadwal & absensi.'
+                                : 'Pantau antrian minuman di KDS Bar, stok bahan bar, serta jadwal & absensi.')
+                            : 'KDS & stok bahan terkunci sampai Anda memiliki shift aktif dan melakukan Absen Masuk.',
                         style: const TextStyle(fontSize: 12.5, color: _textDim),
                       ),
                     ],
@@ -1500,13 +1824,19 @@ class _ProduksiFocusCard extends StatelessWidget {
               runSpacing: 10,
               children: [
                 OutlinedButton.icon(
-                  onPressed: onOpenKds,
-                  icon: const Icon(Icons.tv_rounded, size: 17),
+                  onPressed: isOnDuty ? onOpenKds : null,
+                  icon: Icon(
+                    isOnDuty ? Icons.tv_rounded : Icons.lock_outline_rounded,
+                    size: 17,
+                  ),
                   label: Text(isKitchen ? 'Antrian KDS Kitchen' : 'Antrian KDS Bar'),
                 ),
                 OutlinedButton.icon(
-                  onPressed: onOpenStok,
-                  icon: const Icon(Icons.warehouse_rounded, size: 17),
+                  onPressed: isOnDuty ? onOpenStok : null,
+                  icon: Icon(
+                    isOnDuty ? Icons.warehouse_rounded : Icons.lock_outline_rounded,
+                    size: 17,
+                  ),
                   label: const Text('Ambil Barang Gudang'),
                 ),
                 OutlinedButton.icon(
@@ -1527,19 +1857,22 @@ class _ActionButton extends StatelessWidget {
   final IconData icon;
   final String label;
   final Color color;
+  final bool enabled;
   final VoidCallback onTap;
 
   const _ActionButton({
     required this.icon,
     required this.label,
     required this.color,
+    this.enabled = true,
     required this.onTap,
   });
 
   @override
   Widget build(BuildContext context) {
+    final bgColor = enabled ? color : Colors.grey.shade400;
     return Material(
-      color: color,
+      color: bgColor,
       borderRadius: BorderRadius.circular(12),
       child: InkWell(
         borderRadius: BorderRadius.circular(12),
@@ -1549,13 +1882,20 @@ class _ActionButton extends StatelessWidget {
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(icon, color: Colors.white, size: 18),
+              Icon(enabled ? icon : Icons.lock_outline_rounded,
+                  color: Colors.white, size: 18),
               const SizedBox(width: 8),
-              Text(label,
+              Flexible(
+                child: Text(
+                  label,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
                   style: const TextStyle(
                       color: Colors.white,
                       fontSize: 13,
-                      fontWeight: FontWeight.w600)),
+                      fontWeight: FontWeight.w600),
+                ),
+              ),
             ],
           ),
         ),
@@ -1756,7 +2096,9 @@ class _StokMenipisCard extends StatelessWidget {
                       style: const TextStyle(
                           fontSize: 14, fontWeight: FontWeight.w500)),
                   subtitle: Text(
-                    'Sisa: ${s.jumlahSisa} ${s.satuan} (min: ${s.stokMinimum})',
+                    s.isiPerKemasan > 0
+                        ? 'Sisa: ${s.jumlahSisa.toStringAsFixed(0)} ${s.satuan} (min: ${s.stokMinimum.toStringAsFixed(0)} kemasan / ${s.stokMinimumKecil.toStringAsFixed(0)} ${s.satuan})'
+                        : 'Sisa: ${s.jumlahSisa.toStringAsFixed(0)} ${s.satuan} (min: ${s.stokMinimum.toStringAsFixed(0)} ${s.satuan})',
                     style: const TextStyle(fontSize: 12, color: _textDim),
                   ),
                   dense: true,
@@ -1813,9 +2155,32 @@ class _ApprovalTile extends StatefulWidget {
 class _ApprovalTileState extends State<_ApprovalTile> {
   bool _processing = false;
 
+  Future<void> _handleAction(BuildContext context, bool approve) async {
+    if (_processing) return;
+    final dashboard = context.read<DashboardProvider>();
+    final messenger = ScaffoldMessenger.maybeOf(context);
+    setState(() => _processing = true);
+    if (approve) {
+      await dashboard.approveItem(widget.item.id, widget.item.type);
+    } else {
+      await dashboard.rejectItem(widget.item.id, widget.item.type);
+    }
+    if (!mounted) return;
+    setState(() => _processing = false);
+    final msg = dashboard.lastActionMessage;
+    if (msg != null && msg.isNotEmpty && messenger != null) {
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text(msg),
+          backgroundColor:
+              dashboard.lastActionIsError ? Colors.red.shade700 : null,
+        ),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
-    final dashboard = context.read<DashboardProvider>();
     return ListTile(
       leading: _typeIcon(widget.item.type),
       title: Text(widget.item.namaKaryawan,
@@ -1838,23 +2203,13 @@ class _ApprovalTileState extends State<_ApprovalTile> {
                 IconButton(
                   icon: const Icon(Icons.check_circle_rounded,
                       color: Color(0xFF10B981), size: 22),
-                  onPressed: () async {
-                    setState(() => _processing = true);
-                    await dashboard.approveItem(
-                        widget.item.id, widget.item.type);
-                    if (mounted) setState(() => _processing = false);
-                  },
+                  onPressed: () => _handleAction(context, true),
                   tooltip: 'Approve',
                 ),
                 IconButton(
                   icon: Icon(Icons.cancel_rounded,
                       color: Colors.red.shade400, size: 22),
-                  onPressed: () async {
-                    setState(() => _processing = true);
-                    await dashboard.rejectItem(
-                        widget.item.id, widget.item.type);
-                    if (mounted) setState(() => _processing = false);
-                  },
+                  onPressed: () => _handleAction(context, false),
                   tooltip: 'Tolak',
                 ),
               ],
@@ -1988,6 +2343,7 @@ class _RoleManagementCard extends StatelessWidget {
 class _MobileLayout extends StatelessWidget {
   final AuthProvider auth;
   final DashboardProvider dashboard;
+  final PageRefreshController refreshController;
   final List<_NavItem> navItems;
   final String selectedGroupId;
   final String? selectedSubId;
@@ -2001,6 +2357,7 @@ class _MobileLayout extends StatelessWidget {
   const _MobileLayout({
     required this.auth,
     required this.dashboard,
+    required this.refreshController,
     required this.navItems,
     required this.selectedGroupId,
     required this.selectedSubId,
@@ -2043,6 +2400,36 @@ class _MobileLayout extends StatelessWidget {
           ],
         ),
         actions: [
+          AnimatedBuilder(
+            animation: refreshController,
+            builder: (_, __) {
+              final busy = refreshController.isRefreshing;
+              return IconButton(
+                tooltip: 'Segarkan Data',
+                onPressed: busy
+                    ? null
+                    : () {
+                        if (currentPage == null) {
+                          dashboard.refresh();
+                        } else {
+                          refreshController.triggerRefresh(
+                            fallback: dashboard.refresh,
+                          );
+                        }
+                      },
+                icon: busy
+                    ? const SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: Colors.white,
+                        ),
+                      )
+                    : const Icon(Icons.refresh_rounded),
+              );
+            },
+          ),
           Consumer<NotificationProvider>(
             builder: (context, notifProv, _) {
               return Stack(
@@ -2147,6 +2534,9 @@ class _MobileLayout extends StatelessWidget {
                       final hasChildren = item.children.isNotEmpty;
                       final isGroupSelected = item.id == selectedGroupId;
                       final isExpanded = expandedGroupIds.contains(item.id);
+                      final isLocked = auth.role == 'karyawan' &&
+                          !dashboard.isOnDuty &&
+                          item.requiresOnDuty;
 
                       return Padding(
                         padding: const EdgeInsets.only(bottom: 6),
@@ -2158,6 +2548,11 @@ class _MobileLayout extends StatelessWidget {
                               child: InkWell(
                                 borderRadius: BorderRadius.circular(12),
                                 onTap: () {
+                                  if (isLocked) {
+                                    Navigator.pop(context);
+                                    onGroupTap(item);
+                                    return;
+                                  }
                                   if (!hasChildren) {
                                     Navigator.pop(context);
                                     onGroupTap(item);
@@ -2170,11 +2565,13 @@ class _MobileLayout extends StatelessWidget {
                                   padding: const EdgeInsets.symmetric(
                                       horizontal: 14, vertical: 12),
                                   decoration: BoxDecoration(
-                                    color: (isGroupSelected && !hasChildren)
-                                        ? _brown.withValues(alpha: 0.1)
-                                        : (isGroupSelected && hasChildren)
-                                            ? _brown.withValues(alpha: 0.05)
-                                            : Colors.transparent,
+                                    color: isLocked
+                                        ? Colors.grey.shade100
+                                        : (isGroupSelected && !hasChildren)
+                                            ? _brown.withValues(alpha: 0.1)
+                                            : (isGroupSelected && hasChildren)
+                                                ? _brown.withValues(alpha: 0.05)
+                                                : Colors.transparent,
                                     borderRadius: BorderRadius.circular(12),
                                   ),
                                   child: Row(
@@ -2182,9 +2579,11 @@ class _MobileLayout extends StatelessWidget {
                                       Icon(
                                         item.icon,
                                         size: 20,
-                                        color: isGroupSelected
-                                            ? _brown
-                                            : Colors.grey.shade700,
+                                        color: isLocked
+                                            ? Colors.grey.shade400
+                                            : (isGroupSelected
+                                                ? _brown
+                                                : Colors.grey.shade700),
                                       ),
                                       const SizedBox(width: 14),
                                       Expanded(
@@ -2195,13 +2594,21 @@ class _MobileLayout extends StatelessWidget {
                                             fontWeight: isGroupSelected
                                                 ? FontWeight.w700
                                                 : FontWeight.w600,
-                                            color: isGroupSelected
-                                                ? _brown
-                                                : const Color(0xFF2D312E),
+                                            color: isLocked
+                                                ? Colors.grey.shade400
+                                                : (isGroupSelected
+                                                    ? _brown
+                                                    : const Color(0xFF2D312E)),
                                           ),
                                         ),
                                       ),
-                                      if (hasChildren)
+                                      if (isLocked)
+                                        Icon(
+                                          Icons.lock_outline_rounded,
+                                          size: 17,
+                                          color: Colors.grey.shade400,
+                                        )
+                                      else if (hasChildren)
                                         Icon(
                                           isExpanded
                                               ? Icons.keyboard_arrow_up_rounded
@@ -2217,7 +2624,7 @@ class _MobileLayout extends StatelessWidget {
                                 ),
                               ),
                             ),
-                            if (hasChildren && isExpanded)
+                            if (hasChildren && isExpanded && !isLocked)
                               Padding(
                                 padding: const EdgeInsets.only(
                                     left: 18, top: 4, bottom: 4),

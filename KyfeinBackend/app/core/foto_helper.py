@@ -4,6 +4,7 @@ from fastapi import HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from app.core.config import settings
+from app.core.supabase_storage import delete_supabase_object
 from app.models.foto import Foto
 
 def get_foto_abs_path(path: str) -> str:
@@ -54,4 +55,6 @@ async def remove_old_foto_if_replaced(db: AsyncSession, old_foto_id: Optional[st
                     os.remove(abs_path)
                 except Exception:
                     pass
+            if old_foto.supabase_url:
+                await delete_supabase_object(old_foto.supabase_url)
             await db.delete(old_foto)

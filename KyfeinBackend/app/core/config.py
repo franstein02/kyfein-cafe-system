@@ -37,8 +37,16 @@ class Settings(BaseSettings):
     # CORS
     BACKEND_CORS_ORIGINS: List[str] = ["*"]
 
-    # Upload Directory
+    # Upload Directory & Supabase Storage
     UPLOAD_DIR: str = os.getenv("UPLOAD_DIR", "uploads")
+    SUPABASE_URL: str = os.getenv("SUPABASE_URL", "https://psdeyhujegvaczqyozbz.supabase.co")
+    SUPABASE_KEY: str = os.getenv("SUPABASE_KEY", "sb_publishable_-uzUI0ciD9S5VJTr-NHeCA_IWZb-eHe")
+    SUPABASE_BUCKET: str = os.getenv("SUPABASE_BUCKET", "Storage")
+    SUPABASE_SYNC_ENABLED: bool = os.getenv("SUPABASE_SYNC_ENABLED", "true").lower() in (
+        "1",
+        "true",
+        "yes",
+    )
 
     class Config:
         case_sensitive = True

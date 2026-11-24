@@ -24,12 +24,12 @@ class ApiConfig {
   
   /// Backend running on the same machine as Flutter web server (localhost).
   static const String _webBaseUrl = 'http://127.0.0.1:8000/api/v1';
-  static const String _webWsUrl   = 'ws://127.0.0.1:8000/ws';
+  static const String _webWsUrl   = 'ws://127.0.0.1:8000/api/v1/kds/ws';
 
   /// Backend IP reachable from Android device on the cafe's local WiFi. 
   /// Run `ipconfig` on the server machine and use its IPv4 address.
-  static const String _androidBaseUrl = 'http://10.145.184.177:8000/api/v1';
-  static const String _androidWsUrl   = 'ws://10.145.184.177:8000/ws';
+  static const String _androidBaseUrl = 'http://10.132.226.177:8000/api/v1';
+  static const String _androidWsUrl   = 'ws://10.132.226.177:8000/api/v1/kds/ws';
 
   // ── Resolved at runtime ───────────────────────────────────────────────────
   static const bool _useLocalConfig = true; // Set to true for local testing
@@ -109,12 +109,14 @@ class ApiEndpoints {
 
   // ── KDS ───────────────────────────────────────────────
   static String kdsOrders(String area) => '${ApiConfig.baseUrl}/kds/orders/$area';
+  static String kdsDetailStatus(String detailId) => '${ApiConfig.baseUrl}/kds/orders/detail/$detailId/status';
   static String kdsWs(String area)     => '${ApiConfig.wsUrl}/$area';
 
   // ── Reporting ─────────────────────────────────────────
   static String get dashboardOverview => '${ApiConfig.baseUrl}/reporting/dashboard-overview';
   static String get profitHarian => '${ApiConfig.baseUrl}/reporting/profit-harian';
   static String get profitPeriode => '${ApiConfig.baseUrl}/reporting/profit-periode';
+  static String get hppMenu => '${ApiConfig.baseUrl}/reporting/hpp-menu';
   static String get pengeluaran  => '${ApiConfig.baseUrl}/reporting/pengeluaran';
   static String get pengeluaranBreakdown => '${ApiConfig.baseUrl}/reporting/pengeluaran/breakdown';
 
@@ -126,6 +128,7 @@ class ApiEndpoints {
     // ── Izin & approval (sesuai backend) ──────────────────
   static String get izinTelat      => '${ApiConfig.baseUrl}/absensi/izin-telat';
   static String get izinTidakMasuk => '${ApiConfig.baseUrl}/absensi/izin-tidak-masuk';
+  static String konfirmasiTargetTukarShift(String id) => '${ApiConfig.baseUrl}/jadwal/tukar-shift/$id/konfirmasi-target';
   static String approvalTukarShift(String id)    => '${ApiConfig.baseUrl}/jadwal/tukar-shift/$id/approval';
   static String approvalIzinTelat(String id)     => '${ApiConfig.baseUrl}/absensi/izin-telat/$id/approval';
   static String approvalIzinTidakMasuk(String id) => '${ApiConfig.baseUrl}/absensi/izin-tidak-masuk/$id/approval';

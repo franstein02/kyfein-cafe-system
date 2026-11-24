@@ -60,6 +60,7 @@ class MenuUpdate(BaseModel):
 
 class MenuOut(MenuBase):
     id: str
+    foto_url: Optional[str] = None
     kategori: Optional[KategoriMenuOut] = None
     resep: List[MenuResepItemOut] = []
     created_at: datetime
@@ -72,6 +73,7 @@ class MenuOut(MenuBase):
 class BahanBase(BaseModel):
     nama: str = Field(min_length=1)
     satuan: str = Field(min_length=1)
+    area: Literal['bar', 'kitchen', 'semua'] = 'semua'
     isi_per_kemasan: Optional[Decimal] = Field(None, gt=0)
     stok_minimum: Decimal = Field(Decimal('0'), ge=0)
 
@@ -81,6 +83,7 @@ class BahanCreate(BahanBase):
 class BahanUpdate(BaseModel):
     nama: Optional[str] = Field(None, min_length=1)
     satuan: Optional[str] = Field(None, min_length=1)
+    area: Optional[Literal['bar', 'kitchen', 'semua']] = None
     isi_per_kemasan: Optional[Decimal] = Field(None, gt=0)
     stok_minimum: Optional[Decimal] = Field(None, ge=0)
     harga_rata_rata: Optional[Decimal] = Field(None, ge=0)

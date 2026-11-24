@@ -42,6 +42,7 @@ class MenuItem {
   final String nama;
   final double harga;
   final String? foto;
+  final String? fotoUrl;
   final String kategoriId;
   final List<MenuResepItem> resep;
 
@@ -50,15 +51,23 @@ class MenuItem {
     required this.nama,
     required this.harga,
     this.foto,
+    this.fotoUrl,
     required this.kategoriId,
     this.resep = const [],
   });
+
+  String? get resolvedFotoUrl {
+    if (fotoUrl != null && fotoUrl!.isNotEmpty) return fotoUrl;
+    if (foto == null || foto!.isEmpty) return null;
+    return foto!.startsWith('http') ? foto! : '${ApiConfig.baseUrl}/foto/$foto';
+  }
 
   factory MenuItem.fromJson(Map<String, dynamic> json) => MenuItem(
         id: json['id'].toString(),
         nama: json['nama'] ?? '',
         harga: double.tryParse(json['harga']?.toString() ?? '0') ?? 0.0,
         foto: json['foto_id'],
+        fotoUrl: json['foto_url'],
         kategoriId: json['kategori_id']?.toString() ?? '',
         resep: (json['resep'] as List?)
                 ?.map((e) => MenuResepItem.fromJson(e))
@@ -385,7 +394,7 @@ class PosProvider with ChangeNotifier {
         'total_harga': cartTotal,
         'uang_diterima': uangDiterima,
         'kembalian': (uangDiterima - cartTotal).clamp(0, double.infinity),
-        if (fotoBuktiQris != null) 'foto_bukti_qris': fotoBuktiQris,
+        if (fotoBuktiQris != null) 'foto_bukti_qris_id': fotoBuktiQris,
         'details': details,
       };
 

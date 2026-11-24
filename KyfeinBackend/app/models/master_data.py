@@ -1,4 +1,5 @@
 from datetime import datetime
+from decimal import Decimal
 from sqlalchemy import Column, String, Boolean, DateTime, Numeric, Enum as SQLEnum, ForeignKey, JSON
 from sqlalchemy.orm import relationship
 from app.models.base import Base, generate_uuid
@@ -52,11 +53,23 @@ class Bahan(Base):
     id = Column(String(36), primary_key=True, default=generate_uuid)
     nama = Column(String(100), nullable=False)
     satuan = Column(String(20), nullable=False)
+    area = Column(String(20), nullable=False, default='semua')
     isi_per_kemasan = Column(Numeric(10, 3), nullable=True)
     harga_rata_rata = Column(Numeric(14, 2), nullable=False, default=0)
     stok_minimum = Column(Numeric(10, 3), nullable=False, default=0)
     created_at = Column(DateTime, nullable=False, default=now_local)
     updated_at = Column(DateTime, nullable=False, default=now_local, onupdate=now_local)
+
+
+def hitung_batas_minimum_kecil(bahan: Bahan) -> Decimal:
+    """Konversi stok_minimum (dalam satuan kemasan besar) ke satuan kecil."""
+    stok_min = Decimal(str(bahan.stok_minimum or 0))
+    if stok_min <= 0:
+        return Decimal("0")
+    isi_raw = bahan.isi_per_kemasan
+    isi = Decimal(str(isi_raw)) if isi_raw is not None and Decimal(str(isi_raw)) > 0 else Decimal("1")
+    return stok_min * isi
+
 
 class MenuResep(Base):
     __tablename__ = "menu_resep"

@@ -1,12 +1,13 @@
 import os
 import io
 import uuid
+import logging
 import warnings
 from typing import Literal
 from PIL import Image, ImageOps
 from PIL.Image import DecompressionBombError, DecompressionBombWarning
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, status
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, RedirectResponse, Response
 from starlette.concurrency import run_in_threadpool
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, and_
@@ -14,10 +15,16 @@ from sqlalchemy import select, func, and_
 from app.core.config import settings
 from app.core.deps import get_db, get_current_user, get_optional_user
 from app.core.foto_helper import get_foto_abs_path
-from fastapi.responses import FileResponse, RedirectResponse
+from app.core.supabase_storage import (
+    delete_supabase_object,
+    download_image_bytes,
+    supabase_object_path,
+    upload_image_bytes,
+)
 from app.models.karyawan import Karyawan
 from app.models.foto import Foto
 
+logger = logging.getLogger(__name__)
 router = APIRouter()
 
 ALLOWED_JENIS = {'absensi', 'izin', 'qris', 'menu', 'profil'}
@@ -25,7 +32,8 @@ ALLOWED_FORMATS = {'JPEG', 'PNG', 'WEBP'}
 MAX_FILE_SIZE = 5 * 1024 * 1024  # 5 MB
 MAX_UNUSED_PHOTOS_PER_USER = 50
 
-def _process_and_save_image(file_bytes: bytes, dest_path: str) -> None:
+
+def _process_and_save_image(file_bytes: bytes, dest_path: str) -> bytes:
     Image.MAX_IMAGE_PIXELS = 40_000_000
     try:
         with warnings.catch_warnings():
@@ -37,7 +45,7 @@ def _process_and_save_image(file_bytes: bytes, dest_path: str) -> None:
                     status_code=status.HTTP_400_BAD_REQUEST,
                     detail="Format gambar harus JPEG, PNG, atau WebP"
                 )
-            
+
             # 1. EXIF Transpose
             img = ImageOps.exif_transpose(img)
 
@@ -57,8 +65,14 @@ def _process_and_save_image(file_bytes: bytes, dest_path: str) -> None:
                     new_w = int(width * (max_side / height))
                 img = img.resize((new_w, new_h), Image.Resampling.LANCZOS)
 
+            buf = io.BytesIO()
+            img.save(buf, format="JPEG", quality=85)
+            processed_bytes = buf.getvalue()
+
             os.makedirs(os.path.dirname(dest_path), exist_ok=True)
-            img.save(dest_path, format="JPEG", quality=85)
+            with open(dest_path, "wb") as out_file:
+                out_file.write(processed_bytes)
+            return processed_bytes
     except (DecompressionBombError, DecompressionBombWarning):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -117,13 +131,22 @@ async def upload_foto(
     abs_path = os.path.join(settings.UPLOAD_DIR, rel_path)
 
     # 3. Offload Pillow decoding/resizing/saving to threadpool
-    await run_in_threadpool(_process_and_save_image, file_bytes, abs_path)
+    processed_bytes = await run_in_threadpool(_process_and_save_image, file_bytes, abs_path)
+
+    supabase_url: str | None = None
+    if settings.SUPABASE_SYNC_ENABLED:
+        obj_path = supabase_object_path(jenis, foto_id)
+        try:
+            supabase_url = await upload_image_bytes(obj_path, processed_bytes)
+        except Exception as exc:
+            logger.warning("Gagal upload foto %s (%s) ke Supabase Storage: %s", foto_id, jenis, exc)
 
     # 6. Database commit failure file cleanup
     foto_obj = Foto(
         id=foto_id,
         jenis=jenis,
         path=rel_path,
+        supabase_url=supabase_url,
         uploader_id=current_user.id,
         dipakai=False
     )
@@ -136,9 +159,11 @@ async def upload_foto(
                 os.remove(abs_path)
             except Exception:
                 pass
+        if supabase_url:
+            await delete_supabase_object(supabase_url)
         raise
 
-    return {"id": foto_id}
+    return {"id": foto_id, "supabase_url": supabase_url}
 
 
 @router.get("/{id}")
@@ -170,18 +195,35 @@ async def get_foto(
     if foto.path.startswith("http://") or foto.path.startswith("https://"):
         return RedirectResponse(url=foto.path)
 
-    abs_path = get_foto_abs_path(foto.path)
-    if not os.path.exists(abs_path):
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="File foto tidak ditemukan di server"
-        )
-
     # Cache control: private max-age for public types (menu/profil), no-cache for evidence
     cache_header = "private, max-age=86400" if foto.jenis in {'menu', 'profil'} else "no-cache, no-store, must-revalidate"
 
-    return FileResponse(
-        path=abs_path,
-        media_type="image/jpeg",
-        headers={"Cache-Control": cache_header}
+    abs_path = get_foto_abs_path(foto.path)
+    if os.path.exists(abs_path):
+        return FileResponse(
+            path=abs_path,
+            media_type="image/jpeg",
+            headers={"Cache-Control": cache_header}
+        )
+
+    if foto.supabase_url:
+        try:
+            remote_bytes = await download_image_bytes(foto.supabase_url)
+            try:
+                os.makedirs(os.path.dirname(abs_path), exist_ok=True)
+                with open(abs_path, "wb") as cache_f:
+                    cache_f.write(remote_bytes)
+            except Exception:
+                pass
+            return Response(
+                content=remote_bytes,
+                media_type="image/jpeg",
+                headers={"Cache-Control": cache_header},
+            )
+        except Exception as exc:
+            logger.warning("Gagal mengambil foto %s dari Supabase Storage: %s", id, exc)
+
+    raise HTTPException(
+        status_code=status.HTTP_404_NOT_FOUND,
+        detail="File foto tidak ditemukan di server"
     )

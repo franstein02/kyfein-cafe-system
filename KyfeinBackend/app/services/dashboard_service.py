@@ -12,7 +12,11 @@ from app.models.jadwal import JadwalShift, TukarShift
 from app.models.karyawan import Karyawan
 from app.models.pengeluaran import Pengeluaran
 from app.models.transaksi import Transaksi, TransaksiDetail
-from app.schemas.reporting import EmployeeBehaviorItem, SalesChartPoint
+from app.schemas.reporting import (
+    AbsensiKaryawanLogItem,
+    EmployeeBehaviorItem,
+    SalesChartPoint,
+)
 
 _BULAN_SHORT = [
     "Jan", "Feb", "Mar", "Apr", "Mei", "Jun",
@@ -332,9 +336,11 @@ async def build_employee_behavior(
     start_date: date,
     end_date: date,
     now: datetime,
+    strict_range: bool = False,
+    include_logs: bool = False,
 ) -> Tuple[date, date, Dict[str, object]]:
     """Aggregate attendance discipline & employee behavior across active staff."""
-    if (end_date - start_date).days >= 6:
+    if strict_range or (end_date - start_date).days >= 6:
         beh_start, beh_end = start_date, end_date
     else:
         beh_end = end_date
@@ -359,7 +365,9 @@ async def build_employee_behavior(
 
     abs_by_shift: Dict[str, Absensi] = {}
     izin_telat_by_emp: Dict[str, int] = {}
+    izin_telat_by_shift: Dict[str, IzinTelat] = {}
     izin_tm_approved_shifts = set()
+    izin_tm_by_shift: Dict[str, IzinTidakMasuk] = {}
     izin_tm_by_emp: Dict[str, int] = {}
 
     if shift_ids:
@@ -372,11 +380,13 @@ async def build_employee_behavior(
             await db.execute(select(IzinTelat).where(IzinTelat.jadwal_shift_id.in_(shift_ids)))
         ).scalars().all():
             izin_telat_by_emp[it.karyawan_id] = izin_telat_by_emp.get(it.karyawan_id, 0) + 1
+            izin_telat_by_shift[it.jadwal_shift_id] = it
 
         for itm in (
             await db.execute(select(IzinTidakMasuk).where(IzinTidakMasuk.jadwal_shift_id.in_(shift_ids)))
         ).scalars().all():
             izin_tm_by_emp[itm.karyawan_id] = izin_tm_by_emp.get(itm.karyawan_id, 0) + 1
+            izin_tm_by_shift[itm.jadwal_shift_id] = itm
             if itm.status == "disetujui":
                 izin_tm_approved_shifts.add(itm.jadwal_shift_id)
 
@@ -397,13 +407,20 @@ async def build_employee_behavior(
         shifts_by_emp.setdefault(s.karyawan_id, []).append(s)
 
     items: List[EmployeeBehaviorItem] = []
+    team_scheduled = 0
     team_hadir = 0
     team_tepat = 0
     team_telat = 0
+    team_menit_telat = 0
     team_alpha = 0
+    team_lupa_pulang = 0
 
     for k in staff_list:
-        emp_shifts = shifts_by_emp.get(k.id, [])
+        emp_shifts = sorted(
+            shifts_by_emp.get(k.id, []),
+            key=lambda s: (s.tanggal, s.jam_mulai),
+            reverse=True,
+        )
         total_scheduled = 0
         hadir = 0
         tepat = 0
@@ -411,6 +428,7 @@ async def build_employee_behavior(
         menit_telat_sum = 0
         lupa_pulang = 0
         alpha = 0
+        logs: List[AbsensiKaryawanLogItem] = []
 
         for js in emp_shifts:
             shift_start_dt = datetime.combine(js.tanggal, js.jam_mulai)
@@ -422,23 +440,70 @@ async def build_employee_behavior(
             if shift_start_dt <= now or abs_row is not None:
                 total_scheduled += 1
 
+            is_lupa = False
+            m_late = 0
+            log_status: str = "belum_mulai"
+            log_ket: Optional[str] = None
+
             if abs_row is not None:
                 hadir += 1
                 m_late = int(abs_row.menit_telat or 0)
                 if m_late > 0:
                     telat += 1
                     menit_telat_sum += m_late
+                    log_status = "terlambat"
+                    it_row = izin_telat_by_shift.get(js.id)
+                    if it_row:
+                        log_ket = f"Izin telat ({it_row.status}): {it_row.alasan}"
                 else:
                     tepat += 1
+                    log_status = "tepat_waktu"
 
                 if abs_row.status_pulang == "lupa_absen" or (
                     abs_row.jam_pulang is None
                     and shift_end_dt + timedelta(minutes=90) < now
                 ):
                     lupa_pulang += 1
+                    is_lupa = True
+                    log_ket = (
+                        f"{log_ket} · Lupa absen pulang"
+                        if log_ket
+                        else "Lupa absen pulang"
+                    )
             else:
-                if js.id not in izin_tm_approved_shifts and shift_end_dt < now:
+                itm_row = izin_tm_by_shift.get(js.id)
+                if js.id in izin_tm_approved_shifts:
+                    log_status = "izin_tidak_masuk"
+                    if itm_row:
+                        log_ket = f"Izin disetujui: {itm_row.alasan}"
+                elif shift_end_dt < now:
                     alpha += 1
+                    log_status = "alpha"
+                    if itm_row:
+                        log_ket = f"Izin tidak masuk ({itm_row.status}): {itm_row.alasan}"
+                    else:
+                        log_ket = "Tidak hadir tanpa keterangan"
+                elif itm_row:
+                    log_status = "izin_tidak_masuk"
+                    log_ket = f"Izin ({itm_row.status}): {itm_row.alasan}"
+
+            if include_logs:
+                logs.append(
+                    AbsensiKaryawanLogItem(
+                        jadwal_shift_id=js.id,
+                        tanggal=js.tanggal,
+                        shift=js.shift,
+                        area_kerja=js.area_kerja,
+                        jam_mulai=js.jam_mulai.strftime("%H:%M"),
+                        jam_selesai=js.jam_selesai.strftime("%H:%M"),
+                        jam_masuk=abs_row.jam_masuk if abs_row else None,
+                        jam_pulang=abs_row.jam_pulang if abs_row else None,
+                        menit_telat=m_late,
+                        status_kehadiran=log_status,
+                        lupa_absen_pulang=is_lupa,
+                        keterangan=log_ket,
+                    )
+                )
 
         izin_t = izin_telat_by_emp.get(k.id, 0)
         izin_tm = izin_tm_by_emp.get(k.id, 0)
@@ -456,10 +521,13 @@ async def build_employee_behavior(
             izin_tidak_masuk_count=izin_tm,
         )
 
+        team_scheduled += total_scheduled
         team_hadir += hadir
         team_tepat += tepat
         team_telat += telat
+        team_menit_telat += menit_telat_sum
         team_alpha += alpha
+        team_lupa_pulang += lupa_pulang
 
         items.append(
             EmployeeBehaviorItem(
@@ -480,6 +548,7 @@ async def build_employee_behavior(
                 tingkat_ketepatan_persen=ketepatan_pct,
                 kategori_perilaku=kategori,
                 ringkasan_perilaku=ringkasan,
+                riwayat_shift=logs,
             )
         )
 
@@ -502,10 +571,13 @@ async def build_employee_behavior(
 
     team_pct = round((team_tepat / team_hadir) * 100, 1) if team_hadir > 0 else 100.0
     return beh_start, beh_end, {
+        "total_shift_terjadwal": team_scheduled,
         "total_hadir": team_hadir,
         "tepat_waktu": team_tepat,
         "telat": team_telat,
+        "total_menit_telat": team_menit_telat,
         "alpha": team_alpha,
+        "lupa_absen_pulang": team_lupa_pulang,
         "tingkat_ketepatan_tim_persen": team_pct,
         "items": items,
     }

@@ -234,14 +234,23 @@ void main() {
     await tester.tap(find.byIcon(Icons.menu));
     await tester.pumpAndSettle();
 
-    // Pastikan Kelola Karyawan tidak lagi muncul di luar sub-menu Master Data
-    expect(
-      find.descendant(
-        of: find.byType(Drawer),
-        matching: find.text('Kelola Karyawan'),
-      ),
-      findsNothing,
-    );
+    // Pastikan Kelola Karyawan tidak di luar sub-menu Master Data & semua dropdown awalnya tertutup
+    for (final subLabel in [
+      'Kasir POS',
+      'Menu & Resep POS',
+      'Kelola Karyawan',
+      'Stok Gudang & Mutasi',
+      'Atur Jadwal Shift',
+      'Laba Rugi & Penjualan',
+    ]) {
+      expect(
+        find.descendant(
+          of: find.byType(Drawer),
+          matching: find.text(subLabel),
+        ),
+        findsNothing,
+      );
+    }
 
     // Expand Master Data lalu pilih sub-menu Kelola Karyawan
     await tester.tap(
@@ -314,5 +323,19 @@ void main() {
     expect(find.text('Stok & Opname Kitchen'), findsOneWidget);
     expect(find.text('Jadwal & Absensi'), findsOneWidget);
     expect(find.text('Kasir POS'), findsNothing);
+    for (final hiddenSubLabel in [
+      'Ambil Barang Gudang',
+      'Opname Awal Shift',
+      'Jadwal Kerja Saya',
+      'Absensi Masuk & Pulang',
+    ]) {
+      expect(
+        find.descendant(
+          of: find.byType(Drawer),
+          matching: find.text(hiddenSubLabel),
+        ),
+        findsNothing,
+      );
+    }
   });
 }

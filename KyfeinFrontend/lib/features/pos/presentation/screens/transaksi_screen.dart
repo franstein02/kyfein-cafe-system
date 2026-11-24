@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
+import '../../../../core/widgets/on_duty_guard.dart';
+import '../../../../core/widgets/page_refresh_scope.dart';
 import '../../../auth/providers/auth_provider.dart';
 import '../../providers/transaksi_provider.dart';
 
@@ -10,9 +12,12 @@ class TransaksiScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ChangeNotifierProvider(
-      create: (ctx) => TransaksiProvider(auth: ctx.read<AuthProvider>())..loadInitialData(),
-      child: const _TransaksiView(),
+    return OnDutyGuard(
+      featureName: 'Riwayat Transaksi',
+      child: ChangeNotifierProvider(
+        create: (ctx) => TransaksiProvider(auth: ctx.read<AuthProvider>())..loadInitialData(),
+        child: const _TransaksiView(),
+      ),
     );
   }
 }
@@ -52,27 +57,32 @@ class _TransaksiViewState extends State<_TransaksiView> with SingleTickerProvide
     final provider = context.watch<TransaksiProvider>();
     final isDesktop = MediaQuery.of(context).size.width > 900;
 
-    return Scaffold(
-      backgroundColor: const Color(0xFFF8F9FA),
-      body: SafeArea(
-        child: RefreshIndicator(
-          color: const Color(0xFF5C3D2E),
+    return PageRefreshRegistrar(
+      onRefresh: provider.loadTransaksi,
+      child: Scaffold(
+        backgroundColor: const Color(0xFFF8F9FA),
+        appBar: buildStandaloneAppBar(
+          context,
+          title: 'Riwayat Transaksi',
           onRefresh: provider.loadTransaksi,
-          child: CustomScrollView(
-            slivers: [
-              // ── Header Bar ──────────────────────────────────────────
-              SliverToBoxAdapter(
-                child: Padding(
-                  padding: EdgeInsets.symmetric(
-                    horizontal: isDesktop ? 32 : 16,
-                    vertical: 20,
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      _buildHeader(provider, isDesktop),
-                      const SizedBox(height: 16),
-                      _buildDateFilters(provider),
+        ),
+        body: SafeArea(
+          child: RefreshIndicator(
+            color: const Color(0xFF5C3D2E),
+            onRefresh: provider.loadTransaksi,
+            child: CustomScrollView(
+              slivers: [
+                // ── Filter & Summary Bar ────────────────────────────────
+                SliverToBoxAdapter(
+                  child: Padding(
+                    padding: EdgeInsets.symmetric(
+                      horizontal: isDesktop ? 32 : 16,
+                      vertical: 14,
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        _buildDateFilters(provider),
                       const SizedBox(height: 20),
                       _buildKpiMetrics(provider, isDesktop),
                       const SizedBox(height: 24),
@@ -177,68 +187,7 @@ class _TransaksiViewState extends State<_TransaksiView> with SingleTickerProvide
           ),
         ),
       ),
-    );
-  }
-
-  // ── Header Bar ──────────────────────────────────────────────────────────────
-  Widget _buildHeader(TransaksiProvider provider, bool isDesktop) {
-    return Row(
-      children: [
-        Container(
-          padding: const EdgeInsets.all(12),
-          decoration: BoxDecoration(
-            color: const Color(0xFF5C3D2E),
-            borderRadius: BorderRadius.circular(14),
-            boxShadow: [
-              BoxShadow(
-                color: const Color(0xFF5C3D2E).withValues(alpha: 0.25),
-                blurRadius: 10,
-                offset: const Offset(0, 4),
-              ),
-            ],
-          ),
-          child: const Icon(Icons.receipt_long_rounded, color: Colors.white, size: 28),
-        ),
-        const SizedBox(width: 16),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                'Riwayat & Rekap Transaksi',
-                style: GoogleFonts.outfit(
-                  fontSize: isDesktop ? 24 : 20,
-                  fontWeight: FontWeight.w800,
-                  color: const Color(0xFF1F1F1F),
-                ),
-              ),
-              const SizedBox(height: 2),
-              Text(
-                'Pantau detail penjualan menu & estimasi pemakaian bahan untuk uji coba stok',
-                style: GoogleFonts.outfit(
-                  fontSize: 13,
-                  color: Colors.grey.shade600,
-                ),
-              ),
-            ],
-          ),
-        ),
-        IconButton.filledTonal(
-          onPressed: provider.isLoading ? null : provider.loadTransaksi,
-          icon: provider.isLoading
-              ? const SizedBox(
-                  width: 18,
-                  height: 18,
-                  child: CircularProgressIndicator(strokeWidth: 2),
-                )
-              : const Icon(Icons.refresh_rounded),
-          style: IconButton.styleFrom(
-            backgroundColor: Colors.white,
-            foregroundColor: const Color(0xFF5C3D2E),
-          ),
-          tooltip: 'Refresh Data',
-        ),
-      ],
+      ),
     );
   }
 
@@ -385,7 +334,7 @@ class _TransaksiViewState extends State<_TransaksiView> with SingleTickerProvide
           physics: const NeverScrollableScrollPhysics(),
           mainAxisSpacing: 12,
           crossAxisSpacing: 12,
-          childAspectRatio: isDesktop ? 2.2 : (crossCount == 2 ? 1.6 : 1.9),
+          childAspectRatio: isDesktop ? 2.1 : (crossCount == 2 ? 1.35 : 1.7),
           children: [
             _buildKpiCard(
               title: 'Total Omset',
@@ -449,14 +398,19 @@ class _TransaksiViewState extends State<_TransaksiView> with SingleTickerProvide
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text(
-                title,
-                style: GoogleFonts.outfit(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w600,
-                  color: Colors.grey.shade600,
+              Expanded(
+                child: Text(
+                  title,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: GoogleFonts.outfit(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    color: Colors.grey.shade600,
+                  ),
                 ),
               ),
+              const SizedBox(width: 6),
               Container(
                 padding: const EdgeInsets.all(6),
                 decoration: BoxDecoration(
@@ -822,14 +776,19 @@ class _TransaksiViewState extends State<_TransaksiView> with SingleTickerProvide
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            Text(
-              'Daftar Transaksi',
-              style: GoogleFonts.outfit(
-                fontSize: 18,
-                fontWeight: FontWeight.w800,
-                color: const Color(0xFF1F1F1F),
+            Expanded(
+              child: Text(
+                'Daftar Transaksi',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: GoogleFonts.outfit(
+                  fontSize: 18,
+                  fontWeight: FontWeight.w800,
+                  color: const Color(0xFF1F1F1F),
+                ),
               ),
             ),
+            const SizedBox(width: 8),
             Text(
               '${provider.filteredTransaksi.length} transaksi',
               style: GoogleFonts.outfit(

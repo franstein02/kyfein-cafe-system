@@ -8,6 +8,7 @@ from sqlalchemy.pool import StaticPool
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
 
 from app.main import app
+from app.core.config import settings
 from app.core.deps import get_db
 from app.core.security import create_access_token
 from app.core.utils import now_local
@@ -26,6 +27,15 @@ def set_sqlite_pragma(dbapi_connection, connection_record):
         cursor = dbapi_connection.cursor()
         cursor.execute("PRAGMA foreign_keys=ON")
         cursor.close()
+
+
+@pytest.fixture(autouse=True)
+def isolate_uploads_and_supabase(tmp_path, monkeypatch):
+    """Jaga agar pytest tidak menyentuh folder uploads produksi atau bucket Supabase live."""
+    test_upload_dir = tmp_path / "uploads"
+    test_upload_dir.mkdir(parents=True, exist_ok=True)
+    monkeypatch.setattr(settings, "UPLOAD_DIR", str(test_upload_dir))
+    monkeypatch.setattr(settings, "SUPABASE_SYNC_ENABLED", False)
 
 @pytest_asyncio.fixture
 async def test_engine():
@@ -206,9 +216,11 @@ def mock_time_10():
     modules = [
         'app.api.v1.endpoints.absensi.now_local',
         'app.api.v1.endpoints.jadwal.now_local',
+        'app.api.v1.endpoints.kds.now_local',
         'app.api.v1.endpoints.reporting.now_local',
         'app.api.v1.endpoints.stok.now_local',
         'app.api.v1.endpoints.transaksi.now_local',
+        'app.services.jadwal_service.now_local',
         'app.models.absensi.now_local',
         'app.models.foto.now_local',
         'app.models.jadwal.now_local',
@@ -248,9 +260,11 @@ def mock_time_at():
         modules = [
             'app.api.v1.endpoints.absensi.now_local',
             'app.api.v1.endpoints.jadwal.now_local',
+            'app.api.v1.endpoints.kds.now_local',
             'app.api.v1.endpoints.reporting.now_local',
             'app.api.v1.endpoints.stok.now_local',
             'app.api.v1.endpoints.transaksi.now_local',
+            'app.services.jadwal_service.now_local',
             'app.models.absensi.now_local',
             'app.models.foto.now_local',
             'app.models.jadwal.now_local',

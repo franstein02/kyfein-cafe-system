@@ -8,7 +8,8 @@ class ShiftTemplate(Base):
     __tablename__ = "shift_template"
 
     id = Column(String(36), primary_key=True, default=generate_uuid)
-    shift = Column(SQLEnum('shift_1', 'shift_2', name='enum_shift_type'), nullable=False, unique=True)
+    shift = Column(String(50), nullable=False, unique=True)
+    nama = Column(String(100), nullable=False)
     jam_mulai = Column(Time, nullable=False)
     jam_selesai = Column(Time, nullable=False)
     updated_at = Column(DateTime, nullable=False, default=now_local, onupdate=now_local)
@@ -19,7 +20,7 @@ class JadwalShift(Base):
     id = Column(String(36), primary_key=True, default=generate_uuid)
     karyawan_id = Column(String(36), ForeignKey("karyawan.id", ondelete="RESTRICT"), nullable=False)
     tanggal = Column(Date, nullable=False)
-    shift = Column(SQLEnum('shift_1', 'shift_2', name='enum_shift_type'), nullable=False)
+    shift = Column(String(50), nullable=False)
     area_kerja = Column(SQLEnum('kasir', 'bar', 'kitchen', name='enum_area_kerja'), nullable=False) # [FIX-2]
     shift_template_id = Column(String(36), ForeignKey("shift_template.id", ondelete="SET NULL"), nullable=True)
     jam_mulai = Column(Time, nullable=False)
@@ -41,6 +42,8 @@ class TukarShift(Base):
     karyawan_pengaju_id = Column(String(36), ForeignKey("karyawan.id", ondelete="RESTRICT"), nullable=False)
     karyawan_target_id = Column(String(36), ForeignKey("karyawan.id", ondelete="RESTRICT"), nullable=False)
     status = Column(SQLEnum('pending', 'disetujui', 'ditolak', name='enum_tukar_shift_status'), nullable=False, default='pending')
+    status_target = Column(SQLEnum('pending', 'disetujui', 'ditolak', name='enum_tukar_shift_target_status'), nullable=False, default='pending')
+    dikonfirmasi_target_at = Column(DateTime, nullable=True)
     alasan = Column(Text, nullable=True)
     diajukan_at = Column(DateTime, nullable=False, default=now_local)
     diproses_oleh = Column(String(36), ForeignKey("karyawan.id", ondelete="SET NULL"), nullable=True)

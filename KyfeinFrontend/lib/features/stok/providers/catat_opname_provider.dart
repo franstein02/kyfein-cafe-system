@@ -79,6 +79,7 @@ class OpnameBahanFormState {
 
 class CatatOpnameProvider with ChangeNotifier {
   final AuthProvider? _auth;
+  final TitikStok? _lockedTitik;
 
   TitikStok _titik = TitikStok.bar;
   MetodeOpname _metodeAwal = MetodeOpname.hitungManual;
@@ -100,11 +101,31 @@ class CatatOpnameProvider with ChangeNotifier {
   final Map<String, Map<String, double>> _savedResults = {};
   final Map<String, bool> _isEditing = {};
 
+  static TitikStok? _resolveLockedTitik(
+    AuthProvider? auth,
+    TitikStok? initialTitik,
+  ) {
+    final role = auth?.role?.toLowerCase();
+    final divisi = auth?.divisi?.toLowerCase();
+    if (role != 'admin') {
+      if (initialTitik != null) return initialTitik;
+      if (divisi == 'kitchen') return TitikStok.kitchen;
+      if (divisi == 'bar') return TitikStok.bar;
+    }
+    return null;
+  }
+
   CatatOpnameProvider({AuthProvider? auth, TitikStok? initialTitik})
       : _auth = auth,
-        _titik = initialTitik ?? TitikStok.bar;
+        _lockedTitik = _resolveLockedTitik(auth, initialTitik),
+        _titik = _resolveLockedTitik(auth, initialTitik) ??
+            initialTitik ??
+            ((auth?.divisi?.toLowerCase() == 'kitchen')
+                ? TitikStok.kitchen
+                : TitikStok.bar);
 
   TitikStok get titik => _titik;
+  bool get canSwitchTitik => _lockedTitik == null;
   MetodeOpname get metodeAwal => _metodeAwal;
   bool get isLoading => _isLoading;
   bool get isSubmitting => _isSubmitting;
@@ -136,7 +157,7 @@ class CatatOpnameProvider with ChangeNotifier {
       };
 
   void setTitik(TitikStok t) {
-    if (_titik == t) return;
+    if (_lockedTitik != null || _titik == t) return;
     _titik = t;
     _searchQuery = '';
     notifyListeners();
@@ -148,7 +169,7 @@ class CatatOpnameProvider with ChangeNotifier {
   }
 
   List<Bahan> get filteredBahan {
-    var list = List<Bahan>.from(_allBahan);
+    var list = _allBahan.where((b) => b.cocokUntukTitik(_titik)).toList();
 
     if (_searchQuery.trim().isNotEmpty) {
       final q = _searchQuery.toLowerCase();
@@ -444,21 +465,17 @@ class CatatOpnameProvider with ChangeNotifier {
 
   List<Bahan> _defaultBahanList() {
     return const [
-      Bahan(id: 'b-kopi', nama: 'Biji Kopi House Blend', satuan: 'gram', isiPerKemasan: 1000, stokMinimum: 500),
-      Bahan(id: 'b-uht', nama: 'Susu UHT Diamond', satuan: 'ml', isiPerKemasan: 1000, stokMinimum: 3000),
-      Bahan(id: 'b-aren', nama: 'Sirup Gula Aren Organik', satuan: 'ml', isiPerKemasan: 1000, stokMinimum: 1000),
-      Bahan(id: 'b-matcha', nama: 'Bubuk Matcha Kyoto', satuan: 'gram', isiPerKemasan: 500, stokMinimum: 200),
-      Bahan(id: 'b-gula', nama: 'Gula Cair Fruktosa', satuan: 'ml', isiPerKemasan: 1000, stokMinimum: 1000),
-      Bahan(id: 'b-cup16', nama: 'Cup Plastik 16oz + Tutup', satuan: 'pcs', isiPerKemasan: 50, stokMinimum: 50),
-      Bahan(id: 'b-sedotan', nama: 'Sedotan Kertas Steril', satuan: 'pcs', isiPerKemasan: 100, stokMinimum: 50),
-      Bahan(id: 'b-beras', nama: 'Beras Premium', satuan: 'gram', isiPerKemasan: 5000, stokMinimum: 2000),
-      Bahan(id: 'b-telur', nama: 'Telur Ayam Negeri', satuan: 'pcs', isiPerKemasan: 30, stokMinimum: 20),
-      Bahan(id: 'b-minyak', nama: 'Minyak Goreng Sawit', satuan: 'ml', isiPerKemasan: 2000, stokMinimum: 1000),
-      Bahan(id: 'b-bumbu-nasgor', nama: 'Bumbu Racik Nasi Goreng', satuan: 'gram', isiPerKemasan: 500, stokMinimum: 200),
-      Bahan(id: 'b-basmati', nama: 'Beras Basmati Import', satuan: 'gram', isiPerKemasan: 5000, stokMinimum: 1000),
-      Bahan(id: 'b-kambing', nama: 'Daging Kambing Potong', satuan: 'gram', isiPerKemasan: 1000, stokMinimum: 1000),
-      Bahan(id: 'b-samin', nama: 'Minyak Samin', satuan: 'ml', isiPerKemasan: 1000, stokMinimum: 500),
-      Bahan(id: 'b-bumbu-kebuli', nama: 'Bumbu Rempah Kebuli', satuan: 'gram', isiPerKemasan: 500, stokMinimum: 200),
+      Bahan(id: 'b-kopi', nama: 'Biji Kopi House Blend', satuan: 'gram', area: 'bar', isiPerKemasan: 1000, stokMinimum: 50),
+      Bahan(id: 'b-uht', nama: 'Susu UHT Diamond', satuan: 'ml', area: 'bar', isiPerKemasan: 1000, stokMinimum: 50),
+      Bahan(id: 'b-aren', nama: 'Sirup Gula Aren Organik', satuan: 'ml', area: 'bar', isiPerKemasan: 1000, stokMinimum: 10),
+      Bahan(id: 'b-matcha', nama: 'Bubuk Matcha Kyoto', satuan: 'gram', area: 'bar', isiPerKemasan: 1000, stokMinimum: 10),
+      Bahan(id: 'b-cup16', nama: 'Cup Plastik 16oz + Tutup', satuan: 'pcs', area: 'bar', isiPerKemasan: 50, stokMinimum: 100),
+      Bahan(id: 'b-beras', nama: 'Beras Putih', satuan: 'gram', area: 'kitchen', isiPerKemasan: 5000, stokMinimum: 4),
+      Bahan(id: 'b-telur', nama: 'Telur Ayam', satuan: 'pcs', area: 'kitchen', isiPerKemasan: 15, stokMinimum: 4),
+      Bahan(id: 'b-minyak', nama: 'Minyak Goreng', satuan: 'ml', area: 'kitchen', isiPerKemasan: 2000, stokMinimum: 5),
+      Bahan(id: 'b-bumbu-nasgor', nama: 'Bumbu Nasi Goreng', satuan: 'gram', area: 'kitchen', isiPerKemasan: 500, stokMinimum: 4),
+      Bahan(id: 'b-basmati', nama: 'Beras Basmati', satuan: 'gram', area: 'kitchen', isiPerKemasan: 5000, stokMinimum: 2),
+      Bahan(id: 'b-kambing', nama: 'Daging Kambing', satuan: 'gram', area: 'kitchen', isiPerKemasan: 1000, stokMinimum: 3),
     ];
   }
 

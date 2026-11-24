@@ -41,11 +41,16 @@ class _FakeDashboardProvider extends DashboardProvider {
     periodePerilakuSelesai: '2026-11-14',
     totalPenjualan: 1250000,
     totalHppTeoritis: 450000,
+    labaKotor: 800000,
     pengeluaranBulananProRata: 100000,
     pengeluaranMendadak: 50000,
     totalPengeluaran: 150000,
     netProfit: 650000,
     marginProfitPersen: 52.0,
+    totalBelanjaBarangMasuk: 43233500,
+    totalPengeluaranKas: 43383500,
+    arusKasBersih: -42133500,
+    nilaiAsetStokSaatIni: 43233500,
     jumlahTransaksi: 25,
     jumlahTransaksiDibatalkan: 1,
     rataRataTransaksi: 50000,
@@ -254,42 +259,51 @@ void main() {
     await tester.pumpWidget(buildApp(fakeDash));
     await tester.pumpAndSettle();
 
-    // 1. Verifikasi KPI Penjualan, Keuntungan Bersih, HPP & Biaya, Transaksi
+    // 1. Verifikasi KPI Penjualan, Keuntungan Bersih, HPP & Biaya, Transaksi + Arus Kas & Stok
     expect(find.text('Total Penjualan'), findsOneWidget);
     expect(find.text('Keuntungan Bersih'), findsOneWidget);
     expect(find.text('HPP & Biaya Ops'), findsOneWidget);
     expect(find.text('Transaksi Selesai'), findsOneWidget);
     expect(find.textContaining('+15.4% vs sblmnya'), findsOneWidget);
     expect(find.textContaining('Margin 52.0%'), findsOneWidget);
+    expect(find.text('Total Pengeluaran Kas'), findsOneWidget);
+    expect(find.text('Arus Kas Bersih'), findsOneWidget);
+    expect(find.text('Aset Stok Tersisa'), findsOneWidget);
 
     // 2. Scroll ke Grafik Penjualan & Profit agar terlihat utuh di tengah layar
     final scrollViewFinder = find.byType(CustomScrollView);
-    await tester.drag(scrollViewFinder, const Offset(0, -320));
+    await tester.ensureVisible(find.text('Grafik Penjualan & Profit'));
     await tester.pumpAndSettle();
     expect(find.text('Grafik Penjualan & Profit'), findsOneWidget);
 
+    await tester.ensureVisible(find.text('Profit'));
+    await tester.pumpAndSettle();
     await tester.tap(find.text('Profit'));
     await tester.pumpAndSettle();
     expect(find.text('Rugi / Minus (-)'), findsOneWidget);
 
+    await tester.ensureVisible(find.text('Semua'));
+    await tester.pumpAndSettle();
     await tester.tap(find.text('Semua'));
     await tester.pumpAndSettle();
 
     // 3. Test filter Per Jam Hari Ini & preset 7 Hari
+    await tester.ensureVisible(find.text('Per Jam Hari Ini'));
+    await tester.pumpAndSettle();
     await tester.tap(find.text('Per Jam Hari Ini'));
     await tester.pumpAndSettle();
     expect(fakeDash.lastChartMode, 'jam');
 
-    await tester.drag(scrollViewFinder, const Offset(0, 320));
+    await tester.ensureVisible(find.text('7 Hari'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('7 Hari'));
     await tester.pumpAndSettle();
     expect(fakeDash.lastAppliedPreset, '7_hari');
 
     // 4. Scroll ke Perilaku & Kedisiplinan Karyawan dan cek kategori + filter
-    await tester.drag(scrollViewFinder, const Offset(0, -550));
+    await tester.drag(scrollViewFinder, const Offset(0, -650));
     await tester.pumpAndSettle();
-    await tester.drag(scrollViewFinder, const Offset(0, -450));
+    await tester.drag(scrollViewFinder, const Offset(0, -550));
     await tester.pumpAndSettle();
 
     expect(find.text('Perilaku & Kedisiplinan Karyawan'), findsOneWidget);
@@ -299,6 +313,8 @@ void main() {
     expect(find.text('Lupa pulang 1x'), findsOneWidget);
     expect(find.text('Disiplin'), findsOneWidget);
 
+    await tester.ensureVisible(find.text('Perlu Perhatian (1)'));
+    await tester.pumpAndSettle();
     await tester.tap(find.text('Perlu Perhatian (1)'));
     await tester.pumpAndSettle();
     expect(find.text('Riko'), findsOneWidget);

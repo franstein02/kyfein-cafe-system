@@ -6,8 +6,10 @@ import 'package:http/http.dart' as http;
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 import 'package:kyfein_frontend/core/constants/api_endpoints.dart';
+import 'package:kyfein_frontend/core/widgets/page_refresh_scope.dart';
 import 'package:kyfein_frontend/features/attendance/providers/attendance_provider.dart';
 import 'package:kyfein_frontend/features/auth/providers/auth_provider.dart';
+import 'package:kyfein_frontend/features/dashboard/providers/dashboard_provider.dart';
 
 const _brown = Color(0xFF1B4332);
 const _cream = Color(0xFFF6F8F6);
@@ -16,16 +18,45 @@ const _textDim = Color(0xFF7A7A7A);
 enum _DateScheduleStatus { none, partial, complete }
 
 _DateScheduleStatus _computeScheduleStatus(
-    List<Map<String, dynamic>> entries) {
+  List<Map<String, dynamic>> entries, [
+  List<String> expectedShifts = const ['shift_1', 'shift_2'],
+  Set<String> activeKaryawanIds = const {},
+  List<Map<String, dynamic>> requestOff = const [],
+]) {
   if (entries.isEmpty) return _DateScheduleStatus.none;
+  if (activeKaryawanIds.isNotEmpty) {
+    final scheduledIds = entries
+        .map((j) => (j['karyawan_id'] ?? '').toString())
+        .where((id) => id.isNotEmpty)
+        .toSet();
+    final offIds = requestOff
+        .map((r) => (r['karyawan_id'] ?? '').toString())
+        .where((id) => id.isNotEmpty)
+        .toSet();
+    final coveredIds = {...scheduledIds, ...offIds};
+    return activeKaryawanIds.every(coveredIds.contains)
+        ? _DateScheduleStatus.complete
+        : _DateScheduleStatus.partial;
+  }
   final shifts = entries
       .map((j) => (j['shift'] ?? '').toString())
       .where((s) => s.isNotEmpty)
       .toSet();
-  if (shifts.contains('shift_1') && shifts.contains('shift_2')) {
+  final requiredShifts =
+      expectedShifts.isNotEmpty ? expectedShifts : const ['shift_1', 'shift_2'];
+  if (requiredShifts.every(shifts.contains)) {
     return _DateScheduleStatus.complete;
   }
   return _DateScheduleStatus.partial;
+}
+
+String _defaultShiftTitleFromKey(String shiftKey) {
+  final parts = shiftKey
+      .split('_')
+      .where((p) => p.trim().isNotEmpty)
+      .map((p) => p[0].toUpperCase() + p.substring(1).toLowerCase())
+      .toList();
+  return parts.isEmpty ? 'Shift' : parts.join(' ');
 }
 
 class AdminJadwalScreen extends StatefulWidget {
@@ -79,9 +110,6 @@ class _AdminJadwalScreenState extends State<AdminJadwalScreen> {
   Map<String, String> get _headers => context.read<AuthProvider>().authHeaders;
 
   String get _tanggalStr => DateFormat('yyyy-MM-dd').format(_tanggal);
-
-  int get _totalPending =>
-      _tukar.length + _izinTelat.length + _izinTidakMasuk.length;
 
   List<Map<String, dynamic>> get _requestOffPadaTanggal => _requestOff
       .where((r) => (r['tanggal'] ?? '').toString() == _tanggalStr)
@@ -144,6 +172,49 @@ class _AdminJadwalScreenState extends State<AdminJadwalScreen> {
     return fallback;
   }
 
+  List<Map<String, dynamic>> get _effectiveTemplates {
+    if (_shiftTemplates.isNotEmpty) return _shiftTemplates;
+    return const [
+      {
+        'id': 'default_shift_1',
+        'shift': 'shift_1',
+        'nama': 'Shift 1',
+        'jam_mulai': '08:00:00',
+        'jam_selesai': '16:00:00',
+      },
+      {
+        'id': 'default_shift_2',
+        'shift': 'shift_2',
+        'nama': 'Shift 2',
+        'jam_mulai': '16:00:00',
+        'jam_selesai': '23:00:00',
+      },
+    ];
+  }
+
+  List<String> get _expectedShiftKeys => _effectiveTemplates
+      .map((t) => (t['shift'] ?? '').toString())
+      .where((s) => s.isNotEmpty)
+      .toList();
+
+  Set<String> get _activeKaryawanIds => _karyawan
+      .where((k) =>
+          k['status_aktif'] != false &&
+          (k['role'] ?? 'karyawan').toString() == 'karyawan')
+      .map((k) => (k['id'] ?? '').toString())
+      .where((id) => id.isNotEmpty)
+      .toSet();
+
+  String _shiftDisplayName(String shiftKey) {
+    for (final t in _effectiveTemplates) {
+      if ((t['shift'] ?? '').toString() == shiftKey) {
+        final nama = (t['nama'] ?? '').toString().trim();
+        if (nama.isNotEmpty) return nama;
+      }
+    }
+    return _defaultShiftTitleFromKey(shiftKey);
+  }
+
   (TimeOfDay, TimeOfDay) _templateTimesFor(String shiftKey) {
     final defMulai = shiftKey == 'shift_2'
         ? const TimeOfDay(hour: 16, minute: 0)
@@ -151,7 +222,9 @@ class _AdminJadwalScreenState extends State<AdminJadwalScreen> {
     final defSelesai = shiftKey == 'shift_2'
         ? const TimeOfDay(hour: 23, minute: 0)
         : const TimeOfDay(hour: 16, minute: 0);
-    final match = _shiftTemplates.where((t) => t['shift'] == shiftKey).toList();
+    final match = _effectiveTemplates
+        .where((t) => (t['shift'] ?? '').toString() == shiftKey)
+        .toList();
     if (match.isEmpty) return (defMulai, defSelesai);
     final row = match.first;
     return (
@@ -161,7 +234,7 @@ class _AdminJadwalScreenState extends State<AdminJadwalScreen> {
   }
 
   String _shiftOptionLabel(String shiftKey) {
-    final title = shiftKey == 'shift_2' ? 'Shift 2' : 'Shift 1';
+    final title = _shiftDisplayName(shiftKey);
     final (mulai, selesai) = _templateTimesFor(shiftKey);
     return '$title (${_fmtTodShort(mulai)} – ${_fmtTodShort(selesai)})';
   }
@@ -287,11 +360,7 @@ class _AdminJadwalScreenState extends State<AdminJadwalScreen> {
       _izinTidakMasuk = att.izinTidakMasuk;
       _loadError = att.error;
 
-      for (final shiftKey in ['shift_1', 'shift_2']) {
-        final (m, s) = _templateTimesFor(shiftKey);
-        _tplMulaiDraft[shiftKey] = m;
-        _tplSelesaiDraft[shiftKey] = s;
-      }
+      _syncTemplateDrafts();
 
       if (!_jamCustomEdited) {
         final (m, s) = _templateTimesFor(_shift);
@@ -358,20 +427,36 @@ class _AdminJadwalScreenState extends State<AdminJadwalScreen> {
     if (mounted) setState(() => _saving = false);
   }
 
-  Future<void> _prosesTukar(String id, String status) async {
+  Future<void> _prosesApproval({
+    required String url,
+    required String status,
+    required String approvedMsg,
+    required String rejectedMsg,
+  }) async {
     try {
       final resp = await http
           .put(
-            Uri.parse(ApiEndpoints.approvalTukarShift(id)),
+            Uri.parse(url),
             headers: _headers,
             body: jsonEncode({'status': status}),
           )
-          .timeout(const Duration(seconds: 10));
+          .timeout(const Duration(seconds: 15));
       if (resp.statusCode == 200) {
-        _snack(status == 'disetujui'
-            ? 'Tukar shift disetujui'
-            : 'Tukar shift ditolak');
+        _snack(status == 'disetujui' ? approvedMsg : rejectedMsg);
         await _loadAll();
+        if (mounted) {
+          try {
+            await context.read<DashboardProvider>().refresh();
+          } catch (_) {}
+        }
+      } else if (resp.statusCode == 409 || resp.statusCode == 404) {
+        _snack(_errorMsg(resp));
+        await _loadAll();
+        if (mounted) {
+          try {
+            await context.read<DashboardProvider>().refresh();
+          } catch (_) {}
+        }
       } else {
         _snack(_errorMsg(resp));
       }
@@ -380,49 +465,26 @@ class _AdminJadwalScreenState extends State<AdminJadwalScreen> {
     }
   }
 
-  Future<void> _prosesIzinTelat(String id, String status) async {
-    try {
-      final resp = await http
-          .put(
-            Uri.parse(ApiEndpoints.approvalIzinTelat(id)),
-            headers: _headers,
-            body: jsonEncode({'status': status}),
-          )
-          .timeout(const Duration(seconds: 10));
-      if (resp.statusCode == 200) {
-        _snack(status == 'disetujui'
-            ? 'Izin terlambat disetujui'
-            : 'Izin terlambat ditolak');
-        await _loadAll();
-      } else {
-        _snack(_errorMsg(resp));
-      }
-    } catch (_) {
-      _snack('Tidak bisa terhubung ke server');
-    }
-  }
+  Future<void> _prosesTukar(String id, String status) => _prosesApproval(
+        url: ApiEndpoints.approvalTukarShift(id),
+        status: status,
+        approvedMsg: 'Tukar shift disetujui',
+        rejectedMsg: 'Tukar shift ditolak',
+      );
 
-  Future<void> _prosesIzinTidakMasuk(String id, String status) async {
-    try {
-      final resp = await http
-          .put(
-            Uri.parse(ApiEndpoints.approvalIzinTidakMasuk(id)),
-            headers: _headers,
-            body: jsonEncode({'status': status}),
-          )
-          .timeout(const Duration(seconds: 10));
-      if (resp.statusCode == 200) {
-        _snack(status == 'disetujui'
-            ? 'Izin tidak masuk disetujui'
-            : 'Izin tidak masuk ditolak');
-        await _loadAll();
-      } else {
-        _snack(_errorMsg(resp));
-      }
-    } catch (_) {
-      _snack('Tidak bisa terhubung ke server');
-    }
-  }
+  Future<void> _prosesIzinTelat(String id, String status) => _prosesApproval(
+        url: ApiEndpoints.approvalIzinTelat(id),
+        status: status,
+        approvedMsg: 'Izin terlambat disetujui',
+        rejectedMsg: 'Izin terlambat ditolak',
+      );
+
+  Future<void> _prosesIzinTidakMasuk(String id, String status) => _prosesApproval(
+        url: ApiEndpoints.approvalIzinTidakMasuk(id),
+        status: status,
+        approvedMsg: 'Izin tidak masuk disetujui',
+        rejectedMsg: 'Izin tidak masuk ditolak',
+      );
 
   Future<void> _hapusRequestOff(String id) async {
     try {
@@ -502,11 +564,29 @@ class _AdminJadwalScreenState extends State<AdminJadwalScreen> {
     }
   }
 
+  void _syncTemplateDrafts() {
+    final templates = _effectiveTemplates;
+    final keys = templates
+        .map((t) => (t['shift'] ?? '').toString())
+        .where((s) => s.isNotEmpty)
+        .toList();
+    _tplMulaiDraft.removeWhere((k, _) => !keys.contains(k));
+    _tplSelesaiDraft.removeWhere((k, _) => !keys.contains(k));
+    for (final shiftKey in keys) {
+      final (m, s) = _templateTimesFor(shiftKey);
+      _tplMulaiDraft[shiftKey] = m;
+      _tplSelesaiDraft[shiftKey] = s;
+    }
+    if (keys.isNotEmpty && !keys.contains(_shift)) {
+      _shift = keys.first;
+    }
+  }
+
   List<Map<String, dynamic>> _jadwalPadaTanggal(String tglStr) =>
       _allJadwal.where((j) => (j['tanggal'] ?? '').toString() == tglStr).toList();
 
   _DateScheduleStatus _statusJadwalTanggal(String tglStr) =>
-      _computeScheduleStatus(_jadwalPadaTanggal(tglStr));
+      _computeScheduleStatus(_jadwalPadaTanggal(tglStr), _expectedShiftKeys);
 
   Future<DateTime?> _openScheduleCalendar({
     required String title,
@@ -523,6 +603,8 @@ class _AdminJadwalScreenState extends State<AdminJadwalScreen> {
         lastDate: lastDate,
         allJadwal: _allJadwal,
         requestOff: _requestOff,
+        shiftTemplates: _effectiveTemplates,
+        activeKaryawanIds: _activeKaryawanIds,
         namaKaryawan: _namaKaryawan,
         formatHariTanggal: _formatHariTanggal,
         shortTime: _short,
@@ -637,15 +719,157 @@ class _AdminJadwalScreenState extends State<AdminJadwalScreen> {
       );
       if (!mounted) return;
       if (resp.statusCode == 200) {
-        final label = shiftKey == 'shift_2' ? 'Shift 2' : 'Shift 1';
+        final label = _shiftDisplayName(shiftKey);
         setState(() {
           _shiftTemplates = att.shiftTemplates;
+          _syncTemplateDrafts();
           if (!_jamCustomEdited && _shift == shiftKey) {
             _jamMulai = mulai;
             _jamSelesai = selesai;
           }
         });
         _snack('Template $label berhasil disimpan ke database');
+      } else {
+        _snack(_errorMsg(resp));
+      }
+    } catch (_) {
+      _snack('Tidak bisa terhubung ke server');
+    } finally {
+      if (mounted) setState(() => _savingTemplateShift = null);
+    }
+  }
+
+  Future<void> _openAddTemplateDialog() async {
+    final result = await showDialog<_TemplateFormResult>(
+      context: context,
+      builder: (_) => const _TemplateFormDialog(
+        title: 'Tambah Template Shift',
+        submitLabel: 'Tambah Template',
+        initialNama: '',
+        initialMulai: TimeOfDay(hour: 12, minute: 0),
+        initialSelesai: TimeOfDay(hour: 20, minute: 0),
+        showTimePickers: true,
+      ),
+    );
+    if (result == null || !mounted) return;
+
+    setState(() => _savingTemplateShift = '__creating__');
+    try {
+      final att = context.read<AttendanceProvider>();
+      final resp = await att.createShiftTemplate(
+        nama: result.nama,
+        jamMulai: _fmtTime(result.jamMulai),
+        jamSelesai: _fmtTime(result.jamSelesai),
+      );
+      if (!mounted) return;
+      if (resp.statusCode == 200 || resp.statusCode == 201) {
+        setState(() {
+          _shiftTemplates = att.shiftTemplates;
+          _syncTemplateDrafts();
+        });
+        _snack('Template ${result.nama} berhasil ditambahkan');
+      } else {
+        _snack(_errorMsg(resp));
+      }
+    } catch (_) {
+      _snack('Tidak bisa terhubung ke server');
+    } finally {
+      if (mounted) setState(() => _savingTemplateShift = null);
+    }
+  }
+
+  Future<void> _openRenameTemplateDialog(Map<String, dynamic> tpl) async {
+    final shiftKey = (tpl['shift'] ?? '').toString();
+    final currentNama = _shiftDisplayName(shiftKey);
+    final mulai = _tplMulaiDraft[shiftKey] ?? _templateTimesFor(shiftKey).$1;
+    final selesai = _tplSelesaiDraft[shiftKey] ?? _templateTimesFor(shiftKey).$2;
+
+    final result = await showDialog<_TemplateFormResult>(
+      context: context,
+      builder: (_) => _TemplateFormDialog(
+        title: 'Ubah Nama Template Shift',
+        submitLabel: 'Simpan Nama',
+        initialNama: currentNama,
+        initialMulai: mulai,
+        initialSelesai: selesai,
+        showTimePickers: false,
+      ),
+    );
+    if (result == null || !mounted) return;
+
+    setState(() => _savingTemplateShift = shiftKey);
+    try {
+      final att = context.read<AttendanceProvider>();
+      final resp = await att.updateShiftTemplate(
+        shift: shiftKey,
+        nama: result.nama,
+        jamMulai: _fmtTime(mulai),
+        jamSelesai: _fmtTime(selesai),
+      );
+      if (!mounted) return;
+      if (resp.statusCode == 200) {
+        setState(() {
+          _shiftTemplates = att.shiftTemplates;
+          _syncTemplateDrafts();
+        });
+        _snack('Nama template diubah menjadi ${result.nama}');
+      } else {
+        _snack(_errorMsg(resp));
+      }
+    } catch (_) {
+      _snack('Tidak bisa terhubung ke server');
+    } finally {
+      if (mounted) setState(() => _savingTemplateShift = null);
+    }
+  }
+
+  Future<void> _hapusTemplateShift(String shiftKey, String nama) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Text(
+          'Hapus Template Shift?',
+          style: GoogleFonts.outfit(fontWeight: FontWeight.w700, fontSize: 17),
+        ),
+        content: Text(
+          'Template "$nama" akan dihapus permanen dari database (hanya jika belum dipakai oleh jadwal shift manapun).',
+          style: const TextStyle(fontSize: 13.5, height: 1.4),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Batal'),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.red.shade600,
+              foregroundColor: Colors.white,
+            ),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Hapus'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+
+    setState(() => _savingTemplateShift = shiftKey);
+    try {
+      final att = context.read<AttendanceProvider>();
+      final resp = await att.deleteShiftTemplate(shiftKey);
+      if (!mounted) return;
+      if (resp.statusCode == 200) {
+        setState(() {
+          _shiftTemplates = att.shiftTemplates;
+          _syncTemplateDrafts();
+          if (!_jamCustomEdited) {
+            final (m, s) = _templateTimesFor(_shift);
+            _jamMulai = m;
+            _jamSelesai = s;
+          }
+        });
+        _snack('Template $nama berhasil dihapus');
       } else {
         _snack(_errorMsg(resp));
       }
@@ -672,180 +896,44 @@ class _AdminJadwalScreenState extends State<AdminJadwalScreen> {
   Widget build(BuildContext context) {
     final isApproval = _currentSection == 1;
     final isTemplate = _currentSection == 2;
-    final totalBadge = _totalPending + _requestOff.length;
-
-    final headerTitle = isTemplate
-        ? 'Template Jam Kerja Shift'
+    final standaloneTitle = isTemplate
+        ? 'Template Shift'
         : isApproval
-            ? 'Persetujuan Izin, Tukar Shift & Request Off'
-            : 'Penjadwalan Shift & Area Kerja Kasir';
-    final headerSubtitle = isTemplate
-        ? 'Atur jam mulai & selesai default Shift 1 dan Shift 2 di database'
-        : isApproval
-            ? 'Periksa dan setujui/tolak pengajuan tukar shift, izin terlambat, dan izin tidak masuk'
-            : 'Tetapkan jadwal Shift 1 / Shift 2 serta area kerja Kasir, Bar, atau Kitchen';
+            ? 'Approval Izin & Off'
+            : 'Atur Jadwal Shift';
 
-    return Scaffold(
-      backgroundColor: _cream,
-      body: Column(
-        children: [
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.fromLTRB(24, 18, 24, 18),
-            decoration: const BoxDecoration(
-              color: Colors.white,
-              border: Border(bottom: BorderSide(color: Color(0xFFE5EBE7))),
-            ),
-            child: Center(
-              child: ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 850),
-                child: Wrap(
-                  alignment: WrapAlignment.spaceBetween,
-                  crossAxisAlignment: WrapCrossAlignment.center,
-                  spacing: 16,
-                  runSpacing: 12,
-                  children: [
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Text(
-                          headerTitle,
-                          style: GoogleFonts.outfit(
-                            fontSize: 20,
-                            fontWeight: FontWeight.w700,
-                            color: const Color(0xFF1A1D1B),
-                          ),
-                        ),
-                        const SizedBox(height: 2),
-                        Text(
-                          headerSubtitle,
-                          style: const TextStyle(fontSize: 12.5, color: _textDim),
-                        ),
-                      ],
-                    ),
-                    Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Flexible(
-                          child: ConstrainedBox(
-                            constraints: const BoxConstraints(maxWidth: 250),
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 2),
-                              decoration: BoxDecoration(
-                                color: _cream,
-                                borderRadius: BorderRadius.circular(12),
-                                border: Border.all(color: const Color(0xFFE5EBE7)),
-                              ),
-                              child: DropdownButtonHideUnderline(
-                                child: DropdownButton<int>(
-                                  value: _currentSection,
-                                  isExpanded: true,
-                                  icon: const Padding(
-                                    padding: EdgeInsets.only(left: 8),
-                                    child: Icon(Icons.keyboard_arrow_down_rounded, color: _brown, size: 20),
-                                  ),
-                                  style: GoogleFonts.outfit(
-                                    fontSize: 13.5,
-                                    fontWeight: FontWeight.w600,
-                                    color: _brown,
-                                  ),
-                                  items: [
-                                    const DropdownMenuItem(
-                                      value: 0,
-                                      child: Row(
-                                        children: [
-                                          Icon(Icons.edit_calendar_rounded, size: 17, color: _brown),
-                                          SizedBox(width: 8),
-                                          Expanded(
-                                            child: Text(
-                                              'Atur Jadwal Shift',
-                                              maxLines: 1,
-                                              overflow: TextOverflow.ellipsis,
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                    DropdownMenuItem(
-                                      value: 1,
-                                      child: Row(
-                                        children: [
-                                          const Icon(Icons.fact_check_rounded, size: 17, color: _brown),
-                                          const SizedBox(width: 8),
-                                          Expanded(
-                                            child: Text(
-                                              'Approval & Off ($totalBadge)',
-                                              maxLines: 1,
-                                              overflow: TextOverflow.ellipsis,
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                    const DropdownMenuItem(
-                                      value: 2,
-                                      child: Row(
-                                        children: [
-                                          Icon(Icons.tune_rounded, size: 17, color: _brown),
-                                          SizedBox(width: 8),
-                                          Expanded(
-                                            child: Text(
-                                              'Template Shift',
-                                              maxLines: 1,
-                                              overflow: TextOverflow.ellipsis,
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                  ],
-                                  onChanged: (val) {
-                                    if (val != null) setState(() => _currentSection = val);
-                                  },
-                                ),
-                              ),
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 10),
-                        IconButton.outlined(
-                          icon: const Icon(Icons.refresh_rounded, size: 20),
-                          onPressed: _loadAll,
-                          style: IconButton.styleFrom(
-                            foregroundColor: _brown,
-                            side: const BorderSide(color: Color(0xFFE5EBE7)),
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ),
-          Expanded(
-            child: _loading
-                ? const Center(child: CircularProgressIndicator(color: _brown))
-                : _loadError != null
-                    ? Center(child: Text(_loadError!))
-                    : isTemplate
-                        ? _buildTabTemplateShift()
-                        : (isApproval ? _buildTabApproval() : _buildTabJadwal()),
-          ),
-        ],
+    return PageRefreshRegistrar(
+      onRefresh: _loadAll,
+      child: Scaffold(
+        backgroundColor: _cream,
+        appBar: buildStandaloneAppBar(
+          context,
+          title: standaloneTitle,
+          onRefresh: _loadAll,
+        ),
+        body: _loading
+            ? const Center(child: CircularProgressIndicator(color: _brown))
+            : _loadError != null
+                ? Center(child: Text(_loadError!))
+                : isTemplate
+                    ? _buildTabTemplateShift()
+                    : (isApproval ? _buildTabApproval() : _buildTabJadwal()),
       ),
     );
   }
 
-  Widget _wrap(Widget child) => SingleChildScrollView(
-        padding: const EdgeInsets.fromLTRB(24, 24, 24, 36),
-        child: Align(
-          alignment: Alignment.topCenter,
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 820),
-            child: child,
+  Widget _wrap(Widget child) => RefreshIndicator(
+        color: _brown,
+        onRefresh: _loadAll,
+        child: SingleChildScrollView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          padding: const EdgeInsets.fromLTRB(20, 16, 20, 32),
+          child: Align(
+            alignment: Alignment.topCenter,
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 820),
+              child: child,
+            ),
           ),
         ),
       );
@@ -1097,27 +1185,24 @@ class _AdminJadwalScreenState extends State<AdminJadwalScreen> {
                 LayoutBuilder(
                   builder: (context, constraints) {
                     final isNarrow = constraints.maxWidth < 420;
+                    final templateKeys = _expectedShiftKeys;
+                    final validShiftValue =
+                        templateKeys.contains(_shift) ? _shift : templateKeys.first;
                     final shiftDropdown = _dropdownField(
                       label: 'Shift',
-                      value: _shift,
-                      items: [
-                        DropdownMenuItem(
-                          value: 'shift_1',
-                          child: Text(
-                            _shiftOptionLabel('shift_1'),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ),
-                        DropdownMenuItem(
-                          value: 'shift_2',
-                          child: Text(
-                            _shiftOptionLabel('shift_2'),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ),
-                      ],
+                      value: validShiftValue,
+                      items: templateKeys
+                          .map(
+                            (k) => DropdownMenuItem(
+                              value: k,
+                              child: Text(
+                                _shiftOptionLabel(k),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                          )
+                          .toList(),
                       onChanged: _onShiftChanged,
                     );
                     final areaDropdown = _dropdownField(
@@ -1272,7 +1357,13 @@ class _AdminJadwalScreenState extends State<AdminJadwalScreen> {
 
   Widget _buildSelectedDateStatusHint(String tglStr) {
     final entries = _jadwalPadaTanggal(tglStr);
-    final status = _computeScheduleStatus(entries);
+    final offs = _requestOff
+        .where((r) => (r['tanggal'] ?? '').toString() == tglStr)
+        .toList();
+    final activeIds = _activeKaryawanIds;
+    final expectedKeys = _expectedShiftKeys;
+    final status =
+        _computeScheduleStatus(entries, expectedKeys, activeIds, offs);
     final shifts = entries.map((j) => (j['shift'] ?? '').toString()).toSet();
 
     final Color bgColor;
@@ -1287,16 +1378,55 @@ class _AdminJadwalScreenState extends State<AdminJadwalScreen> {
         borderColor = const Color(0xFF86EFAC);
         fgColor = const Color(0xFF166534);
         icon = Icons.check_circle_rounded;
-        text = 'Shift 1 & Shift 2 sudah lengkap (${entries.length} jadwal)';
+        if (activeIds.isNotEmpty) {
+          final offCount = activeIds
+              .where((id) => offs.any((r) => r['karyawan_id'].toString() == id))
+              .length;
+          text = offCount > 0
+              ? 'Semua ${activeIds.length} karyawan lengkap (${entries.length} jadwal, $offCount request off)'
+              : 'Semua ${activeIds.length} karyawan sudah mendapat shift (${entries.length} jadwal)';
+        } else if (expectedKeys.length == 2 &&
+            expectedKeys.contains('shift_1') &&
+            expectedKeys.contains('shift_2')) {
+          text = 'Shift 1 & Shift 2 sudah lengkap (${entries.length} jadwal)';
+        } else {
+          text =
+              'Semua ${expectedKeys.length} template shift lengkap (${entries.length} jadwal)';
+        }
         break;
       case _DateScheduleStatus.partial:
         bgColor = const Color(0xFFFEF3C7);
         borderColor = const Color(0xFFFCD34D);
         fgColor = const Color(0xFF92400E);
         icon = Icons.timelapse_rounded;
-        final filled = shifts.contains('shift_1') ? 'Shift 1' : 'Shift 2';
-        final missing = shifts.contains('shift_1') ? 'Shift 2' : 'Shift 1';
-        text = 'Baru $filled terisi — $missing belum dijadwalkan';
+        if (activeIds.isNotEmpty) {
+          final coveredIds = {
+            ...entries.map((e) => (e['karyawan_id'] ?? '').toString()),
+            ...offs.map((r) => (r['karyawan_id'] ?? '').toString()),
+          };
+          final coveredCount = activeIds.where(coveredIds.contains).length;
+          final missingCount = activeIds.length - coveredCount;
+          text =
+              'Baru $coveredCount/${activeIds.length} karyawan terjadwal — $missingCount belum mendapat shift';
+        } else {
+          final filledNames = expectedKeys
+              .where(shifts.contains)
+              .map(_shiftDisplayName)
+              .toList();
+          final missingNames = expectedKeys
+              .where((k) => !shifts.contains(k))
+              .map(_shiftDisplayName)
+              .toList();
+          if (expectedKeys.length == 2 &&
+              filledNames.length == 1 &&
+              missingNames.length == 1) {
+            text =
+                'Baru ${filledNames.first} terisi — ${missingNames.first} belum dijadwalkan';
+          } else {
+            text =
+                'Terisi ${filledNames.length}/${expectedKeys.length} shift — Belum: ${missingNames.join(", ")}';
+          }
+        }
         break;
       case _DateScheduleStatus.none:
         bgColor = const Color(0xFFF3F4F6);
@@ -1605,10 +1735,9 @@ class _AdminJadwalScreenState extends State<AdminJadwalScreen> {
                     ),
                     const Divider(height: 18),
                     ...listHari.map((j) {
-                      final shiftLabel = (j['shift'] ?? '')
-                          .toString()
-                          .replaceAll('_', ' ')
-                          .toUpperCase();
+                      final shiftLabel =
+                          _shiftDisplayName((j['shift'] ?? '').toString())
+                              .toUpperCase();
                       final areaLabel =
                           (j['area_kerja'] ?? '').toString().toUpperCase();
                       return Padding(
@@ -1870,8 +1999,17 @@ class _AdminJadwalScreenState extends State<AdminJadwalScreen> {
                     (j) => j['id'].toString() == t['shift_a_id'].toString(),
                     orElse: () => {},
                   );
-                  final tgl = shiftA['tanggal'] ?? '-';
+                  final tgl = t['tanggal_shift'] ?? shiftA['tanggal'] ?? '-';
                   final alasan = (t['alasan'] ?? '').toString();
+                  final statusTarget =
+                      (t['status_target'] ?? 'pending').toString().toLowerCase();
+                  final targetSudahSetuju = statusTarget == 'disetujui';
+                  final namaPengaju = (t['nama_pengaju'] ??
+                          _namaKaryawan(t['karyawan_pengaju_id']))
+                      .toString();
+                  final namaTarget = (t['nama_target'] ??
+                          _namaKaryawan(t['karyawan_target_id']))
+                      .toString();
                   return ListTile(
                     dense: true,
                     contentPadding: EdgeInsets.zero,
@@ -1882,24 +2020,64 @@ class _AdminJadwalScreenState extends State<AdminJadwalScreen> {
                           color: _brown, size: 18),
                     ),
                     title: Text(
-                      '${_namaKaryawan(t['karyawan_pengaju_id'])}  ⇄  ${_namaKaryawan(t['karyawan_target_id'])}',
+                      '$namaPengaju  ⇄  $namaTarget',
                       style: const TextStyle(
                           fontSize: 14, fontWeight: FontWeight.w600),
                     ),
-                    subtitle: Text(
-                      'Tanggal: $tgl${alasan.isNotEmpty ? '\nAlasan: $alasan' : ''}',
-                      style: const TextStyle(fontSize: 12, color: _textDim),
+                    subtitle: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Tanggal: $tgl${alasan.isNotEmpty ? '\nAlasan: $alasan' : ''}',
+                          style: const TextStyle(fontSize: 12, color: _textDim),
+                        ),
+                        const SizedBox(height: 4),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 8, vertical: 3),
+                          decoration: BoxDecoration(
+                            color: targetSudahSetuju
+                                ? Colors.green.shade50
+                                : Colors.amber.shade50,
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(
+                              color: targetSudahSetuju
+                                  ? Colors.green.shade300
+                                  : Colors.amber.shade300,
+                            ),
+                          ),
+                          child: Text(
+                            targetSudahSetuju
+                                ? '✓ Kedua Pihak Setuju ($namaTarget menyetujui)'
+                                : '⏳ Menunggu konfirmasi dari $namaTarget',
+                            style: TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w600,
+                              color: targetSudahSetuju
+                                  ? Colors.green.shade800
+                                  : Colors.amber.shade900,
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
-                    isThreeLine: alasan.isNotEmpty,
                     trailing: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         IconButton(
-                          tooltip: 'Setujui',
-                          icon: const Icon(Icons.check_circle_rounded,
-                              color: Color(0xFF10B981)),
-                          onPressed: () =>
-                              _prosesTukar(t['id'].toString(), 'disetujui'),
+                          tooltip: targetSudahSetuju
+                              ? 'Setujui'
+                              : 'Menunggu persetujuan rekan target ($namaTarget)',
+                          icon: Icon(
+                            Icons.check_circle_rounded,
+                            color: targetSudahSetuju
+                                ? const Color(0xFF10B981)
+                                : Colors.grey.shade400,
+                          ),
+                          onPressed: targetSudahSetuju
+                              ? () =>
+                                  _prosesTukar(t['id'].toString(), 'disetujui')
+                              : null,
                         ),
                         IconButton(
                           tooltip: 'Tolak',
@@ -1926,11 +2104,46 @@ class _AdminJadwalScreenState extends State<AdminJadwalScreen> {
     );
   }
 
+  (IconData, Color) _styleForTemplate(String shiftKey, int index, TimeOfDay start) {
+    if (shiftKey == 'shift_1') {
+      return (Icons.wb_sunny_rounded, const Color(0xFFD97706));
+    }
+    if (shiftKey == 'shift_2') {
+      return (Icons.nights_stay_rounded, const Color(0xFF4F46E5));
+    }
+    if (start.hour < 12) {
+      return (Icons.wb_twilight_rounded, const Color(0xFF0D9488));
+    }
+    if (start.hour < 17) {
+      return (Icons.schedule_rounded, _brown);
+    }
+    return (Icons.dark_mode_rounded, const Color(0xFF7C3AED));
+  }
+
   Widget _buildTabTemplateShift() {
+    final templates = _effectiveTemplates;
+    final isCreating = _savingTemplateShift == '__creating__';
+    final canDelete = _shiftTemplates.length > 1;
+
     return _wrap(
       Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          if (widget.initialSection != 2) ...[
+            TextButton.icon(
+              style: TextButton.styleFrom(
+                foregroundColor: _brown,
+                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+              ),
+              onPressed: () => setState(() => _currentSection = 0),
+              icon: const Icon(Icons.arrow_back_rounded, size: 17),
+              label: const Text(
+                'Kembali ke Atur Jadwal Shift',
+                style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
+              ),
+            ),
+            const SizedBox(height: 8),
+          ],
           Container(
             width: double.infinity,
             padding: const EdgeInsets.all(14),
@@ -1946,7 +2159,7 @@ class _AdminJadwalScreenState extends State<AdminJadwalScreen> {
                 SizedBox(width: 10),
                 Expanded(
                   child: Text(
-                    'Template Shift disimpan langsung di database (tabel shift_template) dan otomatis mengisi jam mulai & selesai saat Anda memilih Shift 1 atau Shift 2 di menu Atur Jadwal Shift.',
+                    'Template Shift disimpan langsung di database (tabel shift_template). Anda dapat menambah, mengubah nama & jam kerja, atau menghapus template shift sesuai kebutuhan operasional.',
                     style: TextStyle(
                       fontSize: 12.5,
                       color: Color(0xFF065F46),
@@ -1957,34 +2170,63 @@ class _AdminJadwalScreenState extends State<AdminJadwalScreen> {
               ],
             ),
           ),
-          const SizedBox(height: 16),
-          _buildTemplateShiftCard(
-            shiftKey: 'shift_1',
-            title: 'Shift 1 (Pagi / Siang)',
-            icon: Icons.wb_sunny_rounded,
-            accentColor: const Color(0xFFD97706),
+          const SizedBox(height: 14),
+          SizedBox(
+            width: double.infinity,
+            height: 46,
+            child: OutlinedButton.icon(
+              style: OutlinedButton.styleFrom(
+                foregroundColor: _brown,
+                backgroundColor: Colors.white,
+                side: const BorderSide(color: _brown, width: 1.2),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+              ),
+              onPressed: isCreating ? null : _openAddTemplateDialog,
+              icon: isCreating
+                  ? const SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: _brown,
+                      ),
+                    )
+                  : const Icon(Icons.add_circle_outline_rounded, size: 19),
+              label: const Text(
+                'Tambah Template Shift Baru',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(fontWeight: FontWeight.w600),
+              ),
+            ),
           ),
           const SizedBox(height: 16),
-          _buildTemplateShiftCard(
-            shiftKey: 'shift_2',
-            title: 'Shift 2 (Sore / Malam)',
-            icon: Icons.nights_stay_rounded,
-            accentColor: const Color(0xFF4F46E5),
-          ),
+          for (int i = 0; i < templates.length; i++) ...[
+            _buildTemplateShiftCard(
+              tpl: templates[i],
+              index: i,
+              canDelete: canDelete,
+            ),
+            if (i < templates.length - 1) const SizedBox(height: 16),
+          ],
         ],
       ),
     );
   }
 
   Widget _buildTemplateShiftCard({
-    required String shiftKey,
-    required String title,
-    required IconData icon,
-    required Color accentColor,
+    required Map<String, dynamic> tpl,
+    required int index,
+    required bool canDelete,
   }) {
+    final shiftKey = (tpl['shift'] ?? '').toString();
+    final title = _shiftDisplayName(shiftKey);
     final (dbMulai, dbSelesai) = _templateTimesFor(shiftKey);
     final draftMulai = _tplMulaiDraft[shiftKey] ?? dbMulai;
     final draftSelesai = _tplSelesaiDraft[shiftKey] ?? dbSelesai;
+    final (icon, accentColor) = _styleForTemplate(shiftKey, index, draftMulai);
 
     final startMin = draftMulai.hour * 60 + draftMulai.minute;
     final endMin = draftSelesai.hour * 60 + draftSelesai.minute;
@@ -2005,6 +2247,7 @@ class _AdminJadwalScreenState extends State<AdminJadwalScreen> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Container(
                 padding: const EdgeInsets.all(10),
@@ -2021,6 +2264,8 @@ class _AdminJadwalScreenState extends State<AdminJadwalScreen> {
                   children: [
                     Text(
                       title,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
                       style: GoogleFonts.outfit(
                         fontSize: 15.5,
                         fontWeight: FontWeight.w700,
@@ -2032,27 +2277,73 @@ class _AdminJadwalScreenState extends State<AdminJadwalScreen> {
                       'Aktif di DB: ${_fmtTodShort(dbMulai)} – ${_fmtTodShort(dbSelesai)}',
                       style: const TextStyle(fontSize: 12, color: _textDim),
                     ),
+                    const SizedBox(height: 6),
+                    Wrap(
+                      spacing: 6,
+                      runSpacing: 4,
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 8, vertical: 3),
+                          decoration: BoxDecoration(
+                            color: validDuration
+                                ? _brown.withValues(alpha: 0.08)
+                                : Colors.red.shade50,
+                            borderRadius: BorderRadius.circular(6),
+                          ),
+                          child: Text(
+                            durasiLabel,
+                            style: TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w600,
+                              color:
+                                  validDuration ? _brown : Colors.red.shade700,
+                            ),
+                          ),
+                        ),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 8, vertical: 3),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFF3F4F6),
+                            borderRadius: BorderRadius.circular(6),
+                          ),
+                          child: Text(
+                            shiftKey,
+                            style: const TextStyle(
+                              fontSize: 11,
+                              color: Color(0xFF4B5563),
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
                   ],
                 ),
               ),
-              Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                decoration: BoxDecoration(
-                  color: validDuration
-                      ? _brown.withValues(alpha: 0.08)
-                      : Colors.red.shade50,
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Text(
-                  durasiLabel,
-                  style: TextStyle(
-                    fontSize: 11.5,
-                    fontWeight: FontWeight.w600,
-                    color: validDuration ? _brown : Colors.red.shade700,
-                  ),
-                ),
+              IconButton(
+                tooltip: 'Ubah Nama Template',
+                visualDensity: VisualDensity.compact,
+                constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                padding: const EdgeInsets.all(6),
+                icon: const Icon(Icons.edit_outlined, size: 18, color: _brown),
+                onPressed:
+                    isSavingThis ? null : () => _openRenameTemplateDialog(tpl),
               ),
+              if (canDelete)
+                IconButton(
+                  tooltip: 'Hapus Template',
+                  visualDensity: VisualDensity.compact,
+                  constraints:
+                      const BoxConstraints(minWidth: 32, minHeight: 32),
+                  padding: const EdgeInsets.all(6),
+                  icon: Icon(Icons.delete_outline_rounded,
+                      size: 18, color: Colors.red.shade500),
+                  onPressed: isSavingThis
+                      ? null
+                      : () => _hapusTemplateShift(shiftKey, title),
+                ),
             ],
           ),
           const SizedBox(height: 16),
@@ -2156,6 +2447,8 @@ class _ScheduleCalendarDialog extends StatefulWidget {
   final DateTime lastDate;
   final List<Map<String, dynamic>> allJadwal;
   final List<Map<String, dynamic>> requestOff;
+  final List<Map<String, dynamic>> shiftTemplates;
+  final Set<String> activeKaryawanIds;
   final String Function(dynamic id) namaKaryawan;
   final String Function(String tglStr, {bool short}) formatHariTanggal;
   final String Function(dynamic t) shortTime;
@@ -2167,6 +2460,8 @@ class _ScheduleCalendarDialog extends StatefulWidget {
     required this.lastDate,
     required this.allJadwal,
     required this.requestOff,
+    required this.shiftTemplates,
+    this.activeKaryawanIds = const {},
     required this.namaKaryawan,
     required this.formatHariTanggal,
     required this.shortTime,
@@ -2200,6 +2495,29 @@ class _ScheduleCalendarDialogState extends State<_ScheduleCalendarDialog> {
   late DateTime _displayedMonth;
   late final Map<String, List<Map<String, dynamic>>> _jadwalByDate;
   late final Map<String, List<Map<String, dynamic>>> _offByDate;
+
+  List<String> get _expectedShifts {
+    final keys = widget.shiftTemplates
+        .map((t) => (t['shift'] ?? '').toString())
+        .where((s) => s.isNotEmpty)
+        .toList();
+    return keys.isNotEmpty ? keys : const ['shift_1', 'shift_2'];
+  }
+
+  bool get _isTwoDefaultShifts =>
+      _expectedShifts.length == 2 &&
+      _expectedShifts.contains('shift_1') &&
+      _expectedShifts.contains('shift_2');
+
+  String _templateTitle(String shiftKey) {
+    for (final t in widget.shiftTemplates) {
+      if ((t['shift'] ?? '').toString() == shiftKey) {
+        final nama = (t['nama'] ?? '').toString().trim();
+        if (nama.isNotEmpty) return nama;
+      }
+    }
+    return _defaultShiftTitleFromKey(shiftKey);
+  }
 
   @override
   void initState() {
@@ -2267,7 +2585,12 @@ class _ScheduleCalendarDialogState extends State<_ScheduleCalendarDialog> {
     final selectedStr = _fmt(_selectedDate);
     final selectedEntries = _jadwalByDate[selectedStr] ?? const [];
     final selectedOffs = _offByDate[selectedStr] ?? const [];
-    final selectedStatus = _computeScheduleStatus(selectedEntries);
+    final selectedStatus = _computeScheduleStatus(
+      selectedEntries,
+      _expectedShifts,
+      widget.activeKaryawanIds,
+      selectedOffs,
+    );
 
     final firstOfMonth =
         DateTime(_displayedMonth.year, _displayedMonth.month, 1);
@@ -2286,7 +2609,7 @@ class _ScheduleCalendarDialogState extends State<_ScheduleCalendarDialog> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            _buildHeader(selectedStr, selectedStatus),
+            _buildHeader(selectedStr, selectedEntries, selectedOffs, selectedStatus),
             Flexible(
               child: SingleChildScrollView(
                 padding: const EdgeInsets.fromLTRB(14, 12, 14, 8),
@@ -2383,18 +2706,44 @@ class _ScheduleCalendarDialogState extends State<_ScheduleCalendarDialog> {
     );
   }
 
-  Widget _buildHeader(String selectedStr, _DateScheduleStatus status) {
+  Widget _buildHeader(
+    String selectedStr,
+    List<Map<String, dynamic>> entries,
+    List<Map<String, dynamic>> offs,
+    _DateScheduleStatus status,
+  ) {
+    final expected = _expectedShifts;
+    final activeIds = widget.activeKaryawanIds;
+    final filledShiftsCount = entries
+        .map((e) => (e['shift'] ?? '').toString())
+        .where((s) => expected.contains(s))
+        .toSet()
+        .length;
+    final coveredIds = {
+      ...entries.map((e) => (e['karyawan_id'] ?? '').toString()),
+      ...offs.map((r) => (r['karyawan_id'] ?? '').toString()),
+    };
+    final coveredCount = activeIds.where(coveredIds.contains).length;
+
     final String statusLabel;
     final Color badgeBg;
     final Color badgeFg;
     switch (status) {
       case _DateScheduleStatus.complete:
-        statusLabel = 'Shift 1 & 2 Lengkap';
+        statusLabel = activeIds.isNotEmpty
+            ? 'Semua Karyawan Lengkap ($coveredCount/${activeIds.length})'
+            : (_isTwoDefaultShifts
+                ? 'Shift 1 & 2 Lengkap'
+                : 'Semua ${expected.length} Shift Lengkap');
         badgeBg = const Color(0xFFDCFCE7);
         badgeFg = const Color(0xFF14532D);
         break;
       case _DateScheduleStatus.partial:
-        statusLabel = 'Sebagian (1 Shift)';
+        statusLabel = activeIds.isNotEmpty
+            ? 'Sebagian ($coveredCount/${activeIds.length} Karyawan)'
+            : (_isTwoDefaultShifts
+                ? 'Sebagian (1 Shift)'
+                : 'Sebagian ($filledShiftsCount/${expected.length} Shift)');
         badgeBg = const Color(0xFFFEF3C7);
         badgeFg = const Color(0xFF92400E);
         break;
@@ -2538,8 +2887,14 @@ class _ScheduleCalendarDialogState extends State<_ScheduleCalendarDialog> {
           final disabled =
               date.isBefore(_firstDay) || date.isAfter(_lastDay);
           final entries = _jadwalByDate[dateStr] ?? const [];
-          final status = _computeScheduleStatus(entries);
-          final hasOff = (_offByDate[dateStr] ?? const []).isNotEmpty;
+          final offs = _offByDate[dateStr] ?? const [];
+          final status = _computeScheduleStatus(
+            entries,
+            _expectedShifts,
+            widget.activeKaryawanIds,
+            offs,
+          );
+          final hasOff = offs.isNotEmpty;
           final isToday = dateStr == todayStr;
           final isSelected = !disabled && dateStr == selectedStr;
 
@@ -2687,12 +3042,20 @@ class _ScheduleCalendarDialogState extends State<_ScheduleCalendarDialog> {
           _legendItem(
             fill: const Color(0xFFDCFCE7),
             border: const Color(0xFF16A34A),
-            label: 'Shift Lengkap (1 & 2)',
+            label: widget.activeKaryawanIds.isNotEmpty
+                ? 'Semua Terjadwal'
+                : (_isTwoDefaultShifts
+                    ? 'Shift Lengkap (1 & 2)'
+                    : 'Semua Shift Lengkap'),
           ),
           _legendItem(
             fill: const Color(0xFFFEF3C7),
             border: const Color(0xFFF59E0B),
-            label: 'Sebagian (1 Shift)',
+            label: widget.activeKaryawanIds.isNotEmpty
+                ? 'Sebagian Terjadwal'
+                : (_isTwoDefaultShifts
+                    ? 'Sebagian (1 Shift)'
+                    : 'Sebagian Terisi'),
           ),
           _legendItem(
             fill: Colors.white,
@@ -2747,8 +3110,13 @@ class _ScheduleCalendarDialogState extends State<_ScheduleCalendarDialog> {
     required List<Map<String, dynamic>> offs,
     required _DateScheduleStatus status,
   }) {
-    final s1 = entries.where((e) => e['shift'] == 'shift_1').toList();
-    final s2 = entries.where((e) => e['shift'] == 'shift_2').toList();
+    final orderedKeys = <String>[
+      ..._expectedShifts,
+      for (final e in entries)
+        if ((e['shift'] ?? '').toString().isNotEmpty &&
+            !_expectedShifts.contains((e['shift'] ?? '').toString()))
+          (e['shift'] ?? '').toString(),
+    ];
 
     return Container(
       width: double.infinity,
@@ -2785,11 +3153,20 @@ class _ScheduleCalendarDialogState extends State<_ScheduleCalendarDialog> {
               'Belum ada jadwal yang dibuat pada tanggal ini.',
               style: TextStyle(fontSize: 11.5, color: _textDim),
             )
-          else ...[
-            _shiftPreviewRow('Shift 1', s1),
-            const SizedBox(height: 4),
-            _shiftPreviewRow('Shift 2', s2),
-          ],
+          else
+            for (int i = 0; i < orderedKeys.length; i++)
+              if (status != _DateScheduleStatus.complete ||
+                  entries.any(
+                      (e) => (e['shift'] ?? '').toString() == orderedKeys[i])) ...[
+                _shiftPreviewRow(
+                  _templateTitle(orderedKeys[i]),
+                  entries
+                      .where(
+                          (e) => (e['shift'] ?? '').toString() == orderedKeys[i])
+                      .toList(),
+                ),
+                if (i < orderedKeys.length - 1) const SizedBox(height: 4),
+              ],
           if (offs.isNotEmpty) ...[
             const SizedBox(height: 6),
             Text(
@@ -2817,18 +3194,23 @@ class _ScheduleCalendarDialogState extends State<_ScheduleCalendarDialog> {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-          decoration: BoxDecoration(
-            color: filled ? const Color(0xFF16A34A) : const Color(0xFFE5E7EB),
-            borderRadius: BorderRadius.circular(5),
-          ),
-          child: Text(
-            shiftTitle,
-            style: TextStyle(
-              fontSize: 10.5,
-              fontWeight: FontWeight.w700,
-              color: filled ? Colors.white : const Color(0xFF6B7280),
+        ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 110),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+            decoration: BoxDecoration(
+              color: filled ? const Color(0xFF16A34A) : const Color(0xFFE5E7EB),
+              borderRadius: BorderRadius.circular(5),
+            ),
+            child: Text(
+              shiftTitle,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                fontSize: 10.5,
+                fontWeight: FontWeight.w700,
+                color: filled ? Colors.white : const Color(0xFF6B7280),
+              ),
             ),
           ),
         ),
@@ -2844,6 +3226,239 @@ class _ScheduleCalendarDialogState extends State<_ScheduleCalendarDialog> {
           ),
         ),
       ],
+    );
+  }
+}
+
+class _TemplateFormResult {
+  final String nama;
+  final TimeOfDay jamMulai;
+  final TimeOfDay jamSelesai;
+
+  const _TemplateFormResult({
+    required this.nama,
+    required this.jamMulai,
+    required this.jamSelesai,
+  });
+}
+
+class _TemplateFormDialog extends StatefulWidget {
+  final String title;
+  final String submitLabel;
+  final String initialNama;
+  final TimeOfDay initialMulai;
+  final TimeOfDay initialSelesai;
+  final bool showTimePickers;
+
+  const _TemplateFormDialog({
+    required this.title,
+    required this.submitLabel,
+    required this.initialNama,
+    required this.initialMulai,
+    required this.initialSelesai,
+    required this.showTimePickers,
+  });
+
+  @override
+  State<_TemplateFormDialog> createState() => _TemplateFormDialogState();
+}
+
+class _TemplateFormDialogState extends State<_TemplateFormDialog> {
+  late final TextEditingController _namaCtrl;
+  late TimeOfDay _jamMulai;
+  late TimeOfDay _jamSelesai;
+  String? _errorText;
+
+  @override
+  void initState() {
+    super.initState();
+    _namaCtrl = TextEditingController(text: widget.initialNama);
+    _jamMulai = widget.initialMulai;
+    _jamSelesai = widget.initialSelesai;
+  }
+
+  @override
+  void dispose() {
+    _namaCtrl.dispose();
+    super.dispose();
+  }
+
+  Future<void> _pickTime(bool isStart) async {
+    final picked = await showTimePicker(
+      context: context,
+      initialTime: isStart ? _jamMulai : _jamSelesai,
+    );
+    if (picked == null || !mounted) return;
+    setState(() {
+      if (isStart) {
+        _jamMulai = picked;
+      } else {
+        _jamSelesai = picked;
+      }
+      _errorText = null;
+    });
+  }
+
+  void _submit() {
+    final nama = _namaCtrl.text.trim();
+    if (nama.isEmpty) {
+      setState(() => _errorText = 'Nama template shift wajib diisi');
+      return;
+    }
+    if (widget.showTimePickers) {
+      final startMin = _jamMulai.hour * 60 + _jamMulai.minute;
+      final endMin = _jamSelesai.hour * 60 + _jamSelesai.minute;
+      if (endMin <= startMin) {
+        setState(
+            () => _errorText = 'Jam selesai harus lebih lambat dari jam mulai');
+        return;
+      }
+    }
+    Navigator.pop(
+      context,
+      _TemplateFormResult(
+        nama: nama,
+        jamMulai: _jamMulai,
+        jamSelesai: _jamSelesai,
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final startMin = _jamMulai.hour * 60 + _jamMulai.minute;
+    final endMin = _jamSelesai.hour * 60 + _jamSelesai.minute;
+    final invalidDuration = widget.showTimePickers && endMin <= startMin;
+
+    return AlertDialog(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+      insetPadding: const EdgeInsets.symmetric(horizontal: 18, vertical: 24),
+      title: Text(
+        widget.title,
+        style: GoogleFonts.outfit(fontWeight: FontWeight.w700, fontSize: 17),
+      ),
+      content: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 400),
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              TextField(
+                controller: _namaCtrl,
+                autofocus: true,
+                textCapitalization: TextCapitalization.words,
+                onChanged: (_) {
+                  if (_errorText != null) setState(() => _errorText = null);
+                },
+                decoration: InputDecoration(
+                  labelText: 'Nama Template Shift',
+                  hintText: 'Contoh: Shift 3, Middle Shift',
+                  prefixIcon: const Icon(Icons.label_outline_rounded, size: 19),
+                  filled: true,
+                  fillColor: _cream,
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
+              ),
+              if (widget.showTimePickers) ...[
+                const SizedBox(height: 14),
+                Builder(
+                  builder: (context) {
+                    final isNarrow = MediaQuery.sizeOf(context).width < 380;
+                    final boxMulai = _dialogTimeBox(
+                      'Jam Mulai',
+                      _jamMulai.format(context),
+                      Icons.access_time_rounded,
+                      () => _pickTime(true),
+                    );
+                    final boxSelesai = _dialogTimeBox(
+                      'Jam Selesai',
+                      _jamSelesai.format(context),
+                      Icons.access_time_filled_rounded,
+                      () => _pickTime(false),
+                    );
+                    if (isNarrow) {
+                      return Column(
+                        children: [
+                          boxMulai,
+                          const SizedBox(height: 10),
+                          boxSelesai,
+                        ],
+                      );
+                    }
+                    return Row(
+                      children: [
+                        Expanded(child: boxMulai),
+                        const SizedBox(width: 10),
+                        Expanded(child: boxSelesai),
+                      ],
+                    );
+                  },
+                ),
+              ],
+              if (_errorText != null || invalidDuration) ...[
+                const SizedBox(height: 10),
+                Text(
+                  _errorText ??
+                      'Jam selesai harus lebih lambat dari jam mulai.',
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: Colors.red.shade700,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Batal'),
+        ),
+        ElevatedButton(
+          style: ElevatedButton.styleFrom(
+            backgroundColor: _brown,
+            foregroundColor: Colors.white,
+            shape:
+                RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+          ),
+          onPressed: invalidDuration ? null : _submit,
+          child: Text(widget.submitLabel),
+        ),
+      ],
+    );
+  }
+
+  Widget _dialogTimeBox(
+    String label,
+    String value,
+    IconData icon,
+    VoidCallback onTap,
+  ) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(12),
+      child: InputDecorator(
+        decoration: InputDecoration(
+          labelText: label,
+          prefixIcon: Icon(icon, size: 18, color: _brown),
+          filled: true,
+          fillColor: _cream,
+          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+          contentPadding:
+              const EdgeInsets.symmetric(horizontal: 10, vertical: 12),
+        ),
+        child: Text(
+          value,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: const TextStyle(fontSize: 13.5, fontWeight: FontWeight.w600),
+        ),
+      ),
     );
   }
 }

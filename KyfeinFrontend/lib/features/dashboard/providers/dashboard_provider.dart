@@ -9,6 +9,7 @@ import '../../auth/providers/auth_provider.dart';
 class ShiftAktif {
   final String id;
   final String shift;
+  final String? shiftNama;
   final String areaKerja;
   final String jamMulai;
   final String jamSelesai;
@@ -23,6 +24,7 @@ class ShiftAktif {
   ShiftAktif({
     required this.id,
     required this.shift,
+    this.shiftNama,
     required this.areaKerja,
     required this.jamMulai,
     required this.jamSelesai,
@@ -52,16 +54,20 @@ class ShiftAktif {
     final defaultSelesai = shiftType == 'shift_2' ? '23:00' : '16:00';
 
     final absensiMap = json['absensi'] is Map ? json['absensi'] as Map<String, dynamic> : null;
-    final bool sudahMasuk = absensiMap != null;
-    final bool sudahPulang = absensiMap != null && absensiMap['jam_pulang'] != null;
+    final bool sudahMasuk =
+        json['sudah_absen_masuk'] == true || absensiMap != null;
+    final bool sudahPulang = json['sudah_absen_pulang'] == true ||
+        (absensiMap != null && absensiMap['jam_pulang'] != null);
 
     return ShiftAktif(
       id: json['id'].toString(),
       shift: json['shift'] ?? '',
+      shiftNama: json['shift_nama']?.toString(),
       areaKerja: json['area_kerja'] ?? '',
       jamMulai: formatTime(json['jam_mulai'], defaultMulai),
       jamSelesai: formatTime(json['jam_selesai'], defaultSelesai),
-      opnameAwalSubmit: json['opname_awal_submit'] == true,
+      opnameAwalSubmit: json['opname_awal_submit'] == true ||
+          (json['area_kerja']?.toString().toLowerCase() == 'kasir'),
       sudahAbsenMasuk: sudahMasuk,
       sudahAbsenPulang: sudahPulang,
       absensiId: absensiMap?['id']?.toString(),
@@ -105,14 +111,19 @@ class StokMenipis {
   final String namaBahan;
   final double jumlahSisa;
   final double stokMinimum;
+  final double isiPerKemasan;
   final String satuan;
 
   StokMenipis({
     required this.namaBahan,
     required this.jumlahSisa,
     required this.stokMinimum,
+    this.isiPerKemasan = 0.0,
     required this.satuan,
   });
+
+  double get stokMinimumKecil =>
+      isiPerKemasan > 0 ? stokMinimum * isiPerKemasan : stokMinimum;
 
   factory StokMenipis.fromJson(Map<String, dynamic> json) => StokMenipis(
         namaBahan: (json['nama_bahan'] ?? json['nama'] ?? '').toString(),
@@ -121,6 +132,8 @@ class StokMenipis {
             0.0,
         stokMinimum:
             double.tryParse((json['stok_minimum'] ?? 0).toString()) ?? 0.0,
+        isiPerKemasan:
+            double.tryParse((json['isi_per_kemasan'] ?? 0).toString()) ?? 0.0,
         satuan: (json['satuan'] ?? '').toString(),
       );
 }
@@ -284,11 +297,16 @@ class DashboardOverviewData {
   final String periodePerilakuSelesai;
   final double totalPenjualan;
   final double totalHppTeoritis;
+  final double labaKotor;
   final double pengeluaranBulananProRata;
   final double pengeluaranMendadak;
   final double totalPengeluaran;
   final double netProfit;
   final double marginProfitPersen;
+  final double totalBelanjaBarangMasuk;
+  final double totalPengeluaranKas;
+  final double arusKasBersih;
+  final double nilaiAsetStokSaatIni;
   final int jumlahTransaksi;
   final int jumlahTransaksiDibatalkan;
   final double rataRataTransaksi;
@@ -314,11 +332,16 @@ class DashboardOverviewData {
     required this.periodePerilakuSelesai,
     required this.totalPenjualan,
     required this.totalHppTeoritis,
+    this.labaKotor = 0.0,
     required this.pengeluaranBulananProRata,
     required this.pengeluaranMendadak,
     required this.totalPengeluaran,
     required this.netProfit,
     required this.marginProfitPersen,
+    this.totalBelanjaBarangMasuk = 0.0,
+    this.totalPengeluaranKas = 0.0,
+    this.arusKasBersih = 0.0,
+    this.nilaiAsetStokSaatIni = 0.0,
     required this.jumlahTransaksi,
     required this.jumlahTransaksiDibatalkan,
     required this.rataRataTransaksi,
@@ -350,6 +373,7 @@ class DashboardOverviewData {
           double.tryParse((json['total_penjualan'] ?? 0).toString()) ?? 0.0,
       totalHppTeoritis:
           double.tryParse((json['total_hpp_teoritis'] ?? 0).toString()) ?? 0.0,
+      labaKotor: double.tryParse((json['laba_kotor'] ?? 0).toString()) ?? 0.0,
       pengeluaranBulananProRata: double.tryParse(
               (json['pengeluaran_bulanan_pro_rata'] ?? 0).toString()) ??
           0.0,
@@ -361,6 +385,17 @@ class DashboardOverviewData {
       netProfit: double.tryParse((json['net_profit'] ?? 0).toString()) ?? 0.0,
       marginProfitPersen:
           double.tryParse((json['margin_profit_persen'] ?? 0).toString()) ??
+              0.0,
+      totalBelanjaBarangMasuk: double.tryParse(
+              (json['total_belanja_barang_masuk'] ?? 0).toString()) ??
+          0.0,
+      totalPengeluaranKas:
+          double.tryParse((json['total_pengeluaran_kas'] ?? 0).toString()) ??
+              0.0,
+      arusKasBersih:
+          double.tryParse((json['arus_kas_bersih'] ?? 0).toString()) ?? 0.0,
+      nilaiAsetStokSaatIni:
+          double.tryParse((json['nilai_aset_stok_saat_ini'] ?? 0).toString()) ??
               0.0,
       jumlahTransaksi:
           int.tryParse((json['jumlah_transaksi'] ?? 0).toString()) ?? 0,
@@ -433,6 +468,29 @@ class DashboardProvider with ChangeNotifier {
   DateTime? get customEnd => _customEnd;
   String get chartMode => _chartMode;
 
+  /// Karyawan hanya dianggap aktif bertugas (on-duty) jika memiliki jadwal shift aktif
+  /// hari ini, sudah melakukan Absen Masuk, dan belum Absen Pulang.
+  /// Admin/Owner selalu memiliki akses penuh.
+  bool get isOnDuty {
+    if (_auth != null && _auth!.role != 'karyawan') return true;
+    final s = shiftAktif;
+    return s != null && s.sudahAbsenMasuk && !s.sudahAbsenPulang;
+  }
+
+  String get offDutyReason {
+    final s = shiftAktif;
+    if (s == null) {
+      return 'Anda sedang off-shift / libur (belum ada jadwal shift aktif).';
+    }
+    if (!s.sudahAbsenMasuk) {
+      return 'Silakan lakukan Absen Masuk terlebih dahulu untuk membuka fitur operasional.';
+    }
+    if (s.sudahAbsenPulang) {
+      return 'Shift Anda sudah selesai (sudah Absen Pulang).';
+    }
+    return '';
+  }
+
   void updateAuth(AuthProvider auth) {
     final wasAuthenticated = _auth?.isAuthenticated ?? false;
     _auth = auth;
@@ -467,7 +525,12 @@ class DashboardProvider with ChangeNotifier {
     try {
       final role = _auth!.role;
       if (role == 'karyawan') {
-        await Future.wait([_loadShiftAktif(), _loadLaporanShift()]);
+        await _loadShiftAktif();
+        if (isOnDuty) {
+          await _loadLaporanShift();
+        } else {
+          _laporanShift = null;
+        }
         _startAutoRefresh();
       } else if (role == 'admin') {
         await Future.wait([
@@ -494,8 +557,14 @@ class DashboardProvider with ChangeNotifier {
 
   void _startAutoRefresh() {
     _autoRefreshTimer?.cancel();
-    _autoRefreshTimer = Timer.periodic(const Duration(seconds: 30), (_) {
-      _loadLaporanShift().then((_) => notifyListeners());
+    _autoRefreshTimer = Timer.periodic(const Duration(seconds: 30), (_) async {
+      await _loadShiftAktif();
+      if (isOnDuty) {
+        await _loadLaporanShift();
+      } else {
+        _laporanShift = null;
+      }
+      notifyListeners();
     });
   }
 
@@ -686,7 +755,34 @@ class DashboardProvider with ChangeNotifier {
         }
       }
 
-      tambah(res[1], 'swap_shift', 'karyawan_pengaju_id');
+      // Tukar shift hanya masuk daftar approval cepat Admin jika karyawan target sudah menyetujui
+      if (res[1].statusCode == 200) {
+        for (final e in jsonDecode(res[1].body) as List) {
+          final statusTarget = (e['status_target'] ?? 'disetujui').toString();
+          if (statusTarget != 'disetujui') continue;
+          final pengajuNama = (e['nama_pengaju'] ??
+                  nama[e['karyawan_pengaju_id'].toString()] ??
+                  'Karyawan')
+              .toString();
+          final targetNama = (e['nama_target'] ??
+                  nama[e['karyawan_target_id'].toString()] ??
+                  'Rekan')
+              .toString();
+          final alasan = (e['alasan'] ?? '').toString();
+          items.add(PendingApproval(
+            id: e['id'].toString(),
+            type: 'swap_shift',
+            namaKaryawan: '$pengajuNama ⇄ $targetNama',
+            keterangan: alasan.isNotEmpty
+                ? 'Rekan sudah setuju · $alasan'
+                : 'Rekan target sudah menyetujui tukar shift',
+            tanggal: (e['tanggal_shift'] ?? e['diajukan_at'] ?? '')
+                .toString()
+                .split('T')
+                .first,
+          ));
+        }
+      }
       tambah(res[2], 'izin_telat', 'karyawan_id');
       tambah(res[3], 'izin_tidak_masuk', 'karyawan_id');
 
@@ -721,27 +817,76 @@ class DashboardProvider with ChangeNotifier {
     }
   }
 
+  String? _lastActionMessage;
+  bool _lastActionIsError = false;
+  final Set<String> _processingApprovalKeys = {};
+
+  String? get lastActionMessage => _lastActionMessage;
+  bool get lastActionIsError => _lastActionIsError;
+  bool isApprovalProcessing(String id, String type) =>
+      _processingApprovalKeys.contains('$type:$id');
+
+  void _syncPendingSummaryCount() {
+    if (_adminSummary != null) {
+      _adminSummary = AdminSummary(
+        totalPenjualan: _adminSummary!.totalPenjualan,
+        profitHarian: _adminSummary!.profitHarian,
+        jumlahTransaksi: _adminSummary!.jumlahTransaksi,
+        pendingApprovals: _pendingApprovals.length,
+      );
+    }
+  }
+
+  String _extractApprovalError(http.Response resp, String fallback) {
+    try {
+      final decoded = jsonDecode(resp.body);
+      if (decoded is Map && decoded['detail'] != null) {
+        return decoded['detail'].toString();
+      }
+    } catch (_) {}
+    return fallback;
+  }
+
   Future<bool> _prosesApproval(String id, String type, String status) async {
+    if (_auth?.token == null) return false;
+    final key = '$type:$id';
+    if (_processingApprovalKeys.contains(key)) return false;
+
+    _processingApprovalKeys.add(key);
+    _lastActionMessage = null;
+    _lastActionIsError = false;
+    notifyListeners();
+
     try {
       if (type == 'request_off') {
-        if (status == 'ditolak') {
-          final resp = await http
-              .delete(
-                Uri.parse('${ApiEndpoints.requestOff}/$id'),
-                headers: _auth!.authHeaders,
-              )
-              .timeout(const Duration(seconds: 8));
-          if (resp.statusCode == 200) {
-            _pendingApprovals.removeWhere((p) => p.id == id);
-            notifyListeners();
-            return true;
-          }
-        } else {
-          // Dismiss from dashboard card (remain active request off)
-          _pendingApprovals.removeWhere((p) => p.id == id);
+        final okStatuses = status == 'disetujui';
+        if (okStatuses) {
+          _pendingApprovals.removeWhere((p) => p.id == id && p.type == type);
+          _syncPendingSummaryCount();
+          _lastActionMessage = 'Request off dicatat';
           notifyListeners();
           return true;
         }
+        final resp = await http
+            .delete(
+              Uri.parse('${ApiEndpoints.requestOff}/$id'),
+              headers: _auth!.authHeaders,
+            )
+            .timeout(const Duration(seconds: 15));
+        if (resp.statusCode == 200 || resp.statusCode == 404 || resp.statusCode == 409) {
+          _pendingApprovals.removeWhere((p) => p.id == id && p.type == type);
+          _syncPendingSummaryCount();
+          _lastActionMessage = resp.statusCode == 200
+              ? 'Request off dihapus'
+              : _extractApprovalError(resp, 'Pengajuan sudah diproses sebelumnya');
+          notifyListeners();
+          await _loadPendingApprovals();
+          _syncPendingSummaryCount();
+          notifyListeners();
+          return resp.statusCode == 200;
+        }
+        _lastActionMessage = _extractApprovalError(resp, 'Gagal memproses request off');
+        _lastActionIsError = true;
         return false;
       }
 
@@ -751,13 +896,45 @@ class DashboardProvider with ChangeNotifier {
             headers: _auth!.authHeaders,
             body: jsonEncode({'status': status}),
           )
-          .timeout(const Duration(seconds: 8));
+          .timeout(const Duration(seconds: 15));
       if (resp.statusCode == 200) {
-        _pendingApprovals.removeWhere((p) => p.id == id);
+        _pendingApprovals.removeWhere((p) => p.id == id && p.type == type);
+        _syncPendingSummaryCount();
+        _lastActionMessage = status == 'disetujui'
+            ? 'Pengajuan berhasil disetujui'
+            : 'Pengajuan berhasil ditolak';
+        notifyListeners();
+        await _loadPendingApprovals();
+        _syncPendingSummaryCount();
         notifyListeners();
         return true;
       }
-    } catch (_) {}
+      if (resp.statusCode == 409 || resp.statusCode == 404) {
+        _pendingApprovals.removeWhere((p) => p.id == id && p.type == type);
+        _syncPendingSummaryCount();
+        _lastActionMessage = _extractApprovalError(
+          resp,
+          'Pengajuan sudah diproses sebelumnya — daftar diperbarui',
+        );
+        _lastActionIsError = false;
+        notifyListeners();
+        await _loadPendingApprovals();
+        _syncPendingSummaryCount();
+        notifyListeners();
+        return false;
+      }
+      _lastActionMessage = _extractApprovalError(
+        resp,
+        'Gagal memproses pengajuan (${resp.statusCode})',
+      );
+      _lastActionIsError = true;
+    } catch (_) {
+      _lastActionMessage = 'Tidak bisa terhubung ke server';
+      _lastActionIsError = true;
+    } finally {
+      _processingApprovalKeys.remove(key);
+      notifyListeners();
+    }
     return false;
   }
 

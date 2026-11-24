@@ -4,6 +4,8 @@ import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 import '../../../auth/providers/auth_provider.dart';
 import '../../../../core/theme/app_theme.dart';
+import '../../../../core/widgets/on_duty_guard.dart';
+import '../../../../core/widgets/page_refresh_scope.dart';
 import '../../providers/stok_models.dart';
 import '../../providers/stok_opname_hub_models.dart';
 import '../../providers/stok_opname_hub_provider.dart';
@@ -14,10 +16,13 @@ class StokOpnameHubScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ChangeNotifierProvider(
-      create: (ctx) =>
-          StokOpnameHubProvider(auth: ctx.read<AuthProvider>())..loadData(),
-      child: _StokOpnameHubView(initialSection: initialSection),
+    return OnDutyGuard(
+      featureName: 'Rekap Stok & Audit Opname',
+      child: ChangeNotifierProvider(
+        create: (ctx) =>
+            StokOpnameHubProvider(auth: ctx.read<AuthProvider>())..loadData(),
+        child: _StokOpnameHubView(initialSection: initialSection),
+      ),
     );
   }
 }
@@ -48,35 +53,28 @@ String _formatTanggalPendek(DateTime dt) {
   return '${dt.day} $bulan';
 }
 
-class _StokOpnameHubViewState extends State<_StokOpnameHubView>
-    with SingleTickerProviderStateMixin {
-  late TabController _tabController;
+class _StokOpnameHubViewState extends State<_StokOpnameHubView> {
+  late int _currentSection;
   final TextEditingController _searchController = TextEditingController();
 
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(
-      length: 2,
-      vsync: this,
-      initialIndex: widget.initialSection.clamp(0, 1),
-    );
-    _tabController.addListener(() {
-      if (mounted) setState(() {});
-    });
+    _currentSection = widget.initialSection.clamp(0, 1);
   }
 
   @override
   void didUpdateWidget(covariant _StokOpnameHubView oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.initialSection != widget.initialSection) {
-      _tabController.animateTo(widget.initialSection.clamp(0, 1));
+      setState(() {
+        _currentSection = widget.initialSection.clamp(0, 1);
+      });
     }
   }
 
   @override
   void dispose() {
-    _tabController.dispose();
     _searchController.dispose();
     super.dispose();
   }
@@ -110,185 +108,103 @@ class _StokOpnameHubViewState extends State<_StokOpnameHubView>
     final provider = context.watch<StokOpnameHubProvider>();
     final isHariIni = DateUtils.isSameDay(provider.selectedDate, DateTime.now());
 
-    return Scaffold(
-      backgroundColor: AppTheme.backgroundColor,
-      body: Column(
-        children: [
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
-            decoration: const BoxDecoration(
-              color: Colors.white,
-              border: Border(bottom: BorderSide(color: AppTheme.borderColor)),
-            ),
-            child: Wrap(
-              spacing: 16,
-              runSpacing: 12,
-              alignment: WrapAlignment.spaceBetween,
-              crossAxisAlignment: WrapCrossAlignment.center,
+    return PageRefreshRegistrar(
+      onRefresh: provider.loadData,
+      child: Scaffold(
+        backgroundColor: AppTheme.backgroundColor,
+        appBar: buildStandaloneAppBar(
+          context,
+          title: _currentSection == 0
+              ? 'Rekap Stok Harian'
+              : 'Audit Pemakaian BOM',
+          onRefresh: provider.loadData,
+        ),
+        body: Column(
+          children: [
+            // ── Compact Filter Bar: Date Selector & Titik Filter ──────────────
+            Container(
+              padding: const EdgeInsets.fromLTRB(16, 10, 16, 10),
+              decoration: const BoxDecoration(
+                color: Colors.white,
+                border: Border(bottom: BorderSide(color: AppTheme.borderColor)),
+              ),
+            child: Column(
               children: [
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      _tabController.index == 0 ? 'Rekap Stok Harian' : 'Audit Pemakaian Bahan (BOM)',
-                      style: GoogleFonts.outfit(
-                        fontSize: 18,
-                        fontWeight: FontWeight.w700,
-                        color: AppTheme.textColor,
-                      ),
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      _tabController.index == 0
-                          ? 'Pantau stok awal, mutasi masuk, dan stok akhir fisik per titik'
-                          : 'Bandingkan pemakaian bahan teoritis dari penjualan POS dengan opname fisik',
-                      style: GoogleFonts.outfit(
-                        fontSize: 12,
-                        color: Colors.grey.shade600,
-                      ),
-                    ),
-                  ],
-                ),
-                Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
-                      decoration: BoxDecoration(
-                        color: AppTheme.backgroundColor,
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: AppTheme.borderColor),
-                      ),
-                      child: DropdownButtonHideUnderline(
-                        child: DropdownButton<int>(
-                          value: _tabController.index,
-                          isDense: true,
-                          icon: const Icon(Icons.keyboard_arrow_down_rounded, color: AppTheme.primaryColor),
-                          style: GoogleFonts.outfit(
-                            fontSize: 13,
-                            fontWeight: FontWeight.w600,
-                            color: AppTheme.textColor,
-                          ),
-                          onChanged: (val) {
-                            if (val != null) {
-                              _tabController.animateTo(val);
-                              setState(() {});
-                            }
-                          },
-                          items: const [
-                            DropdownMenuItem(
-                              value: 0,
-                              child: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  Icon(Icons.calendar_view_day_rounded, size: 16, color: AppTheme.primaryColor),
-                                  SizedBox(width: 8),
-                                  Text('Rekap Stok Harian'),
-                                ],
+                SizedBox(
+                  width: double.infinity,
+                  child: Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    alignment: WrapAlignment.spaceBetween,
+                    crossAxisAlignment: WrapCrossAlignment.center,
+                    children: [
+                      Container(
+                        decoration: BoxDecoration(
+                          color: Colors.grey.shade100,
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            IconButton(
+                              icon: const Icon(Icons.chevron_left_rounded),
+                              padding: EdgeInsets.zero,
+                              constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
+                              onPressed: provider.previousDay,
+                              tooltip: 'Hari Sebelumnya',
+                            ),
+                            Flexible(
+                              child: InkWell(
+                                onTap: () => _pilihTanggal(context, provider),
+                                borderRadius: BorderRadius.circular(8),
+                                child: Padding(
+                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      const Icon(Icons.calendar_month_rounded,
+                                          size: 17, color: AppTheme.primaryColor),
+                                      const SizedBox(width: 6),
+                                      Flexible(
+                                        child: Text(
+                                          isHariIni
+                                              ? 'Hari Ini (${_formatTanggalPendek(provider.selectedDate)})'
+                                              : _formatTanggalIndonesia(provider.selectedDate),
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                          style: const TextStyle(
+                                            fontWeight: FontWeight.w600,
+                                            fontSize: 13,
+                                            color: Color(0xFF2D312E),
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
                               ),
                             ),
-                            DropdownMenuItem(
-                              value: 1,
-                              child: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  Icon(Icons.fact_check_rounded, size: 16, color: AppTheme.primaryColor),
-                                  SizedBox(width: 8),
-                                  Text('Audit Pemakaian BOM'),
-                                ],
-                              ),
+                            IconButton(
+                              icon: const Icon(Icons.chevron_right_rounded),
+                              padding: EdgeInsets.zero,
+                              constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
+                              onPressed: provider.nextDay,
+                              tooltip: 'Hari Berikutnya',
                             ),
                           ],
                         ),
                       ),
-                    ),
-                    const SizedBox(width: 8),
-                    IconButton(
-                      onPressed: provider.isLoading ? null : provider.loadData,
-                      tooltip: 'Segarkan data',
-                      style: IconButton.styleFrom(
-                        backgroundColor: AppTheme.backgroundColor,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(10),
-                          side: const BorderSide(color: AppTheme.borderColor),
+                      if (!isHariIni)
+                        TextButton.icon(
+                          style: TextButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                          ),
+                          onPressed: () => provider.setTanggal(DateTime.now()),
+                          icon: const Icon(Icons.today_rounded, size: 16),
+                          label: const Text('Ke Hari Ini', style: TextStyle(fontSize: 12)),
                         ),
-                      ),
-                      icon: const Icon(Icons.refresh_rounded, size: 18, color: AppTheme.primaryColor),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-          // ── Header Bar: Date Selector & Titik Filter ────────────────────────
-          Container(
-            padding: const EdgeInsets.fromLTRB(24, 14, 24, 14),
-            color: Colors.white,
-            child: Column(
-              children: [
-                Row(
-                  children: [
-                    Container(
-                      decoration: BoxDecoration(
-                        color: Colors.grey.shade100,
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          IconButton(
-                            icon: const Icon(Icons.chevron_left_rounded),
-                            padding: EdgeInsets.zero,
-                            constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
-                            onPressed: provider.previousDay,
-                            tooltip: 'Hari Sebelumnya',
-                          ),
-                          InkWell(
-                            onTap: () => _pilihTanggal(context, provider),
-                            borderRadius: BorderRadius.circular(8),
-                            child: Padding(
-                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-                              child: Row(
-                                children: [
-                                  const Icon(Icons.calendar_month_rounded,
-                                      size: 17, color: AppTheme.primaryColor),
-                                  const SizedBox(width: 6),
-                                  Text(
-                                    isHariIni
-                                        ? 'Hari Ini (${_formatTanggalPendek(provider.selectedDate)})'
-                                        : _formatTanggalIndonesia(provider.selectedDate),
-                                    style: const TextStyle(
-                                      fontWeight: FontWeight.w600,
-                                      fontSize: 13,
-                                      color: Color(0xFF2D312E),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ),
-                          IconButton(
-                            icon: const Icon(Icons.chevron_right_rounded),
-                            padding: EdgeInsets.zero,
-                            constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
-                            onPressed: provider.nextDay,
-                            tooltip: 'Hari Berikutnya',
-                          ),
-                        ],
-                      ),
-                    ),
-                    const Spacer(),
-                    if (!isHariIni)
-                      TextButton.icon(
-                        style: TextButton.styleFrom(
-                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                        ),
-                        onPressed: () => provider.setTanggal(DateTime.now()),
-                        icon: const Icon(Icons.today_rounded, size: 16),
-                        label: const Text('Ke Hari Ini', style: TextStyle(fontSize: 12)),
-                      ),
-                  ],
+                    ],
+                  ),
                 ),
                 const SizedBox(height: 10),
                 Row(
@@ -339,15 +255,12 @@ class _StokOpnameHubViewState extends State<_StokOpnameHubView>
           Expanded(
             child: provider.isLoading
                 ? const Center(child: CircularProgressIndicator())
-                : TabBarView(
-                    controller: _tabController,
-                    children: const [
-                      _TabStokHarianView(),
-                      _TabAuditView(),
-                    ],
-                  ),
+                : (_currentSection == 0
+                    ? const _TabStokHarianView()
+                    : const _TabAuditView()),
           ),
         ],
+      ),
       ),
     );
   }
@@ -387,6 +300,7 @@ class _TabStokHarianView extends StatelessWidget {
     final provider = context.watch<StokOpnameHubProvider>();
     final items = provider.harianItems;
     final sesi = provider.harianSesi;
+    final perbandingan = provider.perbandinganShift;
 
     final lengkapCount = items.where((i) => i.status == 'lengkap').length;
     final awalSajaCount = items.where((i) => i.status == 'hanya_awal').length;
@@ -397,6 +311,21 @@ class _TabStokHarianView extends StatelessWidget {
       child: ListView(
         padding: const EdgeInsets.all(16),
         children: [
+          if (provider.errorMessage.isNotEmpty)
+            Container(
+              margin: const EdgeInsets.only(bottom: 14),
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.red.shade50,
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: Colors.red.shade200),
+              ),
+              child: Text(
+                provider.errorMessage,
+                style: TextStyle(color: Colors.red.shade800, fontSize: 12.5),
+              ),
+            ),
+
           // Sesi Opname Banner
           if (sesi.isNotEmpty)
             Container(
@@ -415,9 +344,11 @@ class _TabStokHarianView extends StatelessWidget {
                       const Icon(Icons.history_toggle_off_rounded,
                           size: 18, color: Color(0xFF1B4332)),
                       const SizedBox(width: 8),
-                      Text(
-                        'Sesi Opname Tercatat (${sesi.length} Sesi)',
-                        style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13),
+                      Expanded(
+                        child: Text(
+                          'Sesi Opname Tercatat (${sesi.length} Sesi)',
+                          style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13),
+                        ),
                       ),
                     ],
                   ),
@@ -427,6 +358,10 @@ class _TabStokHarianView extends StatelessWidget {
                     runSpacing: 6,
                     children: sesi.map((s) {
                       final isAwal = s.tipe == 'awal_shift';
+                      final shiftTag =
+                          (s.shiftLabel != null && s.shiftLabel!.isNotEmpty)
+                              ? '${s.shiftLabel} · '
+                              : '';
                       return Container(
                         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
                         decoration: BoxDecoration(
@@ -445,14 +380,16 @@ class _TabStokHarianView extends StatelessWidget {
                               color: isAwal ? Colors.blue.shade800 : Colors.green.shade800,
                             ),
                             const SizedBox(width: 5),
-                            Text(
-                              '${s.titik.toUpperCase()} • ${isAwal ? 'Awal' : 'Akhir'} Shift '
-                              '(${DateFormat('HH:mm').format(s.waktuOpname)})'
-                              '${s.karyawanNama != null ? ' - ${s.karyawanNama}' : ''}',
-                              style: TextStyle(
-                                fontSize: 11,
-                                fontWeight: FontWeight.w600,
-                                color: isAwal ? Colors.blue.shade900 : Colors.green.shade900,
+                            Flexible(
+                              child: Text(
+                                '${s.titik.toUpperCase()} • $shiftTag${isAwal ? 'Awal' : 'Akhir'} Shift '
+                                '(${DateFormat('HH:mm').format(s.waktuOpname)})'
+                                '${s.karyawanNama != null ? ' - ${s.karyawanNama}' : ''}',
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w600,
+                                  color: isAwal ? Colors.blue.shade900 : Colors.green.shade900,
+                                ),
                               ),
                             ),
                           ],
@@ -463,6 +400,12 @@ class _TabStokHarianView extends StatelessWidget {
                 ],
               ),
             ),
+
+          // Perbandingan Shift 1 vs Shift 2
+          if (perbandingan.isNotEmpty) ...[
+            _ShiftComparisonSection(items: perbandingan),
+            const SizedBox(height: 16),
+          ],
 
           // Mini summary bar
           Row(
@@ -602,33 +545,89 @@ class _HarianItemCard extends StatelessWidget {
             ),
             const SizedBox(height: 12),
 
-            // Row 2: Values (Stok Awal, Transfer Masuk, Stok Akhir, Selisih)
+            // Row 2: Values (Stok Awal, Transfer, BOM, Ekspektasi, Stok Akhir, Selisih)
             Container(
               padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 12),
               decoration: BoxDecoration(
                 color: const Color(0xFFF9FAF9),
                 borderRadius: BorderRadius.circular(10),
               ),
-              child: Row(
+              child: Column(
                 children: [
-                  _colValue('Stok Awal', hasAwal ? '${formatAngka(item.stokAwal!)} ${item.satuan}' : '-'),
-                  if (item.transferMasuk > 0) ...[
-                    const Text('+', style: TextStyle(color: Colors.grey, fontWeight: FontWeight.bold)),
-                    _colValue('Transfer', '+${formatAngka(item.transferMasuk)} ${item.satuan}',
-                        color: Colors.blue.shade700),
-                  ],
-                  const Text('→', style: TextStyle(color: Colors.grey, fontWeight: FontWeight.bold)),
-                  _colValue('Stok Akhir', hasAkhir ? '${formatAngka(item.stokAkhir!)} ${item.satuan}' : '-'),
-                  Container(width: 1, height: 28, color: Colors.grey.shade300, margin: const EdgeInsets.symmetric(horizontal: 6)),
-                  _colValue(
-                    'Selisih Fisik',
-                    hasSelisih ? '${formatAngka(item.selisih!)} ${item.satuan}' : '-',
-                    color: hasSelisih ? AppTheme.primaryColor : Colors.grey,
-                    isBold: true,
+                  Row(
+                    children: [
+                      _colValue('Stok Awal', hasAwal ? '${formatAngka(item.stokAwal!)} ${item.satuan}' : '-'),
+                      if (item.transferMasuk > 0) ...[
+                        const Text('+', style: TextStyle(color: Colors.grey, fontWeight: FontWeight.bold)),
+                        _colValue('Transfer', '+${formatAngka(item.transferMasuk)} ${item.satuan}',
+                            color: Colors.blue.shade700),
+                      ],
+                      const Text('→', style: TextStyle(color: Colors.grey, fontWeight: FontWeight.bold)),
+                      _colValue('Stok Akhir', hasAkhir ? '${formatAngka(item.stokAkhir!)} ${item.satuan}' : '-'),
+                      Container(width: 1, height: 28, color: Colors.grey.shade300, margin: const EdgeInsets.symmetric(horizontal: 6)),
+                      _colValue(
+                        'Pakai Aktual',
+                        hasSelisih ? '${formatAngka(item.selisih!)} ${item.satuan}' : '-',
+                        color: hasSelisih ? AppTheme.primaryColor : Colors.grey,
+                        isBold: true,
+                      ),
+                    ],
                   ),
+                  if (item.ekspektasiStok != null || item.pemakaianBom > 0) ...[
+                    const Divider(height: 14),
+                    Row(
+                      children: [
+                        _colValue(
+                          'Pakai BOM',
+                          '${formatAngka(item.pemakaianBom)} ${item.satuan}',
+                          color: const Color(0xFF1B4332),
+                        ),
+                        _colValue(
+                          'Ekspektasi Stok',
+                          item.ekspektasiStok != null
+                              ? '${formatAngka(item.ekspektasiStok!)} ${item.satuan}'
+                              : '-',
+                          color: Colors.indigo.shade700,
+                          isBold: true,
+                        ),
+                        _colValue(
+                          'Selisih vs BOM',
+                          item.selisihVsBom != null
+                              ? '${item.selisihVsBom! > 0 ? '+' : ''}${formatAngka(item.selisihVsBom!)} ${item.satuan}'
+                              : '-',
+                          color: item.selisihVsBom == null
+                              ? Colors.grey
+                              : (item.selisihVsBom == 0
+                                  ? Colors.green.shade700
+                                  : (item.selisihVsBom! < 0
+                                      ? Colors.red.shade700
+                                      : Colors.blue.shade700)),
+                          isBold: true,
+                        ),
+                      ],
+                    ),
+                  ],
                 ],
               ),
             ),
+            if (item.diagnosa != null && item.diagnosa!.isNotEmpty && item.selisihVsBom != null) ...[
+              const SizedBox(height: 8),
+              Align(
+                alignment: Alignment.centerLeft,
+                child: Text(
+                  'Diagnosa: ${item.diagnosa}',
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                    color: item.selisihVsBom == 0
+                        ? Colors.green.shade800
+                        : (item.selisihVsBom! < 0
+                            ? Colors.red.shade700
+                            : Colors.blue.shade700),
+                  ),
+                ),
+              ),
+            ],
           ],
         ),
       ),
@@ -668,6 +667,7 @@ class _TabAuditView extends StatelessWidget {
     final provider = context.watch<StokOpnameHubProvider>();
     final items = provider.auditItems;
     final summary = provider.auditSummary;
+    final perbandingan = provider.perbandinganShift;
 
     return RefreshIndicator(
       onRefresh: provider.loadData,
@@ -696,16 +696,18 @@ class _TabAuditView extends StatelessWidget {
                       child: const Icon(Icons.analytics_rounded, size: 20, color: AppTheme.primaryColor),
                     ),
                     const SizedBox(width: 10),
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Text('Ringkasan Audit Bahan',
-                            style: TextStyle(fontWeight: FontWeight.w700, fontSize: 14)),
-                        Text(
-                          '${summary.totalTransaksi} Transaksi POS Selesai • ${summary.totalItemTerjual} Cup/Porsi Terjual',
-                          style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
-                        ),
-                      ],
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text('Ringkasan Audit Bahan & Ekspektasi BOM',
+                              style: TextStyle(fontWeight: FontWeight.w700, fontSize: 14)),
+                          Text(
+                            '${summary.totalTransaksi} Transaksi POS Selesai • ${summary.totalItemTerjual} Cup/Porsi Terjual',
+                            style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
+                          ),
+                        ],
+                      ),
                     ),
                   ],
                 ),
@@ -714,9 +716,9 @@ class _TabAuditView extends StatelessWidget {
                   children: [
                     _kpiBox('Diaudit', '${summary.totalBahanDiaudit}', Colors.grey.shade700, Colors.grey.shade100),
                     const SizedBox(width: 8),
-                    _kpiBox('Sesuai (Klop)', '${summary.bahanSesuai}', Colors.green.shade700, Colors.green.shade50),
+                    _kpiBox('Sesuai', '${summary.bahanSesuai}', Colors.green.shade700, Colors.green.shade50),
                     const SizedBox(width: 8),
-                    _kpiBox('Ada Selisih', '${summary.bahanSelisih}', Colors.red.shade700, Colors.red.shade50),
+                    _kpiBox('Tumpah/Susut', '${summary.bahanIndikasiTumpah}', Colors.red.shade700, Colors.red.shade50),
                     const SizedBox(width: 8),
                     _kpiBox('Belum Lengkap', '${summary.bahanBelumLengkap}', Colors.amber.shade800, Colors.amber.shade50),
                   ],
@@ -725,6 +727,12 @@ class _TabAuditView extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 16),
+
+          // Perbandingan Shift 1 vs Shift 2
+          if (perbandingan.isNotEmpty) ...[
+            _ShiftComparisonSection(items: perbandingan),
+            const SizedBox(height: 16),
+          ],
 
           // Audit Explanatory Note
           Container(
@@ -740,7 +748,9 @@ class _TabAuditView extends StatelessWidget {
                 SizedBox(width: 10),
                 Expanded(
                   child: Text(
-                    'Audit membandingkan pemakaian fisik (Stok Awal + Transfer - Stok Akhir) dengan total BOM penjualan POS.\n• Varian Minus (−) : Barang hilang/tekor (pemakaian fisik melebihi penjualan POS)\n• Varian Plus (+) : Barang surplus/lebih (pemakaian fisik lebih sedikit dari penjualan POS)',
+                    'Ekspektasi Stok = (Stok Awal + Transfer) − Pemakaian BOM POS.\n'
+                    '• Selisih Minus (−) : Stok aktual < ekspektasi sistem (indikasi tumpah / susut / takaran berlebih)\n'
+                    '• Selisih Plus (+) : Stok aktual > ekspektasi sistem (surplus / takaran kurang)',
                     style: TextStyle(fontSize: 11, color: Color(0xFF1B4332), height: 1.35),
                   ),
                 ),
@@ -775,12 +785,23 @@ class _TabAuditView extends StatelessWidget {
   Widget _kpiBox(String title, String val, Color textC, Color bgC) {
     return Expanded(
       child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 8),
+        padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
         decoration: BoxDecoration(color: bgC, borderRadius: BorderRadius.circular(10)),
         child: Column(
           children: [
-            Text(val, style: TextStyle(fontWeight: FontWeight.w800, fontSize: 16, color: textC)),
-            Text(title, style: TextStyle(fontSize: 10, color: textC, fontWeight: FontWeight.w600)),
+            Text(
+              val,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(fontWeight: FontWeight.w800, fontSize: 16, color: textC),
+            ),
+            Text(
+              title,
+              textAlign: TextAlign.center,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(fontSize: 10, color: textC, fontWeight: FontWeight.w600),
+            ),
           ],
         ),
       ),
@@ -907,72 +928,157 @@ class _AuditItemCardState extends State<_AuditItemCard> {
             ),
             const SizedBox(height: 12),
 
-            // Comparison Metrics Grid
+            // Comparison Metrics Grid: Alur Stok Awal -> BOM -> Ekspektasi vs Aktual -> Selisih
             Container(
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
                 color: const Color(0xFFF9FAF9),
                 borderRadius: BorderRadius.circular(10),
               ),
-              child: Row(
+              child: Column(
                 children: [
-                  Expanded(
-                    child: Column(
-                      children: [
-                        Text('Selisih Fisik (Aktual)',
-                            style: TextStyle(fontSize: 11, color: Colors.grey.shade600)),
-                        const SizedBox(height: 2),
-                        Text(
-                          item.pemakaianFisik != null
-                              ? '${formatAngka(item.pemakaianFisik!)} ${item.satuan}'
-                              : '-',
-                          style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Column(
+                          children: [
+                            Text('Stok Awal',
+                                style: TextStyle(fontSize: 10.5, color: Colors.grey.shade600)),
+                            const SizedBox(height: 2),
+                            Text(
+                              item.stokAwal != null
+                                  ? '${formatAngka(item.stokAwal!)} ${item.satuan}'
+                                  : '-',
+                              textAlign: TextAlign.center,
+                              style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700),
+                            ),
+                          ],
                         ),
-                      ],
-                    ),
+                      ),
+                      Expanded(
+                        child: Column(
+                          children: [
+                            Text('Ekspektasi Sistem',
+                                style: TextStyle(fontSize: 10.5, color: Colors.indigo.shade700)),
+                            const SizedBox(height: 2),
+                            Text(
+                              item.ekspektasiStok != null
+                                  ? '${formatAngka(item.ekspektasiStok!)} ${item.satuan}'
+                                  : '-',
+                              textAlign: TextAlign.center,
+                              style: TextStyle(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w800,
+                                color: Colors.indigo.shade800,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      Expanded(
+                        child: Column(
+                          children: [
+                            Text('Stok Akhir Aktual',
+                                style: TextStyle(fontSize: 10.5, color: Colors.grey.shade700)),
+                            const SizedBox(height: 2),
+                            Text(
+                              item.stokAkhir != null
+                                  ? '${formatAngka(item.stokAkhir!)} ${item.satuan}'
+                                  : '-',
+                              textAlign: TextAlign.center,
+                              style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w800),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
                   ),
-                  const Text('vs', style: TextStyle(color: Colors.grey, fontWeight: FontWeight.bold)),
-                  Expanded(
-                    child: Column(
-                      children: [
-                        Text('Teoritis BOM POS',
-                            style: TextStyle(fontSize: 11, color: Colors.grey.shade600)),
-                        const SizedBox(height: 2),
-                        Text(
-                          '${formatAngka(item.pemakaianBom)} ${item.satuan}',
-                          style: const TextStyle(
-                              fontSize: 14, fontWeight: FontWeight.w700, color: Color(0xFF1B4332)),
+                  const Divider(height: 16),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Column(
+                          children: [
+                            Text('Pemakaian Aktual',
+                                style: TextStyle(fontSize: 10.5, color: Colors.grey.shade600)),
+                            const SizedBox(height: 2),
+                            Text(
+                              item.pemakaianFisik != null
+                                  ? '${formatAngka(item.pemakaianFisik!)} ${item.satuan}'
+                                  : '-',
+                              textAlign: TextAlign.center,
+                              style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700),
+                            ),
+                          ],
                         ),
-                      ],
-                    ),
-                  ),
-                  Container(width: 1, height: 32, color: Colors.grey.shade300, margin: const EdgeInsets.symmetric(horizontal: 4)),
-                  Expanded(
-                    child: Column(
-                      children: [
-                        Text('Varian Audit',
-                            style: TextStyle(fontSize: 11, color: Colors.grey.shade600)),
-                        const SizedBox(height: 2),
-                        Text(
-                          item.varians != null
-                              ? '${item.varians! > 0 ? '+' : ''}${formatAngka(item.varians!)} ${item.satuan}'
-                              : '-',
-                          style: TextStyle(
-                            fontSize: 14,
-                            fontWeight: FontWeight.w800,
-                            color: item.varians == null
-                                ? Colors.grey
-                                : (item.varians == 0
-                                    ? Colors.green.shade700
-                                    : (item.varians! < 0 ? Colors.red.shade700 : Colors.blue.shade700)),
-                          ),
+                      ),
+                      const Text('vs', style: TextStyle(color: Colors.grey, fontWeight: FontWeight.bold)),
+                      Expanded(
+                        child: Column(
+                          children: [
+                            Text('Pemakaian BOM',
+                                style: TextStyle(fontSize: 10.5, color: Colors.grey.shade600)),
+                            const SizedBox(height: 2),
+                            Text(
+                              '${formatAngka(item.pemakaianBom)} ${item.satuan}',
+                              textAlign: TextAlign.center,
+                              style: const TextStyle(
+                                  fontSize: 13, fontWeight: FontWeight.w700, color: Color(0xFF1B4332)),
+                            ),
+                          ],
                         ),
-                      ],
-                    ),
+                      ),
+                      Container(width: 1, height: 32, color: Colors.grey.shade300, margin: const EdgeInsets.symmetric(horizontal: 4)),
+                      Expanded(
+                        child: Column(
+                          children: [
+                            Text('Selisih vs BOM',
+                                style: TextStyle(fontSize: 10.5, color: Colors.grey.shade600)),
+                            const SizedBox(height: 2),
+                            Text(
+                              item.varians != null
+                                  ? '${item.varians! > 0 ? '+' : ''}${formatAngka(item.varians!)} ${item.satuan}'
+                                  : '-',
+                              textAlign: TextAlign.center,
+                              style: TextStyle(
+                                fontSize: 13.5,
+                                fontWeight: FontWeight.w800,
+                                color: item.varians == null
+                                    ? Colors.grey
+                                    : (item.varians == 0
+                                        ? Colors.green.shade700
+                                        : (item.varians! < 0 ? Colors.red.shade700 : Colors.blue.shade700)),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
                   ),
                 ],
               ),
             ),
+            if (item.penjelasanDiagnosa.isNotEmpty) ...[
+              const SizedBox(height: 8),
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                decoration: BoxDecoration(
+                  color: badgeBg,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: badgeText.withValues(alpha: 0.25)),
+                ),
+                child: Text(
+                  item.penjelasanDiagnosa,
+                  style: TextStyle(
+                    fontSize: 11.5,
+                    color: badgeText,
+                    fontWeight: FontWeight.w500,
+                    height: 1.35,
+                  ),
+                ),
+              ),
+            ],
 
             // Expandable menu breakdown
             if (item.detailMenu.isNotEmpty) ...[
@@ -1082,6 +1188,273 @@ class _AuditItemCardState extends State<_AuditItemCard> {
             ],
           ],
         ),
+      ),
+    );
+  }
+}
+
+// ═════════════════════════════════════════════════════════════════════════════
+// PERBANDINGAN OPNAME SHIFT 1 vs SHIFT 2 (SERAH TERIMA & BOM PER SHIFT)
+// ═════════════════════════════════════════════════════════════════════════════
+class _ShiftComparisonSection extends StatelessWidget {
+  final List<ShiftComparisonItem> items;
+  const _ShiftComparisonSection({required this.items});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: const Color(0xFFC7DEC9)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(6),
+                decoration: BoxDecoration(
+                  color: AppTheme.primaryColor.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: const Icon(Icons.compare_arrows_rounded,
+                    size: 18, color: AppTheme.primaryColor),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Selisih Opname Shift 1 vs Shift 2 (${items.length} Bahan)',
+                      style: GoogleFonts.outfit(
+                        fontWeight: FontWeight.w700,
+                        fontSize: 14,
+                        color: const Color(0xFF1A1D1B),
+                      ),
+                    ),
+                    Text(
+                      'Cek serah terima Akhir Shift 1 → Awal Shift 2 & pemakaian BOM tiap shift',
+                      style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          ...items.map((comp) => _ShiftComparisonCard(item: comp)),
+        ],
+      ),
+    );
+  }
+}
+
+class _ShiftComparisonCard extends StatelessWidget {
+  final ShiftComparisonItem item;
+  const _ShiftComparisonCard({required this.item});
+
+  @override
+  Widget build(BuildContext context) {
+    Color handBg;
+    Color handFg;
+    String handLabel;
+    if (item.statusHandover == 'sesuai') {
+      handBg = Colors.green.shade50;
+      handFg = Colors.green.shade800;
+      handLabel = 'Serah Terima Klop (0)';
+    } else if (item.statusHandover == 'kurang') {
+      handBg = Colors.red.shade50;
+      handFg = Colors.red.shade800;
+      handLabel =
+          'Selisih S1→S2: ${formatAngka(item.selisihAkhirS1VsAwalS2 ?? 0)} ${item.satuan}';
+    } else if (item.statusHandover == 'lebih') {
+      handBg = Colors.blue.shade50;
+      handFg = Colors.blue.shade800;
+      handLabel =
+          'Selisih S1→S2: +${formatAngka(item.selisihAkhirS1VsAwalS2 ?? 0)} ${item.satuan}';
+    } else {
+      handBg = Colors.grey.shade100;
+      handFg = Colors.grey.shade700;
+      handLabel = 'Handover Belum Lengkap';
+    }
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 10),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF9FAF9),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.grey.shade200),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Wrap(
+            spacing: 8,
+            runSpacing: 6,
+            alignment: WrapAlignment.spaceBetween,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            children: [
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    item.namaBahan,
+                    style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13.5),
+                  ),
+                  const SizedBox(width: 6),
+                  Text(
+                    '(${item.titik.toUpperCase()})',
+                    style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
+                  ),
+                ],
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                decoration: BoxDecoration(
+                  color: handBg,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: handFg.withValues(alpha: 0.3)),
+                ),
+                child: Text(
+                  handLabel,
+                  style: TextStyle(
+                    fontSize: 10.5,
+                    fontWeight: FontWeight.w700,
+                    color: handFg,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: _shiftBox('Shift 1', item.shift1, item.satuan),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: _shiftBox('Shift 2', item.shift2, item.satuan),
+              ),
+            ],
+          ),
+          if (item.selisihStokAkhirS1VsS2 != null ||
+              item.catatanPerbandingan.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            Text(
+              item.catatanPerbandingan +
+                  (item.selisihStokAkhirS1VsS2 != null
+                      ? ' · Delta Akhir S2−S1: ${item.selisihStokAkhirS1VsS2! > 0 ? '+' : ''}${formatAngka(item.selisihStokAkhirS1VsS2!)} ${item.satuan}'
+                      : ''),
+              style: TextStyle(
+                fontSize: 11,
+                color: Colors.grey.shade700,
+                height: 1.3,
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _shiftBox(String fallbackTitle, ShiftOpnameSnapshot? snap, String satuan) {
+    if (snap == null) {
+      return Container(
+        padding: const EdgeInsets.all(8),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: Colors.grey.shade200),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(fallbackTitle,
+                style: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.w700)),
+            const SizedBox(height: 4),
+            Text('Belum ada data opname',
+                style: TextStyle(fontSize: 11, color: Colors.grey.shade500)),
+          ],
+        ),
+      );
+    }
+
+    final selColor = snap.selisihVsBom == null
+        ? Colors.grey.shade700
+        : (snap.selisihVsBom == 0
+            ? Colors.green.shade700
+            : (snap.selisihVsBom! < 0 ? Colors.red.shade700 : Colors.blue.shade700));
+
+    return Container(
+      padding: const EdgeInsets.all(8),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: Colors.grey.shade200),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            snap.karyawanNama != null
+                ? '${snap.shiftLabel} (${snap.karyawanNama})'
+                : snap.shiftLabel,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(
+              fontSize: 11.5,
+              fontWeight: FontWeight.w700,
+              color: Color(0xFF1B4332),
+            ),
+          ),
+          const SizedBox(height: 4),
+          _kv('Awal', snap.stokAwal != null ? '${formatAngka(snap.stokAwal!)} $satuan' : '-'),
+          _kv('BOM', '${formatAngka(snap.pemakaianBom)} $satuan'),
+          _kv(
+            'Ekspektasi',
+            snap.ekspektasiStok != null
+                ? '${formatAngka(snap.ekspektasiStok!)} $satuan'
+                : '-',
+            color: Colors.indigo.shade700,
+          ),
+          _kv('Akhir', snap.stokAkhir != null ? '${formatAngka(snap.stokAkhir!)} $satuan' : '-'),
+          _kv(
+            'Selisih',
+            snap.selisihVsBom != null
+                ? '${snap.selisihVsBom! > 0 ? '+' : ''}${formatAngka(snap.selisihVsBom!)} $satuan'
+                : '-',
+            color: selColor,
+            bold: true,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _kv(String k, String v, {Color? color, bool bold = false}) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 1),
+      child: Row(
+        children: [
+          Expanded(
+            child: Text(k, style: TextStyle(fontSize: 10.5, color: Colors.grey.shade600)),
+          ),
+          Text(
+            v,
+            style: TextStyle(
+              fontSize: 10.5,
+              fontWeight: bold ? FontWeight.w800 : FontWeight.w600,
+              color: color ?? const Color(0xFF2D312E),
+            ),
+          ),
+        ],
       ),
     );
   }

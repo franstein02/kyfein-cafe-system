@@ -313,7 +313,7 @@ Saat opname disubmit (dan belum ada opname shift lebih baru) → sistem **overwr
 * **Shift berjalan** (dipakai semua fitur untuk menentukan "shift aktif"; satu service `get_shift_berjalan`): `now` berada di antara `tanggal` 00:00 dan `tanggal + jam_selesai + toleransi` (default **3 jam**, konstanta config). Bukan perbandingan `tanggal = hari ini`, karena shift 2 bisa selesai setelah 00:00. Kandidat: shift karyawan hari ini atau kemarin. Jika dua kandidat valid sekaligus (mis. 01:00), dipilih shift kemarin hanya jika belum ada `absensi.jam_pulang`, selain itu shift hari ini. Dipakai oleh absen masuk, POS, cancel, opname, dan barang keluar
 * Jadwal hanya terlihat milik sendiri untuk Karyawan (Admin melihat semua). Jadwal karyawan **lain** hanya terlihat lewat endpoint khusus tukar shift pada tanggal yang dipilih
 
-**`shift_template`** — preset jam per shift (default saat assign, bisa override): `id`, `shift` (`shift_1`/`shift_2`, UNIQUE), `jam_mulai`, `jam_selesai`.
+**`shift_template`** — preset jam per shift dinamis (default awal `shift_1` & `shift_2`, Admin dapat menambah/mengubah/menghapus template): `id`, `shift` (kode unik `VARCHAR`), `nama`, `jam_mulai`, `jam_selesai`.
 
 **`jadwal_shift`**
 
@@ -322,7 +322,7 @@ Saat opname disubmit (dan belum ada opname shift lebih baru) → sistem **overwr
 | id | UUID | PK |
 | karyawan_id | UUID | FK |
 | tanggal | DATE | |
-| shift | ENUM | `shift_1` / `shift_2` |
+| shift | VARCHAR | mengacu template shift (`shift_1`, `shift_2`, dll.) |
 | area_kerja | ENUM | `kasir` / `bar` / `kitchen` |
 | shift_template_id | UUID nullable | FK, jejak referensi |
 | jam_mulai, jam_selesai | TIME | snapshot dari template atau manual |

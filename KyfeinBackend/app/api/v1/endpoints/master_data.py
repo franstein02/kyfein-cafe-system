@@ -1,16 +1,17 @@
 import uuid
-from typing import List, Union
+from typing import List, Union, Optional, Literal
 from decimal import Decimal
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func
+from sqlalchemy import select, func, delete
 from sqlalchemy.orm import selectinload
 
 from app.core.deps import get_db, require_roles, get_current_user
 from app.core.foto_helper import validate_and_claim_foto, remove_old_foto_if_replaced
 from app.models.foto import Foto
 from app.models.master_data import (
-    KategoriMenu, Menu, Bahan, MenuResep, KategoriPengeluaran, KonfigurasiLokasi
+    KategoriMenu, Menu, Bahan, MenuResep, KategoriPengeluaran, KonfigurasiLokasi,
+    hitung_batas_minimum_kecil,
 )
 from app.models.stok import StokGudang, StokTitik
 from app.models.karyawan import Karyawan
@@ -26,11 +27,41 @@ from app.schemas.master_data import (
 router = APIRouter()
 
 def _populate_menu_resep(menu: Menu):
+    foto_rel = getattr(menu, 'foto_rel', None)
+    if foto_rel and foto_rel.path and foto_rel.path.startswith(('http://', 'https://')):
+        setattr(menu, 'foto_url', foto_rel.path)
+    else:
+        setattr(menu, 'foto_url', None)
+
     if hasattr(menu, 'resep') and menu.resep:
         for r in menu.resep:
             if hasattr(r, 'bahan') and r.bahan:
                 setattr(r, 'nama_bahan', r.bahan.nama)
                 setattr(r, 'satuan', r.bahan.satuan)
+
+
+async def _sync_stok_titik_for_bahan(db: AsyncSession, bahan: Bahan):
+    """Pastikan baris stok_titik sesuai dengan area penggunaan bahan (bar/kitchen/semua)."""
+    area = getattr(bahan, 'area', 'semua') or 'semua'
+    target_titiks = ['bar', 'kitchen'] if area == 'semua' else [area]
+    all_titiks = ['bar', 'kitchen']
+
+    st_res = await db.execute(select(StokTitik).where(StokTitik.bahan_id == bahan.id))
+    existing_map = {st.titik: st for st in st_res.scalars().all()}
+
+    for t in all_titiks:
+        if t in target_titiks:
+            if t not in existing_map:
+                db.add(StokTitik(
+                    id=str(uuid.uuid4()),
+                    bahan_id=bahan.id,
+                    titik=t,
+                    jumlah=Decimal('0')
+                ))
+        else:
+            st = existing_map.get(t)
+            if st and Decimal(str(st.jumlah or 0)) == 0:
+                await db.delete(st)
 
 # --- KATEGORI MENU ---
 @router.get("/kategori-menu", response_model=List[KategoriMenuOut])
@@ -82,6 +113,7 @@ async def list_menu(
 ):
     stmt = select(Menu).options(
         selectinload(Menu.kategori),
+        selectinload(Menu.foto_rel),
         selectinload(Menu.resep).selectinload(MenuResep.bahan)
     )
     if not (include_nonaktif and current_user.role in ["admin"]):
@@ -102,6 +134,7 @@ async def get_menu_by_id(
         select(Menu)
         .options(
             selectinload(Menu.kategori),
+            selectinload(Menu.foto_rel),
             selectinload(Menu.resep).selectinload(MenuResep.bahan)
         )
         .where(Menu.id == id)
@@ -207,6 +240,7 @@ async def create_menu(
         select(Menu)
         .options(
             selectinload(Menu.kategori),
+            selectinload(Menu.foto_rel),
             selectinload(Menu.resep).selectinload(MenuResep.bahan)
         )
         .where(Menu.id == item.id)
@@ -273,6 +307,7 @@ async def update_menu(
         select(Menu)
         .options(
             selectinload(Menu.kategori),
+            selectinload(Menu.foto_rel),
             selectinload(Menu.resep).selectinload(MenuResep.bahan)
         )
         .where(Menu.id == item.id)
@@ -302,7 +337,8 @@ async def get_stok_menipis(
 ):
     """
     List bahan yang total stoknya (stok_gudang dikonversi ke satuan kecil via isi_per_kemasan,
-    ditambah stok_titik bar + kitchen) di bawah bahan.stok_minimum.
+    ditambah stok_titik bar + kitchen) mencapai atau di bawah batas stok_minimum
+    (stok_minimum × isi_per_kemasan; 0 = peringatan nonaktif).
     """
     bahan_res = await db.execute(select(Bahan))
     all_bahan = bahan_res.scalars().all()
@@ -324,8 +360,9 @@ async def get_stok_menipis(
         stok_titik_total = sum((Decimal(str(st.jumlah)) for st in st_list), Decimal('0'))
 
         total_stok = stok_gudang_kecil + stok_titik_total
+        batas_min_kecil = hitung_batas_minimum_kecil(b)
 
-        if total_stok < Decimal(str(b.stok_minimum)):
+        if batas_min_kecil > 0 and total_stok <= batas_min_kecil:
             setattr(b, 'total_stok', total_stok)
             result.append(b)
 
@@ -333,10 +370,15 @@ async def get_stok_menipis(
 
 @router.get("/bahan", response_model=Union[List[BahanAdminOut], List[BahanOut]])
 async def list_bahan(
+    titik: Optional[Literal['bar', 'kitchen']] = None,
     db: AsyncSession = Depends(get_db),
     current_user: Karyawan = Depends(get_current_user)
 ):
-    result = await db.execute(select(Bahan))
+    stmt = select(Bahan)
+    if titik:
+        stmt = stmt.where(Bahan.area.in_([titik, 'semua']))
+    stmt = stmt.order_by(Bahan.nama.asc())
+    result = await db.execute(stmt)
     items = result.scalars().all()
     if current_user.role in ["admin"]:
         return [BahanAdminOut.model_validate(b) for b in items]
@@ -352,20 +394,14 @@ async def create_bahan(
     db.add(item)
     await db.flush()
 
-    # Inisialisasi StokGudang & StokTitik otomatis agar bahan baru langsung muncul di Gudang & Opname
+    # Inisialisasi StokGudang & StokTitik sesuai area bahan
     db.add(StokGudang(
         id=str(uuid.uuid4()),
         bahan_id=item.id,
-        jumlah_kemasan_besar=Decimal('0'),
+        jumlah_kemasan_besar=0,
         jumlah_satuan_kecil=Decimal('0')
     ))
-    for titik_area in ['bar', 'kitchen']:
-        db.add(StokTitik(
-            id=str(uuid.uuid4()),
-            bahan_id=item.id,
-            titik=titik_area,
-            jumlah=Decimal('0')
-        ))
+    await _sync_stok_titik_for_bahan(db, item)
 
     await db.commit()
     await db.refresh(item)
@@ -383,6 +419,7 @@ async def update_bahan(
         raise HTTPException(status_code=404, detail="Bahan tidak ditemukan")
     for field, val in data.dict(exclude_unset=True).items():
         setattr(item, field, val)
+    await _sync_stok_titik_for_bahan(db, item)
     await db.commit()
     await db.refresh(item)
     return item

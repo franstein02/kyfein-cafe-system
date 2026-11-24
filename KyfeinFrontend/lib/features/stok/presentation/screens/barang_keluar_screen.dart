@@ -8,7 +8,12 @@ import '../../providers/stok_models.dart';
 class BarangKeluarScreen extends StatefulWidget {
   /// Titik awal yang terpilih. Nanti bisa diisi dari area_kerja shift aktif karyawan.
   final TitikStok titikAwal;
-  const BarangKeluarScreen({super.key, this.titikAwal = TitikStok.bar});
+  final bool kunciTitik;
+  const BarangKeluarScreen({
+    super.key,
+    this.titikAwal = TitikStok.bar,
+    this.kunciTitik = false,
+  });
 
   @override
   State<BarangKeluarScreen> createState() => _BarangKeluarScreenState();
@@ -84,9 +89,11 @@ class _BarangKeluarScreenState extends State<BarangKeluarScreen> {
     final provider = context.watch<StokGudangProvider>();
     final primary = Theme.of(context).primaryColor;
     final dipakai = _rows.map((r) => r.bahan?.id).whereType<String>().toSet();
-    // Hanya bahan yang masih ada stoknya di gudang.
+    // Hanya bahan sesuai area tujuan & masih ada stoknya di gudang.
     final tersedia = provider.daftarBahan
-        .where((b) => (provider.stokUntuk(b.id)?.totalSatuanKecil ?? 0) > 0)
+        .where((b) =>
+            b.cocokUntukTitik(_titik) &&
+            (provider.stokUntuk(b.id)?.totalSatuanKecil ?? 0) > 0)
         .toList();
 
     return Scaffold(
@@ -100,13 +107,52 @@ class _BarangKeluarScreenState extends State<BarangKeluarScreen> {
             children: [
               Text('Tujuan', style: Theme.of(context).textTheme.titleSmall),
               const SizedBox(height: 8),
-              SegmentedButton<TitikStok>(
-                segments: TitikStok.values
-                    .map((t) => ButtonSegment(value: t, label: Text(t.label)))
-                    .toList(),
-                selected: {_titik},
-                onSelectionChanged: (v) => setState(() => _titik = v.first),
-              ),
+              if (widget.kunciTitik)
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                  decoration: BoxDecoration(
+                    color: primary.withValues(alpha: 0.08),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: primary.withValues(alpha: 0.25)),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(
+                        _titik == TitikStok.kitchen
+                            ? Icons.soup_kitchen_rounded
+                            : Icons.local_cafe_rounded,
+                        size: 18,
+                        color: primary,
+                      ),
+                      const SizedBox(width: 8),
+                      Text(
+                        'Tujuan Otomatis: ${_titik.label}',
+                        style: TextStyle(
+                          fontWeight: FontWeight.w700,
+                          color: primary,
+                        ),
+                      ),
+                    ],
+                  ),
+                )
+              else
+                SegmentedButton<TitikStok>(
+                  segments: TitikStok.values
+                      .map((t) => ButtonSegment(value: t, label: Text(t.label)))
+                      .toList(),
+                  selected: {_titik},
+                  onSelectionChanged: (v) {
+                    final nextTitik = v.first;
+                    setState(() {
+                      _titik = nextTitik;
+                      for (final r in _rows) {
+                        if (r.bahan != null && !r.bahan!.cocokUntukTitik(nextTitik)) {
+                          r.bahan = null;
+                        }
+                      }
+                    });
+                  },
+                ),
               const SizedBox(height: 12),
               Container(
                 padding: const EdgeInsets.all(12),

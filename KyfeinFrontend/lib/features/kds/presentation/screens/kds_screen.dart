@@ -2,6 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 import '../../../../core/theme/app_theme.dart';
+import '../../../../core/widgets/on_duty_guard.dart';
+import '../../../../core/widgets/page_refresh_scope.dart';
+import '../../../auth/providers/auth_provider.dart';
+import '../../../dashboard/providers/dashboard_provider.dart';
 import '../../providers/kds_provider.dart';
 
 class KdsScreen extends StatefulWidget {
@@ -16,6 +20,17 @@ class _KdsScreenState extends State<KdsScreen>
     with SingleTickerProviderStateMixin {
   late TabController _tabController;
   late String _activeArea;
+  KdsProvider? _kdsProvider;
+
+  bool _canAccessKds() {
+    try {
+      final auth = context.read<AuthProvider>();
+      if (auth.role != 'karyawan') return true;
+      return context.read<DashboardProvider>().isOnDuty;
+    } catch (_) {
+      return true;
+    }
+  }
 
   @override
   void initState() {
@@ -26,8 +41,17 @@ class _KdsScreenState extends State<KdsScreen>
       if (mounted) setState(() {});
     });
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      context.read<KdsProvider>().initArea(_activeArea);
+      if (!mounted) return;
+      if (_canAccessKds()) {
+        context.read<KdsProvider>().initArea(_activeArea);
+      }
     });
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _kdsProvider = context.read<KdsProvider>();
   }
 
   @override
@@ -40,6 +64,7 @@ class _KdsScreenState extends State<KdsScreen>
 
   @override
   void dispose() {
+    _kdsProvider?.stopRealtime();
     _tabController.dispose();
     super.dispose();
   }
@@ -54,167 +79,152 @@ class _KdsScreenState extends State<KdsScreen>
   Widget build(BuildContext context) {
     final prov = context.watch<KdsProvider>();
 
-    return Scaffold(
-      backgroundColor: AppTheme.backgroundColor,
-      body: Column(
-        children: [
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
-            decoration: const BoxDecoration(
-              color: Colors.white,
-              border: Border(bottom: BorderSide(color: AppTheme.borderColor)),
-            ),
-            child: Wrap(
-              spacing: 16,
-              runSpacing: 12,
-              alignment: WrapAlignment.spaceBetween,
-              crossAxisAlignment: WrapCrossAlignment.center,
-              children: [
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        const Text(
-                          'Layar Pesanan / KDS',
-                          style: TextStyle(
-                            fontSize: 18,
-                            fontWeight: FontWeight.w700,
-                            color: AppTheme.textColor,
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                          decoration: BoxDecoration(
-                            color: prov.isConnected
-                                ? Colors.green.shade50
-                                : Colors.orange.shade50,
-                            borderRadius: BorderRadius.circular(20),
-                            border: Border.all(
-                              color: prov.isConnected
-                                  ? Colors.green.shade300
-                                  : Colors.orange.shade300,
-                            ),
-                          ),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Icon(
-                                Icons.circle,
-                                size: 8,
-                                color: prov.isConnected
-                                    ? Colors.green.shade700
-                                    : Colors.orange.shade700,
-                              ),
-                              const SizedBox(width: 6),
-                              Text(
-                                prov.isConnected ? 'REALTIME LIVE' : 'POLLING',
-                                style: TextStyle(
-                                  color: prov.isConnected
-                                      ? Colors.green.shade800
-                                      : Colors.orange.shade800,
-                                  fontSize: 10.5,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      'Antrian produksi pesanan realtime dari kasir POS berdasarkan kategori menu',
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: Colors.grey.shade600,
-                      ),
-                    ),
-                  ],
+    return OnDutyGuard(
+      featureName: 'Layar Pesanan KDS',
+      child: PageRefreshRegistrar(
+        onRefresh: () => prov.loadOrders(area: _activeArea),
+        child: Scaffold(
+          backgroundColor: AppTheme.backgroundColor,
+          appBar: buildStandaloneAppBar(
+            context,
+            title: 'Layar Pesanan KDS',
+            onRefresh: () => prov.loadOrders(area: _activeArea),
+          ),
+          body: Column(
+            children: [
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                decoration: const BoxDecoration(
+                  color: Colors.white,
+                  border: Border(bottom: BorderSide(color: AppTheme.borderColor)),
                 ),
-                Row(
-                  mainAxisSize: MainAxisSize.min,
+                child: Row(
                   children: [
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                       decoration: BoxDecoration(
-                        color: AppTheme.backgroundColor,
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: AppTheme.borderColor),
-                      ),
-                      child: DropdownButtonHideUnderline(
-                        child: DropdownButton<int>(
-                          value: _tabController.index,
-                          isDense: true,
-                          icon: const Icon(Icons.keyboard_arrow_down_rounded, color: AppTheme.primaryColor),
-                          style: const TextStyle(
-                            fontSize: 13,
-                            fontWeight: FontWeight.w600,
-                            color: AppTheme.textColor,
-                          ),
-                          onChanged: (val) {
-                            if (val != null) {
-                              _tabController.animateTo(val);
-                              setState(() {});
-                            }
-                          },
-                          items: [
-                            DropdownMenuItem(
-                              value: 0,
-                              child: Text('Menunggu (${prov.menungguOrders.length})'),
-                            ),
-                            DropdownMenuItem(
-                              value: 1,
-                              child: Text('Diproses (${prov.diprosesOrders.length})'),
-                            ),
-                            DropdownMenuItem(
-                              value: 2,
-                              child: Text('Selesai (${prov.selesaiOrders.length})'),
-                            ),
-                            DropdownMenuItem(
-                              value: 3,
-                              child: Text('Semua Status (${prov.orders.length})'),
-                            ),
-                          ],
+                        color: prov.isConnected
+                            ? Colors.green.shade50
+                            : Colors.orange.shade50,
+                        borderRadius: BorderRadius.circular(20),
+                        border: Border.all(
+                          color: prov.isConnected
+                              ? Colors.green.shade300
+                              : Colors.orange.shade300,
                         ),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            Icons.circle,
+                            size: 8,
+                            color: prov.isConnected
+                                ? Colors.green.shade700
+                                : Colors.orange.shade700,
+                          ),
+                          const SizedBox(width: 6),
+                          Text(
+                            prov.isConnected ? 'REALTIME LIVE' : 'POLLING',
+                            style: TextStyle(
+                              color: prov.isConnected
+                                  ? Colors.green.shade800
+                                  : Colors.orange.shade800,
+                              fontSize: 10.5,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ],
                       ),
                     ),
-                    const SizedBox(width: 8),
-                    IconButton(
-                      onPressed: prov.isLoading ? null : () => prov.loadOrders(area: _activeArea),
-                      tooltip: 'Muat Ulang Pesanan',
-                      style: IconButton.styleFrom(
-                        backgroundColor: AppTheme.backgroundColor,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(10),
-                          side: const BorderSide(color: AppTheme.borderColor),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Align(
+                        alignment: Alignment.centerRight,
+                        child: ConstrainedBox(
+                          constraints: const BoxConstraints(maxWidth: 215),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 3),
+                            decoration: BoxDecoration(
+                              color: AppTheme.backgroundColor,
+                              borderRadius: BorderRadius.circular(10),
+                              border: Border.all(color: AppTheme.borderColor),
+                            ),
+                            child: DropdownButtonHideUnderline(
+                              child: DropdownButton<int>(
+                                value: _tabController.index,
+                                isDense: true,
+                                isExpanded: true,
+                                icon: const Icon(Icons.keyboard_arrow_down_rounded, color: AppTheme.primaryColor),
+                                style: const TextStyle(
+                                  fontSize: 12.5,
+                                  fontWeight: FontWeight.w600,
+                                  color: AppTheme.textColor,
+                                ),
+                                onChanged: (val) {
+                                  if (val != null) {
+                                    _tabController.animateTo(val);
+                                    setState(() {});
+                                  }
+                                },
+                                items: [
+                                  DropdownMenuItem(
+                                    value: 0,
+                                    child: Text(
+                                      'Menunggu (${prov.menungguOrders.length})',
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ),
+                                  DropdownMenuItem(
+                                    value: 1,
+                                    child: Text(
+                                      'Diproses (${prov.diprosesOrders.length})',
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ),
+                                  DropdownMenuItem(
+                                    value: 2,
+                                    child: Text(
+                                      'Selesai (${prov.selesaiOrders.length})',
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ),
+                                  DropdownMenuItem(
+                                    value: 3,
+                                    child: Text(
+                                      'Semua Status (${prov.orders.length})',
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
                         ),
                       ),
-                      icon: const Icon(Icons.refresh_rounded, size: 18, color: AppTheme.primaryColor),
                     ),
                   ],
                 ),
-              ],
-            ),
+              ),
+              if (context.watch<AuthProvider>().role != 'karyawan')
+                _buildAreaHeader(prov),
+              Expanded(
+                child: prov.isLoading
+                    ? const Center(child: CircularProgressIndicator())
+                    : TabBarView(
+                        controller: _tabController,
+                        children: [
+                          _buildOrderList(prov, prov.menungguOrders, 'Belum ada pesanan baru berstatus Menunggu.'),
+                          _buildOrderList(prov, prov.diprosesOrders, 'Belum ada pesanan yang sedang Diproses.'),
+                          _buildOrderList(prov, prov.selesaiOrders, 'Belum ada pesanan yang Selesai dibuat.'),
+                          _buildOrderList(prov, prov.orders, 'Belum ada antrian pesanan di area ini.'),
+                        ],
+                      ),
+              ),
+            ],
           ),
-          _buildAreaHeader(prov),
-          Expanded(
-            child: prov.isLoading
-                ? const Center(child: CircularProgressIndicator())
-                : TabBarView(
-                    controller: _tabController,
-                    children: [
-                      _buildOrderList(prov, prov.menungguOrders, 'Belum ada pesanan baru berstatus Menunggu.'),
-                      _buildOrderList(prov, prov.diprosesOrders, 'Belum ada pesanan yang sedang Diproses.'),
-                      _buildOrderList(prov, prov.selesaiOrders, 'Belum ada pesanan yang Selesai dibuat.'),
-                      _buildOrderList(prov, prov.orders, 'Belum ada antrian pesanan di area ini.'),
-                    ],
-                  ),
-          ),
-        ],
+        ),
       ),
     );
   }
@@ -297,7 +307,7 @@ class _KdsScreenState extends State<KdsScreen>
         padding: const EdgeInsets.all(16),
         gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
           maxCrossAxisExtent: 360,
-          mainAxisExtent: 235,
+          mainAxisExtent: 268,
           crossAxisSpacing: 14,
           mainAxisSpacing: 14,
         ),
@@ -385,68 +395,71 @@ class _KdsScreenState extends State<KdsScreen>
           const Divider(height: 18),
           // Body: Kode Menu + Qty + Nama Menu + Catatan
           Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    if (order.kodeMenu.isNotEmpty)
-                      Container(
-                        margin: const EdgeInsets.only(right: 8),
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                        decoration: BoxDecoration(
-                          color: AppTheme.primaryColor,
-                          borderRadius: BorderRadius.circular(6),
-                        ),
-                        child: Text(
-                          order.kodeMenu,
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontWeight: FontWeight.bold,
-                            fontSize: 12,
+            child: SingleChildScrollView(
+              physics: const NeverScrollableScrollPhysics(),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      if (order.kodeMenu.isNotEmpty)
+                        Container(
+                          margin: const EdgeInsets.only(right: 8),
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                          decoration: BoxDecoration(
+                            color: AppTheme.primaryColor,
+                            borderRadius: BorderRadius.circular(6),
+                          ),
+                          child: Text(
+                            order.kodeMenu,
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.bold,
+                              fontSize: 12,
+                            ),
                           ),
                         ),
+                      Expanded(
+                        child: Text(
+                          '${order.qty}x ${order.namaMenu}',
+                          style: const TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 15,
+                          ),
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                        ),
                       ),
-                    Expanded(
+                    ],
+                  ),
+                  const SizedBox(height: 6),
+                  if (order.catatan != null && order.catatan!.trim().isNotEmpty)
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                      decoration: BoxDecoration(
+                        color: Colors.amber.shade50,
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: Colors.amber.shade200),
+                      ),
                       child: Text(
-                        '${order.qty}x ${order.namaMenu}',
-                        style: const TextStyle(
-                          fontWeight: FontWeight.bold,
-                          fontSize: 15,
+                        'Catatan: ${order.catatan}',
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontStyle: FontStyle.italic,
+                          color: Colors.amber.shade900,
                         ),
                         maxLines: 2,
                         overflow: TextOverflow.ellipsis,
                       ),
+                    )
+                  else
+                    Text(
+                      'Area: ${order.areaProduksi.toUpperCase()} • Tanpa catatan khusus',
+                      style: TextStyle(fontSize: 12, color: Colors.grey.shade500),
                     ),
-                  ],
-                ),
-                const SizedBox(height: 6),
-                if (order.catatan != null && order.catatan!.trim().isNotEmpty)
-                  Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                    decoration: BoxDecoration(
-                      color: Colors.amber.shade50,
-                      borderRadius: BorderRadius.circular(8),
-                      border: Border.all(color: Colors.amber.shade200),
-                    ),
-                    child: Text(
-                      'Catatan: ${order.catatan}',
-                      style: TextStyle(
-                        fontSize: 12,
-                        fontStyle: FontStyle.italic,
-                        color: Colors.amber.shade900,
-                      ),
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  )
-                else
-                  Text(
-                    'Area: ${order.areaProduksi.toUpperCase()} • Tanpa catatan khusus',
-                    style: TextStyle(fontSize: 12, color: Colors.grey.shade500),
-                  ),
-              ],
+                ],
+              ),
             ),
           ),
           const SizedBox(height: 8),
@@ -459,18 +472,9 @@ class _KdsScreenState extends State<KdsScreen>
                       backgroundColor: Colors.blue.shade700,
                       padding: const EdgeInsets.symmetric(vertical: 10),
                     ),
-                    onPressed: () async {
-                      final ok = await prov.updateStatusItem(order.id, 'diproses');
-                      if (mounted && ok) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(
-                            content: Text('${order.qty}x ${order.namaMenu} diubah ke DIPROSES'),
-                            backgroundColor: Colors.blue.shade700,
-                            duration: const Duration(seconds: 2),
-                          ),
-                        );
-                      }
-                    },
+                    onPressed: prov.isUpdatingDetail(order.id)
+                        ? null
+                        : () => _handleUpdateStatus(prov, order, 'diproses'),
                     icon: const Icon(Icons.play_arrow_rounded, size: 18),
                     label: const Text('Mulai Proses (Diproses)'),
                   )
@@ -480,18 +484,9 @@ class _KdsScreenState extends State<KdsScreen>
                           backgroundColor: Colors.green.shade700,
                           padding: const EdgeInsets.symmetric(vertical: 10),
                         ),
-                        onPressed: () async {
-                          final ok = await prov.updateStatusItem(order.id, 'selesai');
-                          if (mounted && ok) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(
-                                content: Text('${order.qty}x ${order.namaMenu} telah SELESAI dibuat!'),
-                                backgroundColor: Colors.green.shade700,
-                                duration: const Duration(seconds: 2),
-                              ),
-                            );
-                          }
-                        },
+                        onPressed: prov.isUpdatingDetail(order.id)
+                            ? null
+                            : () => _handleUpdateStatus(prov, order, 'selesai'),
                         icon: const Icon(Icons.check_circle_outline_rounded, size: 18),
                         label: const Text('Tandai Selesai'),
                       )
@@ -507,5 +502,36 @@ class _KdsScreenState extends State<KdsScreen>
         ],
       ),
     );
+  }
+
+  Future<void> _handleUpdateStatus(
+    KdsProvider prov,
+    KdsOrderItem order,
+    String targetStatus,
+  ) async {
+    final ok = await prov.updateStatusItem(order.id, targetStatus);
+    if (!mounted) return;
+    if (ok) {
+      final isDone = targetStatus == 'selesai';
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            isDone
+                ? '${order.qty}x ${order.namaMenu} telah SELESAI dibuat!'
+                : '${order.qty}x ${order.namaMenu} diubah ke DIPROSES',
+          ),
+          backgroundColor: isDone ? Colors.green.shade700 : Colors.blue.shade700,
+          duration: const Duration(seconds: 2),
+        ),
+      );
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(prov.errorMessage ?? 'Gagal memperbarui status pesanan'),
+          backgroundColor: Colors.red.shade700,
+          duration: const Duration(seconds: 3),
+        ),
+      );
+    }
   }
 }

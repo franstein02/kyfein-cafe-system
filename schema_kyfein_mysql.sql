@@ -102,6 +102,7 @@ CREATE TABLE bahan (
     id              CHAR(36) NOT NULL DEFAULT (UUID()) PRIMARY KEY,
     nama            VARCHAR(100) NOT NULL,
     satuan          VARCHAR(20) NOT NULL,
+    area            VARCHAR(20) NOT NULL DEFAULT 'semua',
     isi_per_kemasan DECIMAL(10,3),
     stok_minimum    DECIMAL(10,3) NOT NULL DEFAULT 0,
     harga_rata_rata DECIMAL(14,2) NOT NULL DEFAULT 0 CHECK (harga_rata_rata >= 0),
@@ -125,7 +126,8 @@ CREATE TABLE menu_resep (
 
 CREATE TABLE shift_template (
     id              CHAR(36) NOT NULL DEFAULT (UUID()) PRIMARY KEY,
-    shift           ENUM('shift_1', 'shift_2') NOT NULL UNIQUE,
+    shift           VARCHAR(50) NOT NULL UNIQUE,
+    nama            VARCHAR(100) NOT NULL,
     jam_mulai       TIME NOT NULL,
     jam_selesai     TIME NOT NULL,
     updated_at      DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
@@ -135,7 +137,7 @@ CREATE TABLE jadwal_shift (
     id                  CHAR(36) NOT NULL DEFAULT (UUID()) PRIMARY KEY,
     karyawan_id         CHAR(36) NOT NULL,
     tanggal             DATE NOT NULL,
-    shift               ENUM('shift_1', 'shift_2') NOT NULL,
+    shift               VARCHAR(50) NOT NULL,
     area_kerja          ENUM('kasir', 'bar', 'kitchen') NOT NULL,
     shift_template_id   CHAR(36),
     jam_mulai           TIME NOT NULL,
@@ -469,9 +471,9 @@ DELIMITER ;
 -- PART 11 — SEED DASAR
 -- =====================================================================
 
-INSERT INTO shift_template (shift, jam_mulai, jam_selesai) VALUES
-    ('shift_1', '08:00:00', '16:00:00'),
-    ('shift_2', '16:00:00', '23:00:00');
+INSERT INTO shift_template (shift, nama, jam_mulai, jam_selesai) VALUES
+    ('shift_1', 'Shift 1', '08:00:00', '16:00:00'),
+    ('shift_2', 'Shift 2', '16:00:00', '23:00:00');
 
 INSERT INTO kategori_menu (nama, area_produksi) VALUES
     ('Makanan', 'kitchen'),

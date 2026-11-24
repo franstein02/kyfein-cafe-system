@@ -454,12 +454,22 @@ class _LoginScreenState extends State<LoginScreen>
                   Image.network(
                     'https://img.icons8.com/color/48/000000/google-logo.png',
                     height: 24,
+                    width: 24,
+                    errorBuilder: (_, __, ___) => const Icon(
+                      Icons.g_mobiledata_rounded,
+                      size: 24,
+                      color: Color(0xFF1B4332),
+                    ),
                   ),
                   const SizedBox(width: 12),
-                  Text(
-                    'Masuk dengan Google',
-                    style: GoogleFonts.outfit(
-                        fontSize: 15, fontWeight: FontWeight.w600),
+                  Flexible(
+                    child: Text(
+                      'Masuk dengan Google',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: GoogleFonts.outfit(
+                          fontSize: 15, fontWeight: FontWeight.w600),
+                    ),
                   ),
                 ],
               ),

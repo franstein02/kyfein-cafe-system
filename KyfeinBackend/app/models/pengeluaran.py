@@ -8,7 +8,8 @@ class Pengeluaran(Base):
     __tablename__ = "pengeluaran"
 
     id = Column(String(36), primary_key=True, default=generate_uuid)
-    kategori_id = Column(String(36), ForeignKey("kategori_pengeluaran.id", ondelete="RESTRICT"), nullable=False)
+    kategori_id = Column(String(36), ForeignKey("kategori_pengeluaran.id", ondelete="RESTRICT"), nullable=True)
+    nama_pengeluaran = Column(String(150), nullable=True)
     tipe = Column(SQLEnum('bulanan', 'mendadak', name='enum_tipe_pengeluaran'), nullable=False)
     nominal = Column(Numeric(14, 2), nullable=False)
     bulan = Column(Date, nullable=True) # Wajib kalau tipe='bulanan'

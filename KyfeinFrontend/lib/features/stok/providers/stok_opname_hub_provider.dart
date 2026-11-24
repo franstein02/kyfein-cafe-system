@@ -20,9 +20,10 @@ class StokOpnameHubProvider with ChangeNotifier {
   List<OpnameHarianItem> _harianItems = [];
   List<OpnameHarianSesi> _harianSesi = [];
 
-  // Tab 2 Data (Audit BOM vs Opname)
+  // Tab 2 Data (Audit BOM vs Opname) & Perbandingan Shift 1 vs Shift 2
   List<OpnameAuditItem> _auditItems = [];
   OpnameAuditSummary _auditSummary = OpnameAuditSummary();
+  List<ShiftComparisonItem> _perbandinganShift = [];
 
   StokOpnameHubProvider({AuthProvider? auth}) : _auth = auth;
 
@@ -64,6 +65,20 @@ class StokOpnameHubProvider with ChangeNotifier {
   }
 
   OpnameAuditSummary get auditSummary => _auditSummary;
+
+  List<ShiftComparisonItem> get perbandinganShift {
+    var list = _perbandinganShift;
+    if (_selectedTitik != 'Semua') {
+      list = list
+          .where((i) => i.titik.toLowerCase() == _selectedTitik.toLowerCase())
+          .toList();
+    }
+    if (_query.trim().isNotEmpty) {
+      final q = _query.toLowerCase();
+      list = list.where((i) => i.namaBahan.toLowerCase().contains(q)).toList();
+    }
+    return list;
+  }
 
   Map<String, String> get _headers => {
         'Content-Type': 'application/json',
@@ -118,8 +133,23 @@ class StokOpnameHubProvider with ChangeNotifier {
         final data = json.decode(resHarian.body) as Map<String, dynamic>;
         final rawItems = (data['items'] as List<dynamic>?) ?? [];
         final rawSesi = (data['sesi'] as List<dynamic>?) ?? [];
-        _harianItems = rawItems.map((e) => OpnameHarianItem.fromJson(e as Map<String, dynamic>)).toList();
-        _harianSesi = rawSesi.map((e) => OpnameHarianSesi.fromJson(e as Map<String, dynamic>)).toList();
+        final rawPerb = (data['perbandingan_shift'] as List<dynamic>?) ?? [];
+        _harianItems = rawItems
+            .map((e) => OpnameHarianItem.fromJson(e as Map<String, dynamic>))
+            .toList();
+        _harianSesi = rawSesi
+            .map((e) => OpnameHarianSesi.fromJson(e as Map<String, dynamic>))
+            .toList();
+        _perbandinganShift = rawPerb
+            .map((e) => ShiftComparisonItem.fromJson(e as Map<String, dynamic>))
+            .toList();
+      } else if (resHarian.statusCode == 403) {
+        try {
+          final decoded = json.decode(resHarian.body);
+          _errorMessage = decoded['detail']?.toString() ?? 'Akses rekap stok ditolak';
+        } catch (_) {
+          _errorMessage = 'Akses rekap stok ditolak';
+        }
       }
 
       // 2. Fetch Opname Audit
@@ -134,8 +164,16 @@ class StokOpnameHubProvider with ChangeNotifier {
         final data = json.decode(resAudit.body) as Map<String, dynamic>;
         final rawItems = (data['items'] as List<dynamic>?) ?? [];
         final rawSummary = (data['summary'] as Map<String, dynamic>?) ?? {};
-        _auditItems = rawItems.map((e) => OpnameAuditItem.fromJson(e as Map<String, dynamic>)).toList();
+        final rawPerb = (data['perbandingan_shift'] as List<dynamic>?) ?? [];
+        _auditItems = rawItems
+            .map((e) => OpnameAuditItem.fromJson(e as Map<String, dynamic>))
+            .toList();
         _auditSummary = OpnameAuditSummary.fromJson(rawSummary);
+        if (rawPerb.isNotEmpty) {
+          _perbandinganShift = rawPerb
+              .map((e) => ShiftComparisonItem.fromJson(e as Map<String, dynamic>))
+              .toList();
+        }
       }
     } catch (e) {
       _errorMessage = 'Gagal memuat data stok opname: $e';

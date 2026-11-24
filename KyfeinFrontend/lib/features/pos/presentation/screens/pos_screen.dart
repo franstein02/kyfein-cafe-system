@@ -3,8 +3,9 @@ import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
+import '../../../../core/widgets/on_duty_guard.dart';
+import '../../../../core/widgets/page_refresh_scope.dart';
 import '../../providers/pos_provider.dart';
-import '../../../../core/constants/api_endpoints.dart';
 import '../../../dashboard/providers/dashboard_provider.dart' show DashboardProvider;
 import '../../../stok/presentation/widgets/opname_launcher.dart';
 
@@ -38,20 +39,27 @@ class _PosScreenState extends State<PosScreen> {
   @override
   Widget build(BuildContext context) {
     final shift = context.watch<DashboardProvider>().shiftAktif;
-    if (shift != null && !shift.opnameAwalSubmit) {
-      return OpnameWajibView(
-        areaKerja: shift.areaKerja,
-        onSelesai: () => context.read<DashboardProvider>().refresh(),
-      );
-    }
-
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        if (constraints.maxWidth > 800) {
-          return const _WebPosLayout();
-        }
-        return const _MobilePosLayout();
-      },
+    return OnDutyGuard(
+      featureName: 'Kasir POS',
+      allowedAreas: const ['kasir'],
+      child: PageRefreshRegistrar(
+        onRefresh: () => context.read<PosProvider>().loadAll(),
+        child: (shift != null &&
+                shift.areaKerja != 'kasir' &&
+                !shift.opnameAwalSubmit)
+            ? OpnameWajibView(
+                areaKerja: shift.areaKerja,
+                onSelesai: () => context.read<DashboardProvider>().refresh(),
+              )
+            : LayoutBuilder(
+                builder: (context, constraints) {
+                  if (constraints.maxWidth > 800) {
+                    return const _WebPosLayout();
+                  }
+                  return const _MobilePosLayout();
+                },
+              ),
+      ),
     );
   }
 }
@@ -134,7 +142,7 @@ class _MobileKasirView extends StatelessWidget {
                       onTap: () => _showCartBottomSheet(context),
                       child: Padding(
                         padding: const EdgeInsets.symmetric(
-                            horizontal: 20, vertical: 14),
+                            horizontal: 14, vertical: 12),
                         child: Row(
                           children: [
                             Container(
@@ -146,22 +154,30 @@ class _MobileKasirView extends StatelessWidget {
                               child: const Icon(Icons.shopping_cart_rounded,
                                   color: Colors.white, size: 18),
                             ),
-                            const SizedBox(width: 12),
-                            Text('${pos.cartItemCount} item',
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: Text(
+                                '${pos.cartItemCount} item',
+                                overflow: TextOverflow.ellipsis,
                                 style: const TextStyle(
                                     color: Colors.white,
                                     fontSize: 14,
-                                    fontWeight: FontWeight.w600)),
-                            const Spacer(),
-                            Text(
-                              _idr.format(pos.cartTotal),
-                              style: GoogleFonts.outfit(
-                                color: Colors.white,
-                                fontSize: 16,
-                                fontWeight: FontWeight.w700,
+                                    fontWeight: FontWeight.w600),
                               ),
                             ),
                             const SizedBox(width: 8),
+                            Flexible(
+                              child: Text(
+                                _idr.format(pos.cartTotal),
+                                overflow: TextOverflow.ellipsis,
+                                style: GoogleFonts.outfit(
+                                  color: Colors.white,
+                                  fontSize: 15,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 4),
                             const Icon(Icons.keyboard_arrow_up_rounded,
                                 color: Colors.white),
                           ],
@@ -440,12 +456,12 @@ class _MenuCard extends StatelessWidget {
                         borderRadius:
                             BorderRadius.vertical(top: Radius.circular(14)),
                       ),
-                      child: item.foto != null
+                      child: item.resolvedFotoUrl != null
                           ? ClipRRect(
                               borderRadius: const BorderRadius.vertical(
                                   top: Radius.circular(14)),
                               child: Image.network(
-                                item.foto!.startsWith('http') ? item.foto! : '${ApiConfig.baseUrl}/foto/${item.foto}',
+                                item.resolvedFotoUrl!,
                                 fit: BoxFit.cover,
                                 errorBuilder: (_, __, ___) => const Center(
                                     child: Icon(Icons.coffee_rounded,
@@ -473,15 +489,19 @@ class _MenuCard extends StatelessWidget {
                         const SizedBox(height: 2),
                         Row(
                           children: [
-                            Text(
-                              _idr.format(item.harga),
-                              style: const TextStyle(
-                                  color: _brown,
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.w700),
+                            Expanded(
+                              child: Text(
+                                _idr.format(item.harga),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(
+                                    color: _brown,
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w700),
+                              ),
                             ),
-                            const Spacer(),
-                            if (item.resep.isNotEmpty)
+                            if (item.resep.isNotEmpty) ...[
+                              const SizedBox(width: 4),
                               GestureDetector(
                                 onTap: () => _showPosResepInfo(context, item),
                                 child: Container(
@@ -499,11 +519,12 @@ class _MenuCard extends StatelessWidget {
                                       Text(
                                         '${item.resep.length} BOM',
                                         style: const TextStyle(fontSize: 9, fontWeight: FontWeight.bold, color: _brown),
-                                      ),
-                                    ],
+                                        ),
+                                      ],
+                                    ),
                                   ),
                                 ),
-                              ),
+                            ],
                           ],
                         ),
                       ],
@@ -678,20 +699,27 @@ class _CartPanel extends StatelessWidget {
         children: [
           // Header
           Padding(
-            padding: const EdgeInsets.fromLTRB(20, 20, 20, 12),
+            padding: const EdgeInsets.fromLTRB(16, 16, 12, 12),
             child: Row(
               children: [
                 const Icon(Icons.shopping_cart_rounded, color: _brown),
-                const SizedBox(width: 10),
-                Text(
-                  'Keranjang',
-                  style: GoogleFonts.outfit(
-                      fontSize: 16, fontWeight: FontWeight.w700),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    'Keranjang',
+                    overflow: TextOverflow.ellipsis,
+                    style: GoogleFonts.outfit(
+                        fontSize: 16, fontWeight: FontWeight.w700),
+                  ),
                 ),
-                const Spacer(),
                 if (pos.cart.isNotEmpty)
                   TextButton(
                     onPressed: pos.clearCart,
+                    style: TextButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(horizontal: 8),
+                      minimumSize: Size.zero,
+                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    ),
                     child: const Text('Hapus Semua',
                         style: TextStyle(color: Colors.red, fontSize: 12)),
                   ),
@@ -1065,6 +1093,7 @@ class _PaymentDialogState extends State<_PaymentDialog> {
   String _metode = 'cash';
   final _uangController = TextEditingController();
   double _uangDiterima = 0;
+  bool _qrisConfirmed = false;
 
   static const _presets = [20000.0, 50000.0, 100000.0, 150000.0];
 
@@ -1079,7 +1108,7 @@ class _PaymentDialogState extends State<_PaymentDialog> {
 
   bool get _canSubmit {
     if (_metode == 'cash') return _uangDiterima >= widget.total;
-    return true; // QRIS: always can submit (validation done server-side)
+    return _qrisConfirmed;
   }
 
   @override
@@ -1087,15 +1116,17 @@ class _PaymentDialogState extends State<_PaymentDialog> {
     final pos = context.watch<PosProvider>();
 
     return Dialog(
+      insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
       child: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 480),
-        child: Padding(
-          padding: const EdgeInsets.all(28),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
+        child: SingleChildScrollView(
+          child: Padding(
+            padding: const EdgeInsets.all(20),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
               Row(
                 children: [
                   Text('Pembayaran',
@@ -1112,8 +1143,8 @@ class _PaymentDialogState extends State<_PaymentDialog> {
               Container(
                 width: double.infinity,
                 padding:
-                    const EdgeInsets.symmetric(vertical: 16, horizontal: 20),
-                margin: const EdgeInsets.symmetric(vertical: 12),
+                    const EdgeInsets.symmetric(vertical: 10, horizontal: 16),
+                margin: const EdgeInsets.symmetric(vertical: 8),
                 decoration: BoxDecoration(
                   color: _cream,
                   borderRadius: BorderRadius.circular(12),
@@ -1121,12 +1152,12 @@ class _PaymentDialogState extends State<_PaymentDialog> {
                 child: Column(
                   children: [
                     const Text('Total Bayar',
-                        style: TextStyle(fontSize: 13, color: _textDim)),
-                    const SizedBox(height: 4),
+                        style: TextStyle(fontSize: 12.5, color: _textDim)),
+                    const SizedBox(height: 2),
                     Text(
                       _idr.format(widget.total),
                       style: GoogleFonts.outfit(
-                          fontSize: 28,
+                          fontSize: 24,
                           fontWeight: FontWeight.w800,
                           color: _brown),
                     ),
@@ -1141,7 +1172,10 @@ class _PaymentDialogState extends State<_PaymentDialog> {
                       label: 'Cash',
                       icon: Icons.payments_rounded,
                       selected: _metode == 'cash',
-                      onTap: () => setState(() => _metode = 'cash'),
+                      onTap: () => setState(() {
+                        _metode = 'cash';
+                        _qrisConfirmed = false;
+                      }),
                     ),
                   ),
                   const SizedBox(width: 12),
@@ -1228,39 +1262,75 @@ class _PaymentDialogState extends State<_PaymentDialog> {
                     ),
                   ),
               ],
-              // QRIS fields
+              // QRIS fields (QRIS statis cafe: validasi & konfirmasi pembayaran masuk)
               if (_metode == 'qris') ...[
                 Container(
                   width: double.infinity,
-                  padding: const EdgeInsets.all(16),
+                  padding: const EdgeInsets.all(14),
                   decoration: BoxDecoration(
+                    color: Colors.grey.shade50,
                     border: Border.all(color: Colors.grey.shade200),
                     borderRadius: BorderRadius.circular(12),
                   ),
                   child: Column(
                     children: [
-                      // QRIS placeholder
                       Container(
-                        width: 160,
-                        height: 160,
+                        width: 72,
+                        height: 72,
                         decoration: BoxDecoration(
-                          color: Colors.grey.shade100,
-                          borderRadius: BorderRadius.circular(8),
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(color: Colors.grey.shade200),
                         ),
                         child: const Center(
                           child: Icon(Icons.qr_code_2_rounded,
-                              size: 100, color: Colors.black87),
+                              size: 48, color: _brown),
                         ),
                       ),
-                      const SizedBox(height: 12),
+                      const SizedBox(height: 8),
                       Text(
-                        'Scan & bayar ${_idr.format(widget.total)}',
-                        style: const TextStyle(fontWeight: FontWeight.w600),
+                        'QRIS Statis Cafe · ${_idr.format(widget.total)}',
+                        style: const TextStyle(
+                            fontWeight: FontWeight.w700, fontSize: 14),
+                        textAlign: TextAlign.center,
                       ),
                       const SizedBox(height: 4),
                       const Text(
-                        'Cek mutasi rekening, lalu klik Konfirmasi',
+                        'Minta pelanggan scan QRIS statis di meja kasir, cek mutasi rekening/merchant, lalu centang konfirmasi di bawah.',
                         style: TextStyle(fontSize: 12, color: _textDim),
+                        textAlign: TextAlign.center,
+                      ),
+                      const SizedBox(height: 12),
+                      Material(
+                        color: _qrisConfirmed
+                            ? const Color(0xFFECFDF5)
+                            : Colors.white,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(10),
+                          side: BorderSide(
+                            color: _qrisConfirmed
+                                ? const Color(0xFF10B981)
+                                : Colors.grey.shade300,
+                          ),
+                        ),
+                        clipBehavior: Clip.antiAlias,
+                        child: CheckboxListTile(
+                          value: _qrisConfirmed,
+                          onChanged: (val) =>
+                              setState(() => _qrisConfirmed = val ?? false),
+                          activeColor: const Color(0xFF10B981),
+                          controlAffinity: ListTileControlAffinity.leading,
+                          dense: true,
+                          contentPadding: const EdgeInsets.symmetric(
+                              horizontal: 8, vertical: 2),
+                          title: const Text(
+                            'Dana QRIS sudah masuk & terverifikasi',
+                            style: TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
                       ),
                     ],
                   ),
@@ -1291,6 +1361,7 @@ class _PaymentDialogState extends State<_PaymentDialog> {
                 ),
               ),
             ],
+            ),
           ),
         ),
       ),
@@ -1334,98 +1405,133 @@ void _showStrukDialog(BuildContext context, Map<String, dynamic> data) {
     context: context,
     barrierDismissible: true,
     builder: (dialogCtx) => Dialog(
+      insetPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-      child: Padding(
-        padding: const EdgeInsets.all(28),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Icon(Icons.check_circle_rounded,
-                color: Color(0xFF10B981), size: 48),
-            const SizedBox(height: 12),
-            Text('Transaksi Berhasil',
-                style: GoogleFonts.outfit(
-                    fontSize: 20, fontWeight: FontWeight.w700)),
-            const SizedBox(height: 8),
-            Text(
-              'No. ${data['nomor_transaksi'] ?? '-'}',
-              style: const TextStyle(color: _textDim, fontSize: 13),
-            ),
-            const SizedBox(height: 20),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-              decoration: BoxDecoration(
-                color: Colors.grey.shade50,
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: Colors.grey.shade200),
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 400),
+        child: Padding(
+          padding: const EdgeInsets.all(22),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(Icons.check_circle_rounded,
+                  color: Color(0xFF10B981), size: 48),
+              const SizedBox(height: 12),
+              Text('Transaksi Berhasil',
+                  style: GoogleFonts.outfit(
+                      fontSize: 20, fontWeight: FontWeight.w700)),
+              const SizedBox(height: 8),
+              Text(
+                'No. ${data['nomor_transaksi'] ?? '-'}',
+                style: const TextStyle(color: _textDim, fontSize: 13),
+                textAlign: TextAlign.center,
               ),
-              child: Column(
-                children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              const SizedBox(height: 16),
+              Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                decoration: BoxDecoration(
+                  color: Colors.grey.shade50,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: Colors.grey.shade200),
+                ),
+                child: Column(
+                  children: [
+                    Row(
+                      children: [
+                        const Expanded(
+                          child: Text('Metode',
+                              style: TextStyle(color: _textDim, fontSize: 13)),
+                        ),
+                        const SizedBox(width: 8),
+                        Text(
+                          metodeBayar.toLowerCase() == 'qris'
+                              ? 'QRIS Statis'
+                              : 'Tunai / Cash',
+                          style: const TextStyle(
+                              fontWeight: FontWeight.w600, fontSize: 13),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 6),
+                    Row(
+                      children: [
+                        const Expanded(
+                          child: Text('Total Pembayaran',
+                              style: TextStyle(color: _textDim, fontSize: 13)),
+                        ),
+                        const SizedBox(width: 8),
+                        Text(
+                          _idr.format(totalHarga),
+                          style: const TextStyle(
+                              fontWeight: FontWeight.w700, fontSize: 14),
+                        ),
+                      ],
+                    ),
+                    if (metodeBayar.toLowerCase() == 'cash' &&
+                        uangDiterima > 0) ...[
+                      const SizedBox(height: 6),
+                      Row(
+                        children: [
+                          const Expanded(
+                            child: Text('Tunai Diterima',
+                                style:
+                                    TextStyle(color: _textDim, fontSize: 13)),
+                          ),
+                          const SizedBox(width: 8),
+                          Text(_idr.format(uangDiterima),
+                              style: const TextStyle(fontSize: 13)),
+                        ],
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+              if (kembalian > 0) ...[
+                const SizedBox(height: 12),
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                  decoration: BoxDecoration(
+                    color: _cream,
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Row(
                     children: [
-                      const Text('Total Pembayaran', style: TextStyle(color: _textDim, fontSize: 13)),
+                      const Expanded(
+                        child: Text('Kembalian',
+                            style: TextStyle(fontWeight: FontWeight.w600)),
+                      ),
+                      const SizedBox(width: 8),
                       Text(
-                        _idr.format(totalHarga),
-                        style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14),
+                        _idr.format(kembalian),
+                        style: const TextStyle(
+                            color: _brown,
+                            fontWeight: FontWeight.w800,
+                            fontSize: 18),
                       ),
                     ],
                   ),
-                  if (metodeBayar.toLowerCase() == 'cash' && uangDiterima > 0) ...[
-                    const SizedBox(height: 6),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        const Text('Tunai Diterima', style: TextStyle(color: _textDim, fontSize: 13)),
-                        Text(_idr.format(uangDiterima), style: const TextStyle(fontSize: 13)),
-                      ],
-                    ),
-                  ],
-                ],
-              ),
-            ),
-            if (kembalian > 0) ...[
-              const SizedBox(height: 12),
-              Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-                decoration: BoxDecoration(
-                  color: _cream,
-                  borderRadius: BorderRadius.circular(12),
                 ),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    const Text('Kembalian',
-                        style: TextStyle(fontWeight: FontWeight.w600)),
-                    Text(
-                      _idr.format(kembalian),
-                      style: const TextStyle(
-                          color: _brown,
-                          fontWeight: FontWeight.w800,
-                          fontSize: 18),
-                    ),
-                  ],
+              ],
+              const SizedBox(height: 20),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton(
+                  onPressed: () {
+                    Navigator.of(dialogCtx, rootNavigator: true).pop();
+                  },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: _brown,
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12)),
+                  ),
+                  child: const Text('Transaksi Baru'),
                 ),
               ),
             ],
-            const SizedBox(height: 20),
-            SizedBox(
-              width: double.infinity,
-              child: ElevatedButton(
-                onPressed: () {
-                  Navigator.of(dialogCtx, rootNavigator: true).pop();
-                },
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: _brown,
-                  foregroundColor: Colors.white,
-                  shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12)),
-                ),
-                child: const Text('Transaksi Baru'),
-              ),
-            ),
-          ],
+          ),
         ),
       ),
     ),

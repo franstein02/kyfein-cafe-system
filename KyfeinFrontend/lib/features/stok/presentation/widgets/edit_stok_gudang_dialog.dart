@@ -338,7 +338,7 @@ class _EditStokGudangDialogState extends State<EditStokGudangDialog> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        'Stok Minimum (${bahan.satuan})',
+                        'Stok Min (${bahan.punyaKemasan ? "kemasan" : bahan.satuan})',
                         style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Color(0xFF2D312E)),
                       ),
                       const SizedBox(height: 6),
@@ -349,7 +349,7 @@ class _EditStokGudangDialogState extends State<EditStokGudangDialog> {
                           contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                           border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
                           isDense: true,
-                          suffixText: bahan.satuan,
+                          suffixText: bahan.punyaKemasan ? 'kemasan' : bahan.satuan,
                         ),
                       ),
                     ],

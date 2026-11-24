@@ -4,7 +4,7 @@ from decimal import Decimal
 from sqlalchemy.exc import IntegrityError
 
 from app.core.utils import now_local
-from app.models import JadwalShift, StokOpname, KonfigurasiLokasi, Karyawan, KategoriPengeluaran, Pengeluaran
+from app.models import JadwalShift, StokOpname, KonfigurasiLokasi, Karyawan, KategoriPengeluaran, Pengeluaran, Absensi
 
 @pytest.mark.asyncio
 async def test_issue9_opname_server_determined_method_and_rules(client, sample_data, test_db, mock_time_at):
@@ -16,6 +16,26 @@ async def test_issue9_opname_server_determined_method_and_rules(client, sample_d
     """
     mock_time_at("10:00")
     today = sample_data["today"]
+
+    test_db.add_all([
+        Absensi(
+            id="abs-iss9-k1",
+            karyawan_id="usr-karyawan1",
+            jadwal_shift_id="shift-bar-k1",
+            lat_masuk=Decimal("-6.20000000"),
+            lng_masuk=Decimal("106.80000000"),
+            foto_masuk_id="foto-k1",
+        ),
+        Absensi(
+            id="abs-iss9-k2",
+            karyawan_id="usr-karyawan2",
+            jadwal_shift_id="shift-bar-k2",
+            lat_masuk=Decimal("-6.20000000"),
+            lng_masuk=Decimal("106.80000000"),
+            foto_masuk_id="foto-k1",
+        ),
+    ])
+    await test_db.commit()
 
     # 1. akhir_shift submitted without prior awal_shift -> 400
     res_akhir_no_awal = await client.post(

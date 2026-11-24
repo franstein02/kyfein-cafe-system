@@ -1,14 +1,18 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:flutter_map/flutter_map.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:http/http.dart' as http;
 import 'package:intl/intl.dart';
 import 'package:geolocator/geolocator.dart';
+import 'package:latlong2/latlong.dart';
 import 'package:provider/provider.dart';
 
 import '../../../../core/constants/api_endpoints.dart';
+import '../../../../core/widgets/page_refresh_scope.dart';
 import '../../providers/attendance_provider.dart';
 import '../../../auth/providers/auth_provider.dart';
+import '../widgets/map_lokasi_picker_dialog.dart';
 
 const _brown = Color(0xFF1B4332);
 const _cream = Color(0xFFF6F8F6);
@@ -33,6 +37,8 @@ class _AdminAbsensiScreenState extends State<AdminAbsensiScreen> {
   final TextEditingController _latController = TextEditingController();
   final TextEditingController _lngController = TextEditingController();
   final TextEditingController _radiusController = TextEditingController();
+  final MapController _previewMapController = MapController();
+  bool _previewMapReady = false;
   bool _savingLocation = false;
   bool _fetchingGps = false;
   String? _lastUpdatedAt;
@@ -48,7 +54,9 @@ class _AdminAbsensiScreenState extends State<AdminAbsensiScreen> {
   void initState() {
     super.initState();
     _currentSection = widget.initialSection.clamp(0, 1);
-    _loadAll();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _loadAll();
+    });
   }
 
   @override
@@ -66,7 +74,41 @@ class _AdminAbsensiScreenState extends State<AdminAbsensiScreen> {
     _latController.dispose();
     _lngController.dispose();
     _radiusController.dispose();
+    _previewMapController.dispose();
     super.dispose();
+  }
+
+  LatLng get _currentLatLng {
+    final lat = double.tryParse(_latController.text.trim()) ?? -7.83344070;
+    final lng = double.tryParse(_lngController.text.trim()) ?? 112.00330990;
+    return LatLng(lat.clamp(-85.0, 85.0), lng.clamp(-180.0, 180.0));
+  }
+
+  double get _currentRadiusMeter {
+    final r = double.tryParse(_radiusController.text.trim()) ?? 100.0;
+    return r > 0 ? r : 100.0;
+  }
+
+  void _syncPreviewMap() {
+    if (!_previewMapReady) return;
+    _previewMapController.move(_currentLatLng, _previewMapController.camera.zoom);
+  }
+
+  Future<void> _openMapPicker() async {
+    final picked = await showDialog<LatLng>(
+      context: context,
+      builder: (_) => MapLokasiPickerDialog(
+        initialCenter: _currentLatLng,
+        radiusMeter: _currentRadiusMeter.round(),
+      ),
+    );
+    if (picked == null || !mounted) return;
+    setState(() {
+      _latController.text = picked.latitude.toStringAsFixed(8);
+      _lngController.text = picked.longitude.toStringAsFixed(8);
+    });
+    _syncPreviewMap();
+    _snack('Titik koordinat dipilih dari peta. Tekan Simpan untuk menerapkan.');
   }
 
   void _snack(String msg, {bool isError = false}) {
@@ -129,6 +171,7 @@ class _AdminAbsensiScreenState extends State<AdminAbsensiScreen> {
       _error = att.error;
       _loading = false;
     });
+    _syncPreviewMap();
   }
 
   Future<void> _ambilGpsPerangkat() async {
@@ -154,6 +197,7 @@ class _AdminAbsensiScreenState extends State<AdminAbsensiScreen> {
         _latController.text = pos.latitude.toStringAsFixed(8);
         _lngController.text = pos.longitude.toStringAsFixed(8);
       });
+      _syncPreviewMap();
       _snack('Koordinat GPS berhasil diambil dari posisi Anda saat ini');
     } catch (e) {
       _snack(e.toString(), isError: true);
@@ -208,127 +252,26 @@ class _AdminAbsensiScreenState extends State<AdminAbsensiScreen> {
   Widget build(BuildContext context) {
     final isLokasi = _currentSection == 0;
 
-    return Scaffold(
-      backgroundColor: _cream,
-      body: Column(
-        children: [
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.fromLTRB(24, 18, 24, 18),
-            decoration: const BoxDecoration(
-              color: Colors.white,
-              border: Border(bottom: BorderSide(color: Color(0xFFE5EBE7))),
-            ),
-            child: Center(
-              child: ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 850),
-                child: Wrap(
-                  alignment: WrapAlignment.spaceBetween,
-                  crossAxisAlignment: WrapCrossAlignment.center,
-                  spacing: 16,
-                  runSpacing: 12,
-                  children: [
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Text(
-                          isLokasi
-                              ? 'Pengaturan Titik Lokasi & Radius GPS'
-                              : 'Monitoring Absensi, Izin & Tukar Shift',
-                          style: GoogleFonts.outfit(
-                            fontSize: 20,
-                            fontWeight: FontWeight.w700,
-                            color: const Color(0xFF1A1D1B),
-                          ),
-                        ),
-                        const SizedBox(height: 2),
-                        Text(
-                          isLokasi
-                              ? 'Atur koordinat pusat cafe dan batas toleransi jarak absensi'
-                              : 'Pantau kehadiran masuk/pulang, keterlambatan, izin, dan pertukaran shift',
-                          style: const TextStyle(fontSize: 12.5, color: _textDim),
-                        ),
-                      ],
-                    ),
-                    Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 2),
-                          decoration: BoxDecoration(
-                            color: _cream,
-                            borderRadius: BorderRadius.circular(12),
-                            border: Border.all(color: const Color(0xFFE5EBE7)),
-                          ),
-                          child: DropdownButtonHideUnderline(
-                            child: DropdownButton<int>(
-                              value: _currentSection,
-                              icon: const Padding(
-                                padding: EdgeInsets.only(left: 8),
-                                child: Icon(Icons.keyboard_arrow_down_rounded, color: _brown, size: 20),
-                              ),
-                              style: GoogleFonts.outfit(
-                                fontSize: 13.5,
-                                fontWeight: FontWeight.w600,
-                                color: _brown,
-                              ),
-                              items: const [
-                                DropdownMenuItem(
-                                  value: 1,
-                                  child: Row(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      Icon(Icons.fingerprint_rounded, size: 17, color: _brown),
-                                      SizedBox(width: 8),
-                                      Text('Monitoring Absensi & Izin'),
-                                    ],
-                                  ),
-                                ),
-                                DropdownMenuItem(
-                                  value: 0,
-                                  child: Row(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      Icon(Icons.location_on_outlined, size: 17, color: _brown),
-                                      SizedBox(width: 8),
-                                      Text('Titik Lokasi & Radius GPS'),
-                                    ],
-                                  ),
-                                ),
-                              ],
-                              onChanged: (val) {
-                                if (val != null) setState(() => _currentSection = val);
-                              },
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 10),
-                        IconButton.outlined(
-                          icon: const Icon(Icons.refresh_rounded, size: 20),
-                          tooltip: 'Segarkan Data',
-                          onPressed: _loadAll,
-                          style: IconButton.styleFrom(
-                            foregroundColor: _brown,
-                            side: const BorderSide(color: Color(0xFFE5EBE7)),
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ),
-          Expanded(
-            child: _loading
-                ? const Center(child: CircularProgressIndicator(color: _brown))
-                : _error != null
-                    ? Center(child: Text(_error!))
-                    : (isLokasi ? _buildTabSettingLokasi() : _buildTabRekapAbsensi()),
-          ),
-        ],
+    return PageRefreshRegistrar(
+      onRefresh: _loadAll,
+      child: Scaffold(
+        backgroundColor: _cream,
+        appBar: buildStandaloneAppBar(
+          context,
+          title: isLokasi ? 'Titik & Radius GPS' : 'Monitoring Absensi',
+          onRefresh: _loadAll,
+        ),
+        body: _loading
+            ? const Center(child: CircularProgressIndicator(color: _brown))
+            : _error != null
+                ? Center(child: Text(_error!))
+                : RefreshIndicator(
+                    color: _brown,
+                    onRefresh: _loadAll,
+                    child: isLokasi
+                        ? _buildTabSettingLokasi()
+                        : _buildTabRekapAbsensi(),
+                  ),
       ),
     );
   }
@@ -400,6 +343,221 @@ class _AdminAbsensiScreenState extends State<AdminAbsensiScreen> {
                     ),
                     const Divider(height: 28),
 
+                    // Pratinjau Peta Lokasi & Radius
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(12),
+                      child: Container(
+                        height: 200,
+                        width: double.infinity,
+                        decoration: BoxDecoration(
+                          color: _cream,
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: Colors.grey.shade300),
+                        ),
+                        child: Stack(
+                          children: [
+                            FlutterMap(
+                              mapController: _previewMapController,
+                              options: MapOptions(
+                                initialCenter: _currentLatLng,
+                                initialZoom: 16,
+                                interactionOptions: const InteractionOptions(
+                                  flags: InteractiveFlag.none,
+                                ),
+                                onMapReady: () {
+                                  _previewMapReady = true;
+                                  _syncPreviewMap();
+                                },
+                              ),
+                              children: [
+                                TileLayer(
+                                  urlTemplate:
+                                      'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                                  userAgentPackageName: 'com.kyfein.app',
+                                ),
+                                CircleLayer(
+                                  circles: [
+                                    CircleMarker(
+                                      point: _currentLatLng,
+                                      radius: _currentRadiusMeter,
+                                      useRadiusInMeter: true,
+                                      color: _brown.withValues(alpha: 0.16),
+                                      borderColor: _brown,
+                                      borderStrokeWidth: 2,
+                                    ),
+                                  ],
+                                ),
+                                MarkerLayer(
+                                  markers: [
+                                    Marker(
+                                      point: _currentLatLng,
+                                      width: 40,
+                                      height: 40,
+                                      alignment: Alignment.topCenter,
+                                      child: const Icon(
+                                        Icons.location_on_rounded,
+                                        color: Color(0xFFB91C1C),
+                                        size: 36,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ],
+                            ),
+                            Positioned.fill(
+                              child: Material(
+                                color: Colors.transparent,
+                                child: InkWell(
+                                  onTap: _openMapPicker,
+                                  child: Align(
+                                    alignment: Alignment.bottomRight,
+                                    child: Container(
+                                      margin: const EdgeInsets.all(10),
+                                      padding: const EdgeInsets.symmetric(
+                                          horizontal: 10, vertical: 6),
+                                      decoration: BoxDecoration(
+                                        color: _brown,
+                                        borderRadius: BorderRadius.circular(20),
+                                        boxShadow: const [
+                                          BoxShadow(
+                                            color: Color(0x26000000),
+                                            blurRadius: 6,
+                                            offset: Offset(0, 2),
+                                          ),
+                                        ],
+                                      ),
+                                      child: Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          const Icon(
+                                              Icons.edit_location_alt_rounded,
+                                              color: Colors.white,
+                                              size: 15),
+                                          const SizedBox(width: 6),
+                                          Flexible(
+                                            child: Text(
+                                              'Pilih di Peta',
+                                              maxLines: 1,
+                                              overflow: TextOverflow.ellipsis,
+                                              style: GoogleFonts.outfit(
+                                                color: Colors.white,
+                                                fontSize: 11.5,
+                                                fontWeight: FontWeight.w600,
+                                              ),
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ),
+                            Positioned(
+                              left: 8,
+                              bottom: 8,
+                              child: IgnorePointer(
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 7, vertical: 2),
+                                  decoration: BoxDecoration(
+                                    color: Colors.white.withValues(alpha: 0.85),
+                                    borderRadius: BorderRadius.circular(5),
+                                  ),
+                                  child: const Text(
+                                    '© OpenStreetMap',
+                                    style: TextStyle(
+                                        fontSize: 9.5, color: Colors.black87),
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 14),
+
+                    // Action buttons: Pilih di Peta & Ambil GPS perangkat
+                    LayoutBuilder(
+                      builder: (context, constraints) {
+                        final isNarrow = constraints.maxWidth < 420;
+                        final mapBtn = OutlinedButton.icon(
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: Colors.white,
+                            backgroundColor: _brown,
+                            side: const BorderSide(color: _brown),
+                            shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(10)),
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 14, vertical: 12),
+                          ),
+                          onPressed: _openMapPicker,
+                          icon: const Icon(Icons.map_rounded, size: 18),
+                          label: Text(
+                            'Pilih Lokasi Lewat Peta',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: GoogleFonts.outfit(
+                              fontWeight: FontWeight.w600,
+                              fontSize: 13,
+                            ),
+                          ),
+                        );
+
+                        final gpsBtn = OutlinedButton.icon(
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: _brown,
+                            side: const BorderSide(color: _brown),
+                            shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(10)),
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 14, vertical: 12),
+                          ),
+                          onPressed: _fetchingGps ? null : _ambilGpsPerangkat,
+                          icon: _fetchingGps
+                              ? const SizedBox(
+                                  width: 16,
+                                  height: 16,
+                                  child: CircularProgressIndicator(
+                                      strokeWidth: 2, color: _brown),
+                                )
+                              : const Icon(Icons.my_location_rounded, size: 18),
+                          label: Text(
+                            _fetchingGps
+                                ? 'Mengambil Sinyal GPS...'
+                                : 'Gunakan Lokasi GPS Saat Ini',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: GoogleFonts.outfit(
+                              fontWeight: FontWeight.w600,
+                              fontSize: 13,
+                            ),
+                          ),
+                        );
+
+                        if (isNarrow) {
+                          return Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              mapBtn,
+                              const SizedBox(height: 10),
+                              gpsBtn,
+                            ],
+                          );
+                        }
+
+                        return Row(
+                          children: [
+                            Expanded(child: mapBtn),
+                            const SizedBox(width: 12),
+                            Expanded(child: gpsBtn),
+                          ],
+                        );
+                      },
+                    ),
+                    const SizedBox(height: 16),
+
                     // Latitude & Longitude (Responsive)
                     LayoutBuilder(
                       builder: (context, constraints) {
@@ -415,6 +573,10 @@ class _AdminAbsensiScreenState extends State<AdminAbsensiScreen> {
                             const SizedBox(height: 6),
                             TextField(
                               controller: _latController,
+                              onChanged: (_) {
+                                setState(() {});
+                                _syncPreviewMap();
+                              },
                               keyboardType: const TextInputType.numberWithOptions(
                                   decimal: true, signed: true),
                               decoration: InputDecoration(
@@ -439,6 +601,10 @@ class _AdminAbsensiScreenState extends State<AdminAbsensiScreen> {
                             const SizedBox(height: 6),
                             TextField(
                               controller: _lngController,
+                              onChanged: (_) {
+                                setState(() {});
+                                _syncPreviewMap();
+                              },
                               keyboardType: const TextInputType.numberWithOptions(
                                   decimal: true, signed: true),
                               decoration: InputDecoration(
@@ -471,40 +637,6 @@ class _AdminAbsensiScreenState extends State<AdminAbsensiScreen> {
                         );
                       },
                     ),
-                    const SizedBox(height: 16),
-
-                    // Quick button: Ambil GPS perangkat
-                    SizedBox(
-                      width: double.infinity,
-                      child: OutlinedButton.icon(
-                        style: OutlinedButton.styleFrom(
-                          foregroundColor: _brown,
-                          side: const BorderSide(color: _brown),
-                          shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(10)),
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 16, vertical: 12),
-                        ),
-                        onPressed: _fetchingGps ? null : _ambilGpsPerangkat,
-                        icon: _fetchingGps
-                            ? const SizedBox(
-                                width: 16,
-                                height: 16,
-                                child: CircularProgressIndicator(
-                                    strokeWidth: 2, color: _brown),
-                              )
-                            : const Icon(Icons.my_location_rounded, size: 18),
-                        label: Text(
-                          _fetchingGps
-                              ? 'Mengambil Sinyal GPS...'
-                              : 'Gunakan Lokasi GPS Saat Ini',
-                          style: GoogleFonts.outfit(
-                            fontWeight: FontWeight.w600,
-                            fontSize: 13,
-                          ),
-                        ),
-                      ),
-                    ),
                     const SizedBox(height: 20),
 
                     // Radius Absensi
@@ -516,6 +648,7 @@ class _AdminAbsensiScreenState extends State<AdminAbsensiScreen> {
                     const SizedBox(height: 6),
                     TextField(
                       controller: _radiusController,
+                      onChanged: (_) => setState(() {}),
                       keyboardType: TextInputType.number,
                       decoration: InputDecoration(
                         hintText: '100',

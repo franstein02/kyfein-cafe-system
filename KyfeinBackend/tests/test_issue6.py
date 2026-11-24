@@ -164,3 +164,87 @@ async def test_issue6_clean_orphan_photos_script():
     finally:
         sync_session.close()
         sync_engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_foto_supabase_folder_routing_and_remote_fallback(
+    client, sample_data, test_db, monkeypatch
+):
+    """
+    Pastikan foto absensi/izin/qris tersimpan ke folder `absensi/`, foto menu ke folder `menu/`,
+    dan GET /foto/{id} tetap melayani foto dari Supabase saat file lokal tidak ada di disk.
+    """
+    import app.api.v1.endpoints.foto as foto_ep
+
+    uploaded_objects: dict[str, bytes] = {}
+
+    async def fake_upload(object_path: str, image_bytes: bytes, content_type: str = "image/jpeg") -> str:
+        uploaded_objects[object_path] = image_bytes
+        return f"https://example.supabase.co/storage/v1/object/public/Storage/{object_path}"
+
+    async def fake_download(url_or_path: str) -> bytes:
+        marker = "/storage/v1/object/public/Storage/"
+        key = url_or_path.split(marker, 1)[1] if marker in url_or_path else url_or_path
+        return uploaded_objects[key]
+
+    monkeypatch.setattr(settings, "SUPABASE_SYNC_ENABLED", True)
+    monkeypatch.setattr(foto_ep, "upload_image_bytes", fake_upload)
+    monkeypatch.setattr(foto_ep, "download_image_bytes", fake_download)
+
+    def _jpeg_buf(color: str) -> io.BytesIO:
+        b = io.BytesIO()
+        Image.new("RGB", (40, 40), color=color).save(b, format="JPEG")
+        b.seek(0)
+        return b
+
+    # 1. Absensi & Izin masuk folder `absensi/`
+    res_abs = await client.post(
+        "/api/v1/foto",
+        headers={"Authorization": f"Bearer {sample_data['token_k1']}"},
+        files={"file": ("absen.jpg", _jpeg_buf("blue"), "image/jpeg")},
+        data={"jenis": "absensi"},
+    )
+    assert res_abs.status_code == 201
+    abs_id = res_abs.json()["id"]
+    assert f"absensi/absensi_{abs_id}.jpg" in uploaded_objects
+    assert res_abs.json()["supabase_url"].endswith(f"/Storage/absensi/absensi_{abs_id}.jpg")
+
+    res_izin = await client.post(
+        "/api/v1/foto",
+        headers={"Authorization": f"Bearer {sample_data['token_k1']}"},
+        files={"file": ("telat.jpg", _jpeg_buf("yellow"), "image/jpeg")},
+        data={"jenis": "izin"},
+    )
+    assert res_izin.status_code == 201
+    izin_id = res_izin.json()["id"]
+    assert f"absensi/izin_{izin_id}.jpg" in uploaded_objects
+
+    # 2. Menu masuk folder `menu/`
+    res_menu = await client.post(
+        "/api/v1/foto",
+        headers={"Authorization": f"Bearer {sample_data['token_admin']}"},
+        files={"file": ("menu.jpg", _jpeg_buf("green"), "image/jpeg")},
+        data={"jenis": "menu"},
+    )
+    assert res_menu.status_code == 201
+    menu_foto_id = res_menu.json()["id"]
+    assert f"menu/{menu_foto_id}.jpg" in uploaded_objects
+
+    # 3. Hapus file lokal, pastikan GET /foto/{id} masih berhasil mengambil dari Supabase fallback + tetap proteksi role!
+    local_izin_path = os.path.join(settings.UPLOAD_DIR, f"{izin_id}.jpg")
+    os.remove(local_izin_path)
+    assert not os.path.exists(local_izin_path)
+
+    res_other = await client.get(
+        f"/api/v1/foto/{izin_id}",
+        headers={"Authorization": f"Bearer {sample_data['token_k2']}"},
+    )
+    assert res_other.status_code == 403
+
+    res_admin = await client.get(
+        f"/api/v1/foto/{izin_id}",
+        headers={"Authorization": f"Bearer {sample_data['token_admin']}"},
+    )
+    assert res_admin.status_code == 200
+    assert res_admin.content == uploaded_objects[f"absensi/izin_{izin_id}.jpg"]
+    assert "no-cache" in res_admin.headers.get("Cache-Control", "").lower()

@@ -39,6 +39,7 @@ class MasterBahan {
   final String id;
   final String nama;
   final String satuan;
+  final String area;
   final double isiPerKemasan;
   final double stokMinimum;
   final double hargaRataRata;
@@ -47,15 +48,34 @@ class MasterBahan {
     required this.id,
     required this.nama,
     required this.satuan,
+    this.area = 'semua',
     this.isiPerKemasan = 1.0,
     this.stokMinimum = 0.0,
     this.hargaRataRata = 0.0,
   });
 
+  bool get punyaKemasan => isiPerKemasan > 0;
+
+  String get areaLabel {
+    switch (area) {
+      case 'bar':
+        return 'Bar (Minuman)';
+      case 'kitchen':
+        return 'Kitchen (Dapur)';
+      default:
+        return 'Bar & Kitchen';
+    }
+  }
+
+  double get batasMinimumSatuanKecil => stokMinimum <= 0
+      ? 0.0
+      : (punyaKemasan ? stokMinimum * isiPerKemasan : stokMinimum);
+
   factory MasterBahan.fromJson(Map<String, dynamic> json) => MasterBahan(
         id: json['id'].toString(),
         nama: json['nama'] ?? '',
         satuan: json['satuan'] ?? '',
+        area: (json['area'] ?? 'semua').toString().toLowerCase(),
         isiPerKemasan: double.tryParse(json['isi_per_kemasan']?.toString() ?? '1') ?? 1.0,
         stokMinimum: double.tryParse(json['stok_minimum']?.toString() ?? '0') ?? 0.0,
         hargaRataRata: double.tryParse(json['harga_rata_rata']?.toString() ?? '0') ?? 0.0,
@@ -68,6 +88,7 @@ class MasterMenu {
   final String kodeMenu;
   final double harga;
   final String? fotoId;
+  final String? fotoUrl;
   final String kategoriId;
   final bool statusAktif;
   final List<MasterMenuResep> resep;
@@ -78,10 +99,17 @@ class MasterMenu {
     required this.kodeMenu,
     required this.harga,
     this.fotoId,
+    this.fotoUrl,
     required this.kategoriId,
     required this.statusAktif,
     this.resep = const [],
   });
+
+  String? get resolvedFotoUrl {
+    if (fotoUrl != null && fotoUrl!.isNotEmpty) return fotoUrl;
+    if (fotoId == null || fotoId!.isEmpty) return null;
+    return fotoId!.startsWith('http') ? fotoId! : '${ApiConfig.baseUrl}/foto/$fotoId';
+  }
 
   factory MasterMenu.fromJson(Map<String, dynamic> json) => MasterMenu(
         id: json['id'].toString(),
@@ -89,6 +117,7 @@ class MasterMenu {
         kodeMenu: json['kode_menu'] ?? '',
         harga: double.tryParse(json['harga']?.toString() ?? '0') ?? 0.0,
         fotoId: json['foto_id'],
+        fotoUrl: json['foto_url'],
         kategoriId: json['kategori_id']?.toString() ?? '',
         statusAktif: json['status_aktif'] ?? true,
         resep: (json['resep'] as List?)

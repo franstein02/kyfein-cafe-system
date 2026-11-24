@@ -21,7 +21,7 @@ from app.models.absensi import Absensi
 from app.models.karyawan import Karyawan
 from app.schemas.transaksi import TransaksiCreate, TransaksiOut, ActiveShiftSummaryOut
 from app.api.v1.endpoints.kds import kds_manager
-from app.services.jadwal_service import get_shift_berjalan
+from app.services.jadwal_service import get_shift_berjalan, require_on_duty_karyawan
 
 router = APIRouter()
 
@@ -37,7 +37,10 @@ async def list_transaksi(
 ):
     """
     List riwayat transaksi POS.
+    Karyawan wajib sedang on-duty (memiliki shift berjalan dan sudah absen masuk).
     """
+    await require_on_duty_karyawan(db, current_user, now_local())
+
     query = (
         select(Transaksi)
         .options(
@@ -68,20 +71,25 @@ async def create_transaksi(
     current_user: Karyawan = Depends(get_current_user)
 ):
     """
-    Input transaksi POS baru oleh kasir / admin (mendukung mode testing langsung):
-    - Jika user belum masuk jadwal shift, otomatis gunakan / buatkan shift testing hari ini
-    - Menyimpan transaksi dan detailnya ke database secara persisten
+    Input transaksi POS baru oleh kasir / admin:
+    - Karyawan wajib memiliki shift berjalan dengan area_kerja='kasir' serta sudah absen masuk (dan belum pulang).
+    - Admin tetap dapat melakukan transaksi langsung (dengan fallback shift kasir jika tidak diisi).
     """
     now = now_local()
     today = now.date()
 
-    # 1. Cek shift aktif / testing shift
+    # 1. Cek shift aktif
     shift = None
     explicit_shift = bool(data.jadwal_shift_id)
     if explicit_shift:
         shift = await db.get(JadwalShift, data.jadwal_shift_id)
         if not shift:
             raise HTTPException(status_code=404, detail="Jadwal shift tidak ditemukan")
+        if current_user.role == "karyawan" and shift.karyawan_id != current_user.id:
+            raise HTTPException(
+                status_code=403,
+                detail="Tidak dapat membuat transaksi menggunakan jadwal shift milik karyawan lain"
+            )
         if shift.area_kerja != "kasir":
             raise HTTPException(
                 status_code=400,
@@ -96,19 +104,30 @@ async def create_transaksi(
         absen_res = await db.execute(
             select(Absensi).where(Absensi.jadwal_shift_id == shift.id)
         )
-        if not absen_res.scalars().first():
+        absen_obj = absen_res.scalars().first()
+        if not absen_obj:
             raise HTTPException(
                 status_code=400,
                 detail="Kasir wajib melakukan absen masuk terlebih dahulu"
             )
+        if absen_obj.jam_pulang is not None:
+            raise HTTPException(
+                status_code=403,
+                detail="Akses ditolak: Anda sudah melakukan Absen Pulang pada shift ini."
+            )
+    elif current_user.role == "karyawan":
+        # Karyawan tidak boleh membuat POS saat off-shift / belum absen / bukan area kasir
+        shift = await require_on_duty_karyawan(
+            db, current_user, now, allowed_areas=["kasir"]
+        )
 
-    if not shift:
+    # Fallback hanya untuk admin/owner saat jadwal_shift_id tidak dikirim
+    if not shift and current_user.role in ["admin", "owner"]:
         active_shift = await get_shift_berjalan(db, current_user.id, now)
         if active_shift:
             shift = active_shift
 
-    if not shift:
-        # Cari jadwal shift kasir hari ini
+    if not shift and current_user.role in ["admin", "owner"]:
         shift_q = select(JadwalShift).where(
             and_(
                 JadwalShift.tanggal == today,
@@ -118,28 +137,15 @@ async def create_transaksi(
         shift_res = await db.execute(shift_q)
         shift = shift_res.scalars().first()
 
-    if not shift:
-        # Fallback 1: Shift milik user hari ini
-        user_shift_q = select(JadwalShift).where(
-            and_(
-                JadwalShift.tanggal == today,
-                JadwalShift.karyawan_id == current_user.id
-            )
-        )
-        user_res = await db.execute(user_shift_q)
-        shift = user_res.scalars().first()
-
-    if not shift:
-        # Fallback 2: Shift apapun hari ini
+    if not shift and current_user.role in ["admin", "owner"]:
         any_shift_q = select(JadwalShift).where(JadwalShift.tanggal == today)
         any_res = await db.execute(any_shift_q)
         shift = any_res.scalars().first()
 
-    if not shift:
+    if not shift and current_user.role in ["admin", "owner"]:
         test_shift_id = f"shift-kasir-{today.strftime('%Y%m%d')}"
         shift = await db.get(JadwalShift, test_shift_id)
         if not shift:
-            # Auto-create shift kasir untuk hari ini agar testing transaksi POS dapat langsung berjalan
             shift = JadwalShift(
                 id=test_shift_id,
                 karyawan_id=current_user.id,
@@ -209,12 +215,20 @@ async def create_transaksi(
 
     # Validasi pembayaran cash vs qris
     kembalian = None
+    uang_diterima = data.uang_diterima
     if data.metode_bayar == "cash":
-        if not data.uang_diterima or data.uang_diterima < total_harga:
+        if not uang_diterima or uang_diterima < total_harga:
             raise HTTPException(status_code=400, detail="Uang diterima kurang dari total harga")
-        kembalian = data.uang_diterima - total_harga
+        kembalian = uang_diterima - total_harga
     elif data.metode_bayar == "qris":
-        await validate_and_claim_foto(db, data.foto_bukti_qris_id, current_user.id, "qris", required=True)
+        # QRIS statis cafe: bukti foto opsional, kasir memvalidasi dana sudah masuk
+        if data.foto_bukti_qris_id:
+            await validate_and_claim_foto(
+                db, data.foto_bukti_qris_id, current_user.id, "qris", required=False
+            )
+        if uang_diterima is not None and uang_diterima < total_harga:
+            raise HTTPException(status_code=400, detail="Nominal konfirmasi QRIS kurang dari total harga")
+        uang_diterima = uang_diterima or total_harga
 
     new_trx = Transaksi(
         jadwal_shift_id=shift.id,
@@ -222,7 +236,7 @@ async def create_transaksi(
         nomor_transaksi=nomor_trx,
         metode_bayar=data.metode_bayar,
         total_harga=total_harga,
-        uang_diterima=data.uang_diterima,
+        uang_diterima=uang_diterima,
         kembalian=kembalian,
         foto_bukti_qris_id=data.foto_bukti_qris_id,
         status="selesai",
@@ -246,6 +260,8 @@ async def create_transaksi(
         )
 
     # Broadcast KDS Realtime Event
+    waktu_iso = (new_trx.waktu_transaksi or now).isoformat()
+    created_iso = (new_trx.created_at or now).isoformat()
     for kds in kds_items:
         message = {
             "event": "new_order",
@@ -260,8 +276,8 @@ async def create_transaksi(
             "qty": kds["qty"],
             "catatan": kds["catatan"],
             "status_item": "menunggu",
-            "waktu_transaksi": new_trx.waktu_transaksi.isoformat(),
-            "waktu": new_trx.created_at.isoformat()
+            "waktu_transaksi": waktu_iso,
+            "waktu": created_iso,
         }
         await kds_manager.broadcast_order(kds["area_produksi"], message)
         await kds_manager.broadcast_order("all", message)
@@ -305,10 +321,9 @@ async def cancel_transaksi(
             detail="Transaksi tidak dapat dibatalkan karena shift sudah terkunci (opname akhir_shift selesai / shift selesai)."
         )
 
-    # 2. Authorization Check (Kasir hanya boleh cancel transaksi buatan sendiri di shift miliknya)
+    # 2. Authorization Check (Kasir hanya boleh cancel transaksi buatan sendiri saat on-duty)
     if current_user.role == "karyawan":
-        now = now_local()
-        active_shift = await get_shift_berjalan(db, current_user.id, now)
+        active_shift = await require_on_duty_karyawan(db, current_user, now_local(), allowed_areas=["kasir"])
         if trx.kasir_id != current_user.id or not active_shift or shift.id != active_shift.id:
             raise HTTPException(
                 status_code=403,
@@ -324,12 +339,29 @@ async def cancel_transaksi(
     res = await db.execute(
         select(Transaksi)
         .options(
-            selectinload(Transaksi.details).selectinload(TransaksiDetail.menu),
+            selectinload(Transaksi.details).selectinload(TransaksiDetail.menu).selectinload(Menu.kategori),
+            selectinload(Transaksi.details).selectinload(TransaksiDetail.transaksi),
             selectinload(Transaksi.kasir)
         )
         .where(Transaksi.id == trx.id)
     )
-    return res.scalar_one()
+    cancelled_trx = res.scalar_one()
+
+    for detail in cancelled_trx.details:
+        area = detail.area_produksi or "kitchen"
+        cancel_msg = {
+            "event": "order_cancelled",
+            "id": detail.id,
+            "detail_id": detail.id,
+            "transaksi_id": cancelled_trx.id,
+            "nomor_transaksi": cancelled_trx.nomor_transaksi,
+            "area_produksi": area,
+        }
+        if area in ["kitchen", "bar"]:
+            await kds_manager.broadcast_order(area, cancel_msg)
+        await kds_manager.broadcast_order("all", cancel_msg)
+
+    return cancelled_trx
 
 @router.get("/shift-aktif/laporan", response_model=ActiveShiftSummaryOut)
 async def get_active_shift_report(

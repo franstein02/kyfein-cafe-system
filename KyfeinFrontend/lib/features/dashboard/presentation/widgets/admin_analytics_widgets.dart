@@ -283,6 +283,10 @@ class AdminKpiSection extends StatelessWidget {
     final cash = ov?.totalCash ?? 0.0;
     final qris = ov?.totalQris ?? 0.0;
     final pctChange = ov?.perubahanPenjualanPersen;
+    final belanjaBahan = ov?.totalBelanjaBarangMasuk ?? 0.0;
+    final totalKasKeluar = ov?.totalPengeluaranKas ?? (totalPengeluaran + belanjaBahan);
+    final arusKasBersih = ov?.arusKasBersih ?? (totalPenjualan - totalKasKeluar);
+    final nilaiAsetStok = ov?.nilaiAsetStokSaatIni ?? 0.0;
 
     String salesBadgeText = '';
     Color salesBadgeColor = _kEmerald;
@@ -340,48 +344,195 @@ class AdminKpiSection extends StatelessWidget {
       ),
     ];
 
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        if (constraints.maxWidth >= 760) {
-          return IntrinsicHeight(
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                for (int i = 0; i < cards.length; i++) ...[
-                  if (i > 0) const SizedBox(width: 12),
-                  Expanded(child: _buildKpiCard(cards[i])),
-                ],
-              ],
-            ),
-          );
-        }
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        LayoutBuilder(
+          builder: (context, constraints) {
+            if (constraints.maxWidth >= 760) {
+              return IntrinsicHeight(
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    for (int i = 0; i < cards.length; i++) ...[
+                      if (i > 0) const SizedBox(width: 12),
+                      Expanded(child: _buildKpiCard(cards[i])),
+                    ],
+                  ],
+                ),
+              );
+            }
 
-        return Column(
-          children: [
-            IntrinsicHeight(
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
+            return Column(
+              children: [
+                IntrinsicHeight(
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Expanded(child: _buildKpiCard(cards[0])),
+                      const SizedBox(width: 12),
+                      Expanded(child: _buildKpiCard(cards[1])),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 12),
+                IntrinsicHeight(
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Expanded(child: _buildKpiCard(cards[2])),
+                      const SizedBox(width: 12),
+                      Expanded(child: _buildKpiCard(cards[3])),
+                    ],
+                  ),
+                ),
+              ],
+            );
+          },
+        ),
+        const SizedBox(height: 12),
+        _AnalyticsCard(
+          padding: const EdgeInsets.all(14),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
                 children: [
-                  Expanded(child: _buildKpiCard(cards[0])),
-                  const SizedBox(width: 12),
-                  Expanded(child: _buildKpiCard(cards[1])),
+                  const Icon(
+                    Icons.account_balance_wallet_outlined,
+                    size: 16,
+                    color: _kPrimary,
+                  ),
+                  const SizedBox(width: 6),
+                  Expanded(
+                    child: Text(
+                      'Arus Kas Riil (Belanja Bahan + Ops) & Nilai Stok',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: GoogleFonts.outfit(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w700,
+                        color: _kTextDark,
+                      ),
+                    ),
+                  ),
                 ],
               ),
+              const SizedBox(height: 10),
+              LayoutBuilder(
+                builder: (context, c) {
+                  final items = [
+                    (
+                      'Total Pengeluaran Kas',
+                      _idrFormat.format(totalKasKeluar),
+                      'Bahan ${_formatCompactRp(belanjaBahan)} · Ops ${_formatCompactRp(totalPengeluaran)}',
+                      const Color(0xFFB45309),
+                    ),
+                    (
+                      'Arus Kas Bersih',
+                      _idrFormat.format(arusKasBersih),
+                      arusKasBersih >= 0
+                          ? 'Surplus kas periode'
+                          : 'Belum BEP modal stok',
+                      arusKasBersih >= 0
+                          ? const Color(0xFF059669)
+                          : const Color(0xFFDC2626),
+                    ),
+                    (
+                      'Aset Stok Tersisa',
+                      _idrFormat.format(nilaiAsetStok),
+                      'Modal tersimpan di gudang & titik',
+                      _kPrimary,
+                    ),
+                  ];
+                  if (c.maxWidth >= 680) {
+                    return Row(
+                      children: [
+                        for (int i = 0; i < items.length; i++) ...[
+                          if (i > 0) const SizedBox(width: 12),
+                          Expanded(
+                            child: _cashSummaryCell(
+                              items[i].$1,
+                              items[i].$2,
+                              items[i].$3,
+                              items[i].$4,
+                            ),
+                          ),
+                        ],
+                      ],
+                    );
+                  }
+                  return Column(
+                    children: [
+                      for (int i = 0; i < items.length; i++) ...[
+                        if (i > 0) const SizedBox(height: 8),
+                        _cashSummaryCell(
+                          items[i].$1,
+                          items[i].$2,
+                          items[i].$3,
+                          items[i].$4,
+                        ),
+                      ],
+                    ],
+                  );
+                },
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _cashSummaryCell(
+    String label,
+    String value,
+    String subtitle,
+    Color color,
+  ) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF8FAF9),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: _kBorder),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            label,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(
+              fontSize: 11.5,
+              fontWeight: FontWeight.w600,
+              color: _kTextDim,
             ),
-            const SizedBox(height: 12),
-            IntrinsicHeight(
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Expanded(child: _buildKpiCard(cards[2])),
-                  const SizedBox(width: 12),
-                  Expanded(child: _buildKpiCard(cards[3])),
-                ],
+          ),
+          const SizedBox(height: 3),
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            alignment: Alignment.centerLeft,
+            child: Text(
+              value,
+              style: GoogleFonts.outfit(
+                fontSize: 16,
+                fontWeight: FontWeight.w700,
+                color: color,
               ),
             ),
-          ],
-        );
-      },
+          ),
+          const SizedBox(height: 2),
+          Text(
+            subtitle,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(fontSize: 10.5, color: _kTextDim),
+          ),
+        ],
+      ),
     );
   }
 

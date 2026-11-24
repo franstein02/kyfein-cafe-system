@@ -9,6 +9,7 @@ class Foto(Base):
     id = Column(String(36), primary_key=True, default=generate_uuid)
     jenis = Column(SQLEnum('absensi', 'izin', 'qris', 'menu', 'profil', name='enum_foto_jenis'), nullable=False)
     path = Column(String(500), nullable=False)
+    supabase_url = Column(String(500), nullable=True)
     uploader_id = Column(String(36), ForeignKey("karyawan.id", ondelete="RESTRICT"), nullable=False)
     dipakai = Column(Boolean, nullable=False, default=False)
     created_at = Column(DateTime, nullable=False, default=now_local)

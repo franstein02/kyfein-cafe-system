@@ -114,6 +114,16 @@ async def test_full_jadwal_and_absensi_flow(client, sample_data, test_db):
     )
     assert res_tukar.status_code == 200
     tukar_id = res_tukar.json()["id"]
+    assert res_tukar.json()["status_target"] == "pending"
+
+    # Target (user_kitchen) konfirmasi setuju terlebih dahulu
+    res_target_ok = await client.put(
+        f"/api/v1/jadwal/tukar-shift/{tukar_id}/konfirmasi-target",
+        headers={"Authorization": f"Bearer {token_kitchen}"},
+        json={"status": "disetujui"}
+    )
+    assert res_target_ok.status_code == 200
+    assert res_target_ok.json()["status_target"] == "disetujui"
 
     # Admin approve tukar shift
     res_app_tukar = await client.put(

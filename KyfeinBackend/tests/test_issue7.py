@@ -157,7 +157,8 @@ async def test_issue7_approval_validations(client, sample_data, test_db):
         shift_b_id="shift-bar-k2",
         karyawan_pengaju_id="usr-karyawan1",
         karyawan_target_id="usr-karyawan2",
-        status="pending"
+        status="pending",
+        status_target="disetujui",
     )
     test_db.add(tukar_appr)
     await test_db.commit()

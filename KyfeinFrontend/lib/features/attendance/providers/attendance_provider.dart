@@ -187,19 +187,61 @@ class AttendanceProvider with ChangeNotifier {
     }
   }
 
-  Future<http.Response> updateShiftTemplate({
-    required String shift,
+  void _sortShiftTemplates() {
+    _shiftTemplates.sort((a, b) {
+      final cmpJam = (a['jam_mulai'] ?? '')
+          .toString()
+          .compareTo((b['jam_mulai'] ?? '').toString());
+      if (cmpJam != 0) return cmpJam;
+      return (a['shift'] ?? '').toString().compareTo((b['shift'] ?? '').toString());
+    });
+  }
+
+  Future<http.Response> createShiftTemplate({
+    required String nama,
+    String? shift,
     required String jamMulai,
     required String jamSelesai,
   }) async {
+    final payload = <String, dynamic>{
+      'nama': nama,
+      'jam_mulai': jamMulai,
+      'jam_selesai': jamSelesai,
+      if (shift != null && shift.trim().isNotEmpty) 'shift': shift.trim(),
+    };
+    final res = await http
+        .post(
+          Uri.parse(ApiEndpoints.shiftTemplate),
+          headers: headers,
+          body: jsonEncode(payload),
+        )
+        .timeout(const Duration(seconds: 10));
+
+    if (res.statusCode == 200 || res.statusCode == 201) {
+      final created = jsonDecode(res.body) as Map<String, dynamic>;
+      _shiftTemplates.add(created);
+      _sortShiftTemplates();
+      notifyListeners();
+    }
+    return res;
+  }
+
+  Future<http.Response> updateShiftTemplate({
+    required String shift,
+    String? nama,
+    required String jamMulai,
+    required String jamSelesai,
+  }) async {
+    final payload = <String, dynamic>{
+      'jam_mulai': jamMulai,
+      'jam_selesai': jamSelesai,
+      if (nama != null && nama.trim().isNotEmpty) 'nama': nama.trim(),
+    };
     final res = await http
         .put(
           Uri.parse(ApiEndpoints.shiftTemplateByKey(shift)),
           headers: headers,
-          body: jsonEncode({
-            'jam_mulai': jamMulai,
-            'jam_selesai': jamSelesai,
-          }),
+          body: jsonEncode(payload),
         )
         .timeout(const Duration(seconds: 10));
 
@@ -211,6 +253,22 @@ class AttendanceProvider with ChangeNotifier {
       } else {
         _shiftTemplates.add(updated);
       }
+      _sortShiftTemplates();
+      notifyListeners();
+    }
+    return res;
+  }
+
+  Future<http.Response> deleteShiftTemplate(String shift) async {
+    final res = await http
+        .delete(
+          Uri.parse(ApiEndpoints.shiftTemplateByKey(shift)),
+          headers: headers,
+        )
+        .timeout(const Duration(seconds: 10));
+
+    if (res.statusCode == 200) {
+      _shiftTemplates.removeWhere((t) => t['shift'] == shift);
       notifyListeners();
     }
     return res;
@@ -273,6 +331,16 @@ class AttendanceProvider with ChangeNotifier {
     return http
         .put(
           Uri.parse(ApiEndpoints.approvalTukarShift(id)),
+          headers: headers,
+          body: jsonEncode({'status': status}),
+        )
+        .timeout(const Duration(seconds: 10));
+  }
+
+  Future<http.Response> konfirmasiTargetTukarShift(String id, String status) {
+    return http
+        .put(
+          Uri.parse(ApiEndpoints.konfirmasiTargetTukarShift(id)),
           headers: headers,
           body: jsonEncode({'status': status}),
         )
